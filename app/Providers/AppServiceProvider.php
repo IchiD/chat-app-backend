@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -20,6 +21,16 @@ class AppServiceProvider extends ServiceProvider
    */
   public function boot(): void
   {
+    // 本番環境でHTTPS強制
+    if (app()->environment('production')) {
+      URL::forceScheme('https');
+
+      // Railway特有の設定
+      if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+        $_SERVER['HTTPS'] = 'on';
+      }
+    }
+
     ResetPassword::createUrlUsing(function (object $notifiable, string $token) {
       // .envにFRONTEND_URLが設定されていることを前提とします。
       // 例: FRONTEND_URL=http://localhost:3000
