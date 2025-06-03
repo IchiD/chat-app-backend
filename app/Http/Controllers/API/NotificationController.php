@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -84,13 +84,14 @@ class NotificationController extends Controller
   public function sendTestNotification(): JsonResponse
   {
     $user = Auth::user();
+    $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
 
     // テスト通知の作成と送信
     $notification = new PushNotification(
       'テスト通知',
       'これはテスト通知です。',
       [
-        'url' => '/chat',
+        'url' => $frontendUrl . '/chat',
         'timestamp' => now()->timestamp
       ],
       [
@@ -119,13 +120,16 @@ class NotificationController extends Controller
    */
   public function sendNewMessageNotification(User $recipient, string $senderName, string $messagePreview, int $roomId, string $roomToken): void
   {
+    $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
+
     $notification = new PushNotification(
       $senderName . 'からのメッセージ',
       $messagePreview,
       [
-        'url' => '/chat/' . $roomToken,
+        'url' => $frontendUrl . '/chat',
         'type' => 'new_message',
         'room_id' => $roomId,
+        'room_token' => $roomToken,
         'timestamp' => now()->timestamp
       ],
       [
@@ -146,11 +150,13 @@ class NotificationController extends Controller
    */
   public function sendFriendRequestNotification(User $recipient, string $senderName): void
   {
+    $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
+
     $notification = new PushNotification(
       'フレンド申請',
       $senderName . 'さんからフレンド申請が届きました',
       [
-        'url' => '/friends',
+        'url' => $frontendUrl . '/friends',
         'type' => 'friend_request',
         'timestamp' => now()->timestamp
       ],
