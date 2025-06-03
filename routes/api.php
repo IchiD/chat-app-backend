@@ -9,6 +9,7 @@ use App\Http\Controllers\API\ConversationsController;
 use App\Http\Controllers\API\MessagesController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\AppConfigController;
+use App\Http\Controllers\DebugController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerificationEmail']);
@@ -98,6 +99,13 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
 
 // メールアドレス変更確認（認証不要）
 Route::get('/verify-email-change', [AuthController::class, 'confirmEmailChange']);
+
+// デバッグ用エンドポイント（本番環境でのみ利用可能）
+Route::prefix('debug')->controller(DebugController::class)->group(function () {
+  Route::get('/email-config', 'emailConfig'); // メール設定の確認
+  Route::get('/test-email', 'testEmail'); // メール送信テスト
+  Route::get('/test-smtp', 'testSmtp'); // SMTP接続テスト
+});
 
 // 既存のユーザー情報取得エンドポイント
 Route::middleware(['auth:sanctum', 'check.user.status'])->get('/user', function (Request $request) {
