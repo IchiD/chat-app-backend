@@ -13,6 +13,11 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 use Illuminate\Support\Facades\Log;
+use App\Models\Friendship;
+use App\Models\Conversation;
+use App\Models\Participant;
+use App\Models\Message;
+use App\Models\Admin;
 
 class User extends Authenticatable
 {
