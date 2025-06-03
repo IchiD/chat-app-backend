@@ -9,7 +9,7 @@ use App\Models\Friendship;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\API\NotificationController;
 use Illuminate\Http\JsonResponse;
 
 class FriendshipController extends Controller
