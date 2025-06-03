@@ -241,50 +241,46 @@ class User extends Authenticatable
   public function sendFriendRequest(int $friendId, string $message = null)
   {
     try {
-      Log::info('User::sendFriendRequest開始', ['user_id' => $this->id, 'friend_id' => $friendId]);
-
       // 既存のアクティブな友達関係をチェック
       $existingFriendship = Friendship::getFriendship($this->id, $friendId);
-      Log::info('既存のアクティブな友達関係チェック', ['existing' => $existingFriendship ? $existingFriendship->id : null]);
 
       if ($existingFriendship) {
-        Log::info('既存の友達関係を返却');
         return $existingFriendship;
       }
 
       // 論理削除された友達関係があるかチェック
-      Log::info('論理削除された友達関係をチェック開始');
       $deletedFriendship = Friendship::getFriendshipWithTrashed($this->id, $friendId);
-      Log::info('論理削除された友達関係チェック完了', ['deleted' => $deletedFriendship ? $deletedFriendship->id : null]);
 
       if ($deletedFriendship && $deletedFriendship->isDeleted()) {
-        Log::info('論理削除された関係を復活');
         // 論理削除された関係を復活させる
         $deletedFriendship->restoreByAdmin();
         $deletedFriendship->status = Friendship::STATUS_PENDING;
         $deletedFriendship->message = $message;
         $deletedFriendship->save();
-        Log::info('論理削除された関係の復活完了');
+
+        Log::info('論理削除された友達関係を復活', [
+          'user_id' => $this->id,
+          'friend_id' => $friendId,
+          'friendship_id' => $deletedFriendship->id
+        ]);
+
         return $deletedFriendship;
       }
 
       // 新しい友達申請を作成
-      Log::info('新しい友達申請を作成');
       $friendship = Friendship::create([
         'user_id' => $this->id,
         'friend_id' => $friendId,
         'status' => Friendship::STATUS_PENDING,
         'message' => $message,
       ]);
-      Log::info('新しい友達申請作成完了', ['friendship_id' => $friendship->id]);
 
       return $friendship;
     } catch (\Exception $e) {
       Log::error('User::sendFriendRequestでエラー', [
         'user_id' => $this->id,
         'friend_id' => $friendId,
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
+        'error' => $e->getMessage()
       ]);
       throw $e;
     }

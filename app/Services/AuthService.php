@@ -147,44 +147,31 @@ class AuthService extends BaseService
   public function login(string $email, string $password, string $ip): array
   {
     try {
-      Log::info('=== ログイン処理開始 ===', ['email' => $email, 'ip' => $ip]);
-
       // ユーザーの検索
-      Log::info('ユーザー検索開始', ['email' => $email]);
       $user = User::where('email', $email)->first();
 
       if (!$user) {
-        Log::warning('ユーザーが見つかりません', ['email' => $email]);
+        Log::warning('ログイン失敗: ユーザーが見つかりません', ['email' => $email, 'ip' => $ip]);
         return [
           'status'     => 'error',
           'error_type' => 'invalid_credentials',
           'message'    => 'メールアドレスまたはパスワードが正しくありません。',
         ];
       }
-
-      Log::info('ユーザー検索成功', [
-        'user_id' => $user->id,
-        'email' => $user->email,
-        'is_verified' => $user->is_verified,
-        'is_banned' => $user->is_banned,
-        'deleted_at' => $user->deleted_at
-      ]);
 
       // パスワードチェック
-      Log::info('パスワードチェック開始');
       if (!Hash::check($password, $user->password)) {
-        Log::warning('パスワードが一致しません', ['email' => $email]);
+        Log::warning('ログイン失敗: パスワードが一致しません', ['email' => $email, 'ip' => $ip]);
         return [
           'status'     => 'error',
           'error_type' => 'invalid_credentials',
           'message'    => 'メールアドレスまたはパスワードが正しくありません。',
         ];
       }
-      Log::info('パスワードチェック成功');
 
       // 削除されたユーザーのログイン制限
       if ($user->isDeleted()) {
-        Log::warning('削除されたユーザーのログイン試行', ['user_id' => $user->id]);
+        Log::warning('ログイン失敗: 削除されたアカウント', ['user_id' => $user->id, 'ip' => $ip]);
         return [
           'status'     => 'error',
           'error_type' => 'account_deleted',
@@ -194,7 +181,7 @@ class AuthService extends BaseService
 
       // バンされたユーザーのログイン制限
       if ($user->isBanned()) {
-        Log::warning('バンされたユーザーのログイン試行', ['user_id' => $user->id]);
+        Log::warning('ログイン失敗: バンされたアカウント', ['user_id' => $user->id, 'ip' => $ip]);
         return [
           'status'     => 'error',
           'error_type' => 'account_banned',
@@ -203,7 +190,7 @@ class AuthService extends BaseService
       }
 
       if (!$user->is_verified) {
-        Log::warning('未認証ユーザーのログイン試行', ['user_id' => $user->id]);
+        Log::warning('ログイン失敗: 未認証アカウント', ['user_id' => $user->id, 'ip' => $ip]);
         return [
           'status'     => 'error',
           'error_type' => 'not_verified',
@@ -212,14 +199,12 @@ class AuthService extends BaseService
       }
 
       // アクセストークンの発行
-      Log::info('アクセストークン発行開始');
       $tokenResult = $user->createToken('authToken');
       $tokenResult->accessToken->update([
         'expires_at' => Carbon::now()->addDay(),
       ]);
-      Log::info('アクセストークン発行成功');
 
-      Log::info('=== ログイン処理完了 ===', ['email' => $email]);
+      Log::info('ログイン成功', ['user_id' => $user->id, 'email' => $email, 'ip' => $ip]);
 
       return [
         'status'       => 'success',
@@ -229,10 +214,10 @@ class AuthService extends BaseService
         'email'        => $user->email,
       ];
     } catch (\Exception $e) {
-      Log::error('=== ログイン処理でエラー ===', [
+      Log::error('ログイン処理でエラーが発生', [
         'email' => $email,
         'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
+        'ip' => $ip
       ]);
 
       return [

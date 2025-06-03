@@ -101,7 +101,13 @@ class AuthController extends Controller
 
     // エラーの場合
     if ($result['status'] === 'error') {
-      return response()->json($result, 401);
+      // フロントエンドが期待するレスポンス形式に変換
+      $errorResponse = [
+        'message' => $result['message'],
+        'error_type' => $result['error_type'] ?? 'login_error'
+      ];
+
+      return response()->json($errorResponse, 401);
     }
 
     Log::info('ログインに成功しました', [
