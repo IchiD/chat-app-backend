@@ -9,7 +9,7 @@ use App\Models\Participant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
-use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\API\NotificationController;
 use Illuminate\Support\Facades\Log;
 
 class MessagesController extends Controller
@@ -93,114 +93,155 @@ class MessagesController extends Controller
    */
   public function store(Conversation $conversation, Request $request)
   {
-    $user = Auth::user();
+    try {
+      Log::info('メッセージ送信処理を開始', [
+        'conversation_id' => $conversation->id,
+        'room_token' => $conversation->room_token,
+        'request_data' => $request->all()
+      ]);
 
-    // 削除されたユーザーはメッセージ送信不可
-    if ($user->isDeleted()) {
-      return response()->json(['message' => 'アカウントが削除されています。'], 403);
-    }
+      $user = Auth::user();
 
-    // 削除された会話にはメッセージ送信不可
-    if ($conversation->isDeleted()) {
-      return response()->json(['message' => 'この会話は削除されています。'], 403);
-    }
+      Log::info('認証ユーザー確認完了', [
+        'user_id' => $user->id,
+        'is_deleted' => $user->isDeleted()
+      ]);
 
-    // ユーザーがこの会話の参加者であることを確認
-    if (!$conversation->participants()->where('user_id', $user->id)->exists()) {
-      return response()->json(['message' => 'この会話にメッセージを送信する権限がありません。'], 403);
-    }
+      // 削除されたユーザーはメッセージ送信不可
+      if ($user->isDeleted()) {
+        return response()->json(['message' => 'アカウントが削除されています。'], 403);
+      }
 
-    // ダイレクトメッセージの場合、友達関係を確認
-    if ($conversation->type === 'direct') {
-      // 会話の相手を取得（削除されていないユーザーのみ）
-      $otherParticipant = $conversation->participants()
-        ->where('users.id', '!=', $user->id)
-        ->whereNull('users.deleted_at')
-        ->first();
+      // 削除された会話にはメッセージ送信不可
+      if ($conversation->isDeleted()) {
+        return response()->json(['message' => 'この会話は削除されています。'], 403);
+      }
 
-      if ($otherParticipant) {
-        // 友達関係を確認
-        $currentFriends = $user->friends()->pluck('id')->toArray();
-        if (!in_array($otherParticipant->id, $currentFriends)) {
+      // ユーザーがこの会話の参加者であることを確認
+      if (!$conversation->participants()->where('user_id', $user->id)->exists()) {
+        return response()->json(['message' => 'この会話にメッセージを送信する権限がありません。'], 403);
+      }
+
+      Log::info('基本権限チェック完了');
+
+      // ダイレクトメッセージの場合、友達関係を確認
+      if ($conversation->type === 'direct') {
+        // 会話の相手を取得（削除されていないユーザーのみ）
+        $otherParticipant = $conversation->participants()
+          ->where('users.id', '!=', $user->id)
+          ->whereNull('users.deleted_at')
+          ->first();
+
+        if ($otherParticipant) {
+          // 友達関係を確認
+          $currentFriends = $user->friends()->pluck('id')->toArray();
+          if (!in_array($otherParticipant->id, $currentFriends)) {
+            return response()->json([
+              'message' => '友達関係が解除されたため、このチャットにメッセージを送信できません。',
+              'friendship_status' => 'unfriended'
+            ], 403);
+          }
+        } else {
+          // 相手が削除されている場合
           return response()->json([
-            'message' => '友達関係が解除されたため、このチャットにメッセージを送信できません。',
-            'friendship_status' => 'unfriended'
+            'message' => '相手のアカウントが削除されたため、このチャットにメッセージを送信できません。',
+            'friendship_status' => 'user_deleted'
           ], 403);
         }
-      } else {
-        // 相手が削除されている場合
-        return response()->json([
-          'message' => '相手のアカウントが削除されたため、このチャットにメッセージを送信できません。',
-          'friendship_status' => 'user_deleted'
-        ], 403);
-      }
-    }
-
-    $request->validate([
-      'text_content' => 'required|string|max:5000', // 最大文字数など適宜調整
-      // 'content_type' => 'sometimes|in:text,image,file' // 将来的な拡張用
-    ]);
-
-    $message = $conversation->messages()->create([
-      'sender_id' => $user->id,
-      'text_content' => $request->input('text_content'),
-      'content_type' => 'text', // MVPではtext固定
-      'sent_at' => now(),
-    ]);
-
-    $message->load(['sender' => function ($query) {
-      $query->select('id', 'name', 'friend_id');
-    }, 'adminSender' => function ($query) {
-      $query->select('id', 'name');
-    }]);
-
-    // プッシュ通知の送信
-    // 同じ会話の参加者全員（自分以外）に通知を送信する
-    $participants = $conversation->conversationParticipants()
-      ->where('user_id', '!=', $user->id)
-      ->whereHas('user', function ($query) {
-        $query->whereNull('deleted_at'); // 削除されていないユーザーのみ
-      })
-      ->with('user')
-      ->get();
-
-    if ($participants->isNotEmpty()) {
-      // メッセージプレビュー（長い場合は短縮する）
-      $messagePreview = mb_substr($message->text_content, 0, 50);
-      if (mb_strlen($message->text_content) > 50) {
-        $messagePreview .= '...';
       }
 
-      $notificationController = new NotificationController();
+      Log::info('友達関係チェック完了');
 
-      foreach ($participants as $participant) {
-        // 各参加者にプッシュ通知を送信
-        if ($participant->user) {
-          try {
-            $notificationController->sendNewMessageNotification(
-              $participant->user,
-              $user->name,
-              $messagePreview,
-              $conversation->id,
-              $conversation->room_token
-            );
-          } catch (\Exception $e) {
-            Log::warning('新しいメッセージ通知の送信に失敗しました', [
-              'recipient_user_id' => $participant->user->id,
-              'sender_user_id' => $user->id,
-              'conversation_id' => $conversation->id,
-              'error' => $e->getMessage()
-            ]);
-            // 通知エラーは無視して処理を続行
+      $request->validate([
+        'text_content' => 'required|string|max:5000', // 最大文字数など適宜調整
+        // 'content_type' => 'sometimes|in:text,image,file' // 将来的な拡張用
+      ]);
+
+      Log::info('バリデーション完了');
+
+      $message = $conversation->messages()->create([
+        'sender_id' => $user->id,
+        'text_content' => $request->input('text_content'),
+        'content_type' => 'text', // MVPではtext固定
+        'sent_at' => now(),
+      ]);
+
+      Log::info('メッセージ作成完了', ['message_id' => $message->id]);
+
+      $message->load(['sender' => function ($query) {
+        $query->select('id', 'name', 'friend_id');
+      }, 'adminSender' => function ($query) {
+        $query->select('id', 'name');
+      }]);
+
+      Log::info('メッセージリレーション読み込み完了');
+
+      // プッシュ通知の送信
+      // 同じ会話の参加者全員（自分以外）に通知を送信する
+      $participants = $conversation->conversationParticipants()
+        ->where('user_id', '!=', $user->id)
+        ->whereHas('user', function ($query) {
+          $query->whereNull('deleted_at'); // 削除されていないユーザーのみ
+        })
+        ->with('user')
+        ->get();
+
+      Log::info('参加者取得完了', ['participants_count' => $participants->count()]);
+
+      if ($participants->isNotEmpty()) {
+        // メッセージプレビュー（長い場合は短縮する）
+        $messagePreview = mb_substr($message->text_content, 0, 50);
+        if (mb_strlen($message->text_content) > 50) {
+          $messagePreview .= '...';
+        }
+
+        Log::info('通知送信開始');
+
+        $notificationController = new NotificationController();
+
+        foreach ($participants as $participant) {
+          // 各参加者にプッシュ通知を送信
+          if ($participant->user) {
+            try {
+              $notificationController->sendNewMessageNotification(
+                $participant->user,
+                $user->name,
+                $messagePreview,
+                $conversation->id,
+                $conversation->room_token
+              );
+            } catch (\Exception $e) {
+              Log::warning('新しいメッセージ通知の送信に失敗しました', [
+                'recipient_user_id' => $participant->user->id,
+                'sender_user_id' => $user->id,
+                'conversation_id' => $conversation->id,
+                'error' => $e->getMessage()
+              ]);
+              // 通知エラーは無視して処理を続行
+            }
           }
         }
+
+        Log::info('通知送信完了');
       }
+
+      Log::info('メッセージ送信処理完了', ['message_id' => $message->id]);
+
+      // TODO: リアルタイムで相手にメッセージを通知するイベントを発行 (例: NewMessageEvent)
+      // broadcast(new NewMessageEvent($message))->toOthers();
+
+      return response()->json($message, 201);
+    } catch (\Exception $e) {
+      Log::error('メッセージ送信処理でエラーが発生しました', [
+        'conversation_id' => $conversation->id ?? 'unknown',
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+      ]);
+
+      return response()->json([
+        'message' => 'メッセージの送信に失敗しました。'
+      ], 500);
     }
-
-    // TODO: リアルタイムで相手にメッセージを通知するイベントを発行 (例: NewMessageEvent)
-    // broadcast(new NewMessageEvent($message))->toOthers();
-
-    return response()->json($message, 201);
   }
 
   /**
