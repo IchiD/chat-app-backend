@@ -59,10 +59,12 @@ class AuthController extends Controller
   {
     $data = $request->validated();
     $token = $data['token'];
+    $redirectTo = $request->query('redirect_to', '/user'); // デフォルトは /user
 
     Log::info('メール認証の試行を開始しました', [
       'token' => $token,
       'ip'    => $request->ip(),
+      'redirect_to' => $redirectTo
     ]);
 
     $result = $this->authService->verifyEmail($token, $request->ip());
@@ -78,6 +80,9 @@ class AuthController extends Controller
     }
 
     Log::info('アクセストークンを発行しました', ['email' => $result['email']]);
+
+    // 成功時にリダイレクト情報を含める
+    $result['frontend_redirect_url'] = env('FRONTEND_URL', 'http://localhost:3000') . $redirectTo;
 
     return response()->json($result, 200);
   }

@@ -133,6 +133,7 @@ class AuthService extends BaseService
       'access_token' => $tokenResult->plainTextToken,
       'token_type'   => 'Bearer',
       'email'        => $user->email,
+      'redirect_url' => '/user',
     ];
   }
 
