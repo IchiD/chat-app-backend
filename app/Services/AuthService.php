@@ -146,56 +146,101 @@ class AuthService extends BaseService
    */
   public function login(string $email, string $password, string $ip): array
   {
-    // ユーザーの検索
-    $user = User::where('email', $email)->first();
+    try {
+      Log::info('=== ログイン処理開始 ===', ['email' => $email, 'ip' => $ip]);
 
-    if (!$user || !Hash::check($password, $user->password)) {
+      // ユーザーの検索
+      Log::info('ユーザー検索開始', ['email' => $email]);
+      $user = User::where('email', $email)->first();
+
+      if (!$user) {
+        Log::warning('ユーザーが見つかりません', ['email' => $email]);
+        return [
+          'status'     => 'error',
+          'error_type' => 'invalid_credentials',
+          'message'    => 'メールアドレスまたはパスワードが正しくありません。',
+        ];
+      }
+
+      Log::info('ユーザー検索成功', [
+        'user_id' => $user->id,
+        'email' => $user->email,
+        'is_verified' => $user->is_verified,
+        'is_banned' => $user->is_banned,
+        'deleted_at' => $user->deleted_at
+      ]);
+
+      // パスワードチェック
+      Log::info('パスワードチェック開始');
+      if (!Hash::check($password, $user->password)) {
+        Log::warning('パスワードが一致しません', ['email' => $email]);
+        return [
+          'status'     => 'error',
+          'error_type' => 'invalid_credentials',
+          'message'    => 'メールアドレスまたはパスワードが正しくありません。',
+        ];
+      }
+      Log::info('パスワードチェック成功');
+
+      // 削除されたユーザーのログイン制限
+      if ($user->isDeleted()) {
+        Log::warning('削除されたユーザーのログイン試行', ['user_id' => $user->id]);
+        return [
+          'status'     => 'error',
+          'error_type' => 'account_deleted',
+          'message'    => 'このアカウントは削除されています。ログインできません。',
+        ];
+      }
+
+      // バンされたユーザーのログイン制限
+      if ($user->isBanned()) {
+        Log::warning('バンされたユーザーのログイン試行', ['user_id' => $user->id]);
+        return [
+          'status'     => 'error',
+          'error_type' => 'account_banned',
+          'message'    => 'このアカウントは利用停止されています。ログインできません。',
+        ];
+      }
+
+      if (!$user->is_verified) {
+        Log::warning('未認証ユーザーのログイン試行', ['user_id' => $user->id]);
+        return [
+          'status'     => 'error',
+          'error_type' => 'not_verified',
+          'message'    => 'メール認証がお済みでないようです。登録メールアドレスに送られたメールをご確認ください。',
+        ];
+      }
+
+      // アクセストークンの発行
+      Log::info('アクセストークン発行開始');
+      $tokenResult = $user->createToken('authToken');
+      $tokenResult->accessToken->update([
+        'expires_at' => Carbon::now()->addDay(),
+      ]);
+      Log::info('アクセストークン発行成功');
+
+      Log::info('=== ログイン処理完了 ===', ['email' => $email]);
+
+      return [
+        'status'       => 'success',
+        'message'      => 'ログインに成功しました。',
+        'access_token' => $tokenResult->plainTextToken,
+        'token_type'   => 'Bearer',
+        'email'        => $user->email,
+      ];
+    } catch (\Exception $e) {
+      Log::error('=== ログイン処理でエラー ===', [
+        'email' => $email,
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+      ]);
+
       return [
         'status'     => 'error',
-        'error_type' => 'invalid_credentials',
-        'message'    => 'メールアドレスまたはパスワードが正しくありません。',
+        'error_type' => 'login_error',
+        'message'    => 'ログイン処理中にエラーが発生しました。',
       ];
     }
-
-    // 削除されたユーザーのログイン制限
-    if ($user->isDeleted()) {
-      return [
-        'status'     => 'error',
-        'error_type' => 'account_deleted',
-        'message'    => 'このアカウントは削除されています。ログインできません。',
-      ];
-    }
-
-    // バンされたユーザーのログイン制限
-    if ($user->isBanned()) {
-      return [
-        'status'     => 'error',
-        'error_type' => 'account_banned',
-        'message'    => 'このアカウントは利用停止されています。ログインできません。',
-      ];
-    }
-
-    if (!$user->is_verified) {
-      return [
-        'status'     => 'error',
-        'error_type' => 'not_verified',
-        'message'    => 'メール認証がお済みでないようです。登録メールアドレスに送られたメールをご確認ください。',
-      ];
-    }
-
-    // アクセストークンの発行
-    $tokenResult = $user->createToken('authToken');
-    $tokenResult->accessToken->update([
-      'expires_at' => Carbon::now()->addDay(),
-    ]);
-
-    return [
-      'status'       => 'success',
-      'message'      => 'ログインに成功しました。',
-      'access_token' => $tokenResult->plainTextToken,
-      'token_type'   => 'Bearer',
-      'email'        => $user->email,
-    ];
   }
 
   /**
