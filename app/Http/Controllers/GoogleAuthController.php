@@ -27,10 +27,24 @@ class GoogleAuthController extends Controller
   {
     try {
       Log::info('Google認証へのリダイレクトを開始');
-      return Socialite::driver('google')->redirect();
+
+      // 環境変数の確認
+      $clientId = config('services.google.client_id');
+      $redirectUri = config('services.google.redirect');
+
+      Log::info('Google OAuth設定確認', [
+        'client_id' => $clientId ? 'SET' : 'NOT_SET',
+        'redirect_uri' => $redirectUri
+      ]);
+
+      // redirect_uriを明示的に設定
+      return Socialite::driver('google')
+        ->redirectUrl($redirectUri)
+        ->redirect();
     } catch (\Exception $e) {
       Log::error('Google認証リダイレクトでエラーが発生しました', [
-        'error' => $e->getMessage()
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
       ]);
       return response()->json([
         'status' => 'error',
