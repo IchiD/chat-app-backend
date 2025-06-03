@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use App\Http\Controllers\Api\NotificationController;
+use Illuminate\Support\Facades\Log;
 
 class MessagesController extends Controller
 {
@@ -175,13 +176,23 @@ class MessagesController extends Controller
       foreach ($participants as $participant) {
         // 各参加者にプッシュ通知を送信
         if ($participant->user) {
-          $notificationController->sendNewMessageNotification(
-            $participant->user,
-            $user->name,
-            $messagePreview,
-            $conversation->id,
-            $conversation->room_token
-          );
+          try {
+            $notificationController->sendNewMessageNotification(
+              $participant->user,
+              $user->name,
+              $messagePreview,
+              $conversation->id,
+              $conversation->room_token
+            );
+          } catch (\Exception $e) {
+            Log::warning('新しいメッセージ通知の送信に失敗しました', [
+              'recipient_user_id' => $participant->user->id,
+              'sender_user_id' => $user->id,
+              'conversation_id' => $conversation->id,
+              'error' => $e->getMessage()
+            ]);
+            // 通知エラーは無視して処理を続行
+          }
         }
       }
     }

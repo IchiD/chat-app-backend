@@ -288,8 +288,17 @@ class FriendshipController extends Controller
 
         // 再申請の通知を送信
         if ($friendUser) {
-          $notificationController = new NotificationController();
-          $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+          try {
+            $notificationController = new NotificationController();
+            $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+          } catch (\Exception $e) {
+            Log::warning('友達申請再送信通知の送信に失敗しました', [
+              'friend_user_id' => $friendUser->id,
+              'sender_user_id' => $currentUser->id,
+              'error' => $e->getMessage()
+            ]);
+            // 通知エラーは無視して処理を続行
+          }
         }
 
         return response()->json([
@@ -303,10 +312,19 @@ class FriendshipController extends Controller
     // 新しい友達申請を作成
     $friendship = $currentUser->sendFriendRequest($friendId, $message);
 
-    // 友達申請の通知を送信
+    // 友達申請の通知を送信（エラーが発生しても友達申請自体は成功させる）
     if ($friendUser) {
-      $notificationController = new NotificationController();
-      $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+      try {
+        $notificationController = new NotificationController();
+        $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+      } catch (\Exception $e) {
+        Log::warning('友達申請通知の送信に失敗しました', [
+          'friend_user_id' => $friendUser->id,
+          'sender_user_id' => $currentUser->id,
+          'error' => $e->getMessage()
+        ]);
+        // 通知エラーは無視して処理を続行
+      }
     }
 
     return response()->json([
