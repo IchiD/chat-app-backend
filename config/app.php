@@ -56,6 +56,18 @@ return [
 
   /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | This URL is used for redirecting after authentication processes like
+    | Google OAuth callback. Set this to your frontend application URL.
+    |
+    */
+
+  'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+
+  /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

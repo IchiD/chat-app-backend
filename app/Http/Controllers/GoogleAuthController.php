@@ -185,7 +185,8 @@ class GoogleAuthController extends Controller
   private function redirectWithError(string $message)
   {
     $encodedMessage = urlencode($message);
-    return redirect("http://localhost:3000/auth/login?error={$encodedMessage}");
+    $frontendUrl = config('app.frontend_url', 'http://localhost:3000');
+    return redirect("{$frontendUrl}/auth/login?error={$encodedMessage}");
   }
 
   /**
@@ -205,7 +206,8 @@ class GoogleAuthController extends Controller
     ];
     $encodedUserData = urlencode(json_encode($userData));
 
-    $redirectUrl = "http://localhost:3000/auth/google/callback?token={$encodedToken}&user={$encodedUserData}";
+    $frontendUrl = config('app.frontend_url', 'http://localhost:3000');
+    $redirectUrl = "{$frontendUrl}/auth/google/callback?token={$encodedToken}&user={$encodedUserData}";
 
     Log::info('フロントエンドにリダイレクトします', [
       'redirect_url' => $redirectUrl,
