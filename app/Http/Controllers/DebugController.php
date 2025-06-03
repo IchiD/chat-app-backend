@@ -32,6 +32,10 @@ class DebugController extends Controller
       'railway_env' => env('RAILWAY_ENVIRONMENT'),
       'app_env' => env('APP_ENV'),
 
+      // URL設定の確認
+      'app_url' => config('app.url'),
+      'frontend_url' => env('FRONTEND_URL'),
+
       // 環境変数の確認
       'env_vars' => [
         'MAIL_MAILER' => env('MAIL_MAILER'),
@@ -41,6 +45,8 @@ class DebugController extends Controller
         'MAIL_PASSWORD_SET' => !empty(env('MAIL_PASSWORD')),
         'MAIL_ENCRYPTION' => env('MAIL_ENCRYPTION'),
         'MAIL_FROM_ADDRESS' => env('MAIL_FROM_ADDRESS'),
+        'APP_URL' => env('APP_URL'),
+        'FRONTEND_URL' => env('FRONTEND_URL'),
       ]
     ];
 

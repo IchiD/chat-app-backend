@@ -34,8 +34,11 @@ class EmailChangeVerification extends Mailable
    */
   public function build()
   {
+    // フロントエンドのベースURLを環境変数から取得
+    $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+
     // 認証リンク（フロントエンドのverify-email-changeページを使用）
-    $verificationUrl = 'http://localhost:3000/auth/verify-email-change?token=' . $this->token;
+    $verificationUrl = $frontendUrl . '/auth/verify-email-change?token=' . $this->token;
 
     return $this->subject('メールアドレス変更確認')
       ->view('emails.verify-email-change')

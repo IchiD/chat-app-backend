@@ -43,18 +43,8 @@ class CustomSendPasswordResetEmail extends Notification
    */
   public function toMail($notifiable)
   {
-    // パスワード再設定URLを作成
-    // $url = url(config('app.url') . route('password.reset', [
-    //   'token' => $this->token,
-    //   'email' => $notifiable->getEmailForPasswordReset(),
-    // ], false));
-
-    // フロントエンドのパスワードリセットページのURLを直接生成
-    // .envにFRONTEND_URLが設定されていることを前提とします。
-    // 例: FRONTEND_URL=http://localhost:3000
-    // $frontendUrl = config('app.frontend_url', 'http://localhost:3000');
-    // 今回は直接指定します。
-    $frontendUrl = 'http://localhost:3000';
+    // フロントエンドのベースURLを環境変数から取得
+    $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
     $url = $frontendUrl . '/auth/reset-password?token=' . $this->token . '&email=' . urlencode($notifiable->getEmailForPasswordReset());
 
     return (new MailMessage)
