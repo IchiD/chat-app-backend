@@ -133,6 +133,7 @@ class GoogleAuthController extends Controller
           'avatar' => $googleUser->avatar,
           'social_type' => 'google',
           'is_verified' => true,
+          'is_banned' => false,
           'email_verified_at' => Carbon::now(),
           'password' => Hash::make(Str::random(32)), // ランダムパスワード
         ]);

@@ -105,6 +105,11 @@ class User extends Authenticatable
         $user->token_expires_at = Carbon::now()->addHours(1);
       }
 
+      // is_banned が設定されていない場合、デフォルトでfalseを設定
+      if (is_null($user->is_banned)) {
+        $user->is_banned = false;
+      }
+
       // friend_id が設定されていない場合、自動生成する
       // 6桁のランダム文字列を使用
       if (empty($user->friend_id)) {
@@ -391,7 +396,7 @@ class User extends Authenticatable
    */
   public function isBanned(): bool
   {
-    return $this->is_banned;
+    return (bool) $this->is_banned;
   }
 
   /**
