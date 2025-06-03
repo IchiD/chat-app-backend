@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use NotificationChannels\WebPush\HasPushSubscriptions;
+use Illuminate\Support\Facades\Log;
 
 class User extends Authenticatable
 {
@@ -234,32 +235,54 @@ class User extends Authenticatable
    */
   public function sendFriendRequest(int $friendId, string $message = null)
   {
-    // 既存のアクティブな友達関係をチェック
-    $existingFriendship = Friendship::getFriendship($this->id, $friendId);
+    try {
+      Log::info('User::sendFriendRequest開始', ['user_id' => $this->id, 'friend_id' => $friendId]);
 
-    if ($existingFriendship) {
-      return $existingFriendship;
+      // 既存のアクティブな友達関係をチェック
+      $existingFriendship = Friendship::getFriendship($this->id, $friendId);
+      Log::info('既存のアクティブな友達関係チェック', ['existing' => $existingFriendship ? $existingFriendship->id : null]);
+
+      if ($existingFriendship) {
+        Log::info('既存の友達関係を返却');
+        return $existingFriendship;
+      }
+
+      // 論理削除された友達関係があるかチェック
+      Log::info('論理削除された友達関係をチェック開始');
+      $deletedFriendship = Friendship::getFriendshipWithTrashed($this->id, $friendId);
+      Log::info('論理削除された友達関係チェック完了', ['deleted' => $deletedFriendship ? $deletedFriendship->id : null]);
+
+      if ($deletedFriendship && $deletedFriendship->isDeleted()) {
+        Log::info('論理削除された関係を復活');
+        // 論理削除された関係を復活させる
+        $deletedFriendship->restoreByAdmin();
+        $deletedFriendship->status = Friendship::STATUS_PENDING;
+        $deletedFriendship->message = $message;
+        $deletedFriendship->save();
+        Log::info('論理削除された関係の復活完了');
+        return $deletedFriendship;
+      }
+
+      // 新しい友達申請を作成
+      Log::info('新しい友達申請を作成');
+      $friendship = Friendship::create([
+        'user_id' => $this->id,
+        'friend_id' => $friendId,
+        'status' => Friendship::STATUS_PENDING,
+        'message' => $message,
+      ]);
+      Log::info('新しい友達申請作成完了', ['friendship_id' => $friendship->id]);
+
+      return $friendship;
+    } catch (\Exception $e) {
+      Log::error('User::sendFriendRequestでエラー', [
+        'user_id' => $this->id,
+        'friend_id' => $friendId,
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+      ]);
+      throw $e;
     }
-
-    // 論理削除された友達関係があるかチェック
-    $deletedFriendship = Friendship::getFriendshipWithTrashed($this->id, $friendId);
-
-    if ($deletedFriendship && $deletedFriendship->isDeleted()) {
-      // 論理削除された関係を復活させる
-      $deletedFriendship->restoreByAdmin();
-      $deletedFriendship->status = Friendship::STATUS_PENDING;
-      $deletedFriendship->message = $message;
-      $deletedFriendship->save();
-      return $deletedFriendship;
-    }
-
-    // 新しい友達申請を作成
-    return Friendship::create([
-      'user_id' => $this->id,
-      'friend_id' => $friendId,
-      'status' => Friendship::STATUS_PENDING,
-      'message' => $message,
-    ]);
   }
 
   /**

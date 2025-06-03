@@ -214,124 +214,158 @@ class FriendshipController extends Controller
    */
   public function sendRequest(Request $request)
   {
-    // 認証チェック
-    $currentUser = $this->getAuthenticatedUser();
-    if ($currentUser instanceof JsonResponse) {
-      return $currentUser;
-    }
+    try {
+      Log::info('友達申請処理開始', ['request_data' => $request->all()]);
 
-    $validator = Validator::make($request->all(), [
-      'user_id' => 'required|integer|exists:users,id',
-      'message' => 'nullable|string|max:255'
-    ]);
+      // 認証チェック
+      $currentUser = $this->getAuthenticatedUser();
+      if ($currentUser instanceof JsonResponse) {
+        Log::warning('認証チェック失敗');
+        return $currentUser;
+      }
 
-    if ($validator->fails()) {
-      return response()->json([
-        'status' => 'error',
-        'message' => '入力内容に問題があります',
-        'errors' => $validator->errors()
-      ], 422);
-    }
+      Log::info('認証チェック成功', ['user_id' => $currentUser->id]);
 
-    $friendId = $request->input('user_id');
-    $message = $request->input('message');
+      $validator = Validator::make($request->all(), [
+        'user_id' => 'required|integer|exists:users,id',
+        'message' => 'nullable|string|max:255'
+      ]);
 
-    // 自分自身への申請を防止
-    if ($currentUser->id === (int)$friendId) {
-      return response()->json([
-        'status' => 'error',
-        'message' => '自分自身に友達申請はできません'
-      ], 422);
-    }
-
-    // 送信先のユーザーが削除・バンされていないかチェック
-    $friendUser = User::find($friendId);
-    if (!$friendUser || $friendUser->isDeleted() || $friendUser->isBanned()) {
-      return response()->json([
-        'status' => 'error',
-        'message' => '指定されたユーザーは現在利用できません'
-      ], 422);
-    }
-
-    // 既存の友達関係をチェック
-    $existingFriendship = Friendship::getFriendship($currentUser->id, $friendId);
-
-    if ($existingFriendship) {
-      if ($existingFriendship->status === Friendship::STATUS_ACCEPTED) {
+      if ($validator->fails()) {
+        Log::warning('バリデーション失敗', ['errors' => $validator->errors()]);
         return response()->json([
           'status' => 'error',
-          'message' => 'すでに友達です'
+          'message' => '入力内容に問題があります',
+          'errors' => $validator->errors()
         ], 422);
-      } elseif ($existingFriendship->status === Friendship::STATUS_PENDING) {
-        // 自分が送った申請の場合とそうでない場合で分ける
-        if ($existingFriendship->user_id === $currentUser->id) {
+      }
+
+      $friendId = $request->input('user_id');
+      $message = $request->input('message');
+
+      Log::info('バリデーション成功', ['friend_id' => $friendId, 'message' => $message]);
+
+      // 自分自身への申請を防止
+      if ($currentUser->id === (int)$friendId) {
+        Log::warning('自分自身への申請');
+        return response()->json([
+          'status' => 'error',
+          'message' => '自分自身に友達申請はできません'
+        ], 422);
+      }
+
+      // 送信先のユーザーが削除・バンされていないかチェック
+      $friendUser = User::find($friendId);
+      if (!$friendUser || $friendUser->isDeleted() || $friendUser->isBanned()) {
+        Log::warning('送信先ユーザーが利用不可', ['friend_id' => $friendId]);
+        return response()->json([
+          'status' => 'error',
+          'message' => '指定されたユーザーは現在利用できません'
+        ], 422);
+      }
+
+      Log::info('送信先ユーザーチェック成功', ['friend_user_id' => $friendUser->id]);
+
+      // 既存の友達関係をチェック
+      $existingFriendship = Friendship::getFriendship($currentUser->id, $friendId);
+      Log::info('既存の友達関係チェック', ['existing_friendship' => $existingFriendship ? $existingFriendship->id : null]);
+
+      if ($existingFriendship) {
+        if ($existingFriendship->status === Friendship::STATUS_ACCEPTED) {
+          Log::warning('既に友達');
           return response()->json([
             'status' => 'error',
-            'message' => '既に友達申請を送信済みです'
+            'message' => 'すでに友達です'
           ], 422);
-        } else {
-          // 相手から既に申請が来ている場合は自動的に承認する
-          $existingFriendship->status = Friendship::STATUS_ACCEPTED;
+        } elseif ($existingFriendship->status === Friendship::STATUS_PENDING) {
+          // 自分が送った申請の場合とそうでない場合で分ける
+          if ($existingFriendship->user_id === $currentUser->id) {
+            Log::warning('既に友達申請送信済み');
+            return response()->json([
+              'status' => 'error',
+              'message' => '既に友達申請を送信済みです'
+            ], 422);
+          } else {
+            // 相手から既に申請が来ている場合は自動的に承認する
+            Log::info('相手からの申請を自動承認');
+            $existingFriendship->status = Friendship::STATUS_ACCEPTED;
+            $existingFriendship->save();
+
+            return response()->json([
+              'status' => 'success',
+              'message' => '相手からの友達申請を承認しました',
+              'friendship' => $existingFriendship
+            ]);
+          }
+        } elseif ($existingFriendship->status === Friendship::STATUS_REJECTED) {
+          // 拒否された申請は再度送信可能にする
+          Log::info('拒否された申請を再送信');
+          $existingFriendship->status = Friendship::STATUS_PENDING;
+          $existingFriendship->message = $message;
           $existingFriendship->save();
+
+          // 再申請の通知を送信
+          if ($friendUser) {
+            try {
+              $notificationController = new NotificationController();
+              $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+            } catch (\Exception $e) {
+              Log::warning('友達申請再送信通知の送信に失敗しました', [
+                'friend_user_id' => $friendUser->id,
+                'sender_user_id' => $currentUser->id,
+                'error' => $e->getMessage()
+              ]);
+              // 通知エラーは無視して処理を続行
+            }
+          }
 
           return response()->json([
             'status' => 'success',
-            'message' => '相手からの友達申請を承認しました',
+            'message' => '友達申請を送信しました',
             'friendship' => $existingFriendship
           ]);
         }
-      } elseif ($existingFriendship->status === Friendship::STATUS_REJECTED) {
-        // 拒否された申請は再度送信可能にする
-        $existingFriendship->status = Friendship::STATUS_PENDING;
-        $existingFriendship->message = $message;
-        $existingFriendship->save();
+      }
 
-        // 再申請の通知を送信
-        if ($friendUser) {
-          try {
-            $notificationController = new NotificationController();
-            $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
-          } catch (\Exception $e) {
-            Log::warning('友達申請再送信通知の送信に失敗しました', [
-              'friend_user_id' => $friendUser->id,
-              'sender_user_id' => $currentUser->id,
-              'error' => $e->getMessage()
-            ]);
-            // 通知エラーは無視して処理を続行
-          }
+      // 新しい友達申請を作成
+      Log::info('新しい友達申請を作成開始');
+      $friendship = $currentUser->sendFriendRequest($friendId, $message);
+      Log::info('新しい友達申請を作成完了', ['friendship_id' => $friendship->id]);
+
+      // 友達申請の通知を送信（エラーが発生しても友達申請自体は成功させる）
+      if ($friendUser) {
+        try {
+          $notificationController = new NotificationController();
+          $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+          Log::info('友達申請通知送信成功');
+        } catch (\Exception $e) {
+          Log::warning('友達申請通知の送信に失敗しました', [
+            'friend_user_id' => $friendUser->id,
+            'sender_user_id' => $currentUser->id,
+            'error' => $e->getMessage()
+          ]);
+          // 通知エラーは無視して処理を続行
         }
-
-        return response()->json([
-          'status' => 'success',
-          'message' => '友達申請を送信しました',
-          'friendship' => $existingFriendship
-        ]);
       }
+
+      Log::info('友達申請処理完了');
+      return response()->json([
+        'status' => 'success',
+        'message' => '友達申請を送信しました',
+        'friendship' => $friendship
+      ]);
+    } catch (\Exception $e) {
+      Log::error('友達申請処理でエラーが発生', [
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString(),
+        'request_data' => $request->all()
+      ]);
+
+      return response()->json([
+        'status' => 'error',
+        'message' => '友達申請の送信中にエラーが発生しました'
+      ], 500);
     }
-
-    // 新しい友達申請を作成
-    $friendship = $currentUser->sendFriendRequest($friendId, $message);
-
-    // 友達申請の通知を送信（エラーが発生しても友達申請自体は成功させる）
-    if ($friendUser) {
-      try {
-        $notificationController = new NotificationController();
-        $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
-      } catch (\Exception $e) {
-        Log::warning('友達申請通知の送信に失敗しました', [
-          'friend_user_id' => $friendUser->id,
-          'sender_user_id' => $currentUser->id,
-          'error' => $e->getMessage()
-        ]);
-        // 通知エラーは無視して処理を続行
-      }
-    }
-
-    return response()->json([
-      'status' => 'success',
-      'message' => '友達申請を送信しました',
-      'friendship' => $friendship
-    ]);
   }
 
   /**
