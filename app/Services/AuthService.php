@@ -57,8 +57,8 @@ class AuthService extends BaseService
         ]);
       }
 
-      // 認証用メールの送信を非同期実施
-      Mail::to($user->email)->queue(new PreRegistrationEmail($user));
+      // 認証用メールの送信を同期実施（一時的）
+      Mail::to($user->email)->send(new PreRegistrationEmail($user));
 
       // throw new \Exception('テスト用例外: メール送信をスキップ');
 
@@ -411,8 +411,8 @@ class AuthService extends BaseService
       $user->token_expires_at = $expiresAt;
       $user->save();
 
-      // メール送信（非同期）
-      Mail::to($newEmail)->queue(new EmailChangeVerification($user, $token));
+      // メール送信（同期・一時的）
+      Mail::to($newEmail)->send(new EmailChangeVerification($user, $token));
 
       DB::commit();
 
