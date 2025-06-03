@@ -540,4 +540,70 @@ class FriendshipController extends Controller
       'message' => '友達申請を取り消しました'
     ]);
   }
+
+  /**
+   * デバッグ用のテストエンドポイント
+   *
+   * @param Request $request
+   * @return \Illuminate\Http\JsonResponse
+   */
+  public function testDebug(Request $request)
+  {
+    try {
+      Log::info('=== DEBUG TEST START ===');
+
+      // 認証チェック
+      $currentUser = $this->getAuthenticatedUser();
+      if ($currentUser instanceof JsonResponse) {
+        Log::error('認証チェック失敗 in testDebug');
+        return $currentUser;
+      }
+
+      Log::info('認証チェック成功', ['user_id' => $currentUser->id, 'user_name' => $currentUser->name]);
+
+      // Friendshipクラスのテスト
+      Log::info('Friendshipクラステスト');
+      $testFriendship = new Friendship();
+      Log::info('Friendship STATUS_PENDING: ' . Friendship::STATUS_PENDING);
+      Log::info('Friendship STATUS_ACCEPTED: ' . Friendship::STATUS_ACCEPTED);
+      Log::info('Friendship STATUS_REJECTED: ' . Friendship::STATUS_REJECTED);
+
+      // データベース接続のテスト
+      Log::info('データベーステスト');
+      $userCount = User::count();
+      Log::info('ユーザー数: ' . $userCount);
+
+      // Friendshipテーブルのテスト
+      $friendshipCount = Friendship::count();
+      Log::info('Friendship数: ' . $friendshipCount);
+
+      Log::info('=== DEBUG TEST END ===');
+
+      return response()->json([
+        'status' => 'success',
+        'message' => 'デバッグテスト完了',
+        'data' => [
+          'user_id' => $currentUser->id,
+          'user_name' => $currentUser->name,
+          'user_count' => $userCount,
+          'friendship_count' => $friendshipCount,
+          'status_constants' => [
+            'PENDING' => Friendship::STATUS_PENDING,
+            'ACCEPTED' => Friendship::STATUS_ACCEPTED,
+            'REJECTED' => Friendship::STATUS_REJECTED,
+          ]
+        ]
+      ]);
+    } catch (\Exception $e) {
+      Log::error('=== DEBUG TEST ERROR ===', [
+        'message' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+      ]);
+
+      return response()->json([
+        'status' => 'error',
+        'message' => 'デバッグテスト中にエラーが発生しました: ' . $e->getMessage()
+      ], 500);
+    }
+  }
 }

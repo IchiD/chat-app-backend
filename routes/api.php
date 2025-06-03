@@ -39,6 +39,9 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
 
   // 友達関係のAPI
   Route::prefix('friends')->group(function () {
+    // デバッグテスト用エンドポイント
+    Route::get('/debug-test', [FriendshipController::class, 'testDebug']);
+
     // 友達一覧
     Route::get('/', [FriendshipController::class, 'getFriends']);
 
