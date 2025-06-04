@@ -12,8 +12,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // MySQLのenumを変更するため、直接SQLを実行
-        DB::statement("ALTER TABLE conversations MODIFY COLUMN type ENUM('direct', 'group', 'support') DEFAULT 'direct'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE conversations MODIFY COLUMN type ENUM('direct', 'group', 'support') DEFAULT 'direct'");
+        }
     }
 
     /**
@@ -21,9 +22,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // ロールバック時は元のenumに戻す
-        // 既存の'support'タイプのレコードがあれば削除が必要
-        DB::statement("DELETE FROM conversations WHERE type = 'support'");
-        DB::statement("ALTER TABLE conversations MODIFY COLUMN type ENUM('direct', 'group') DEFAULT 'direct'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("DELETE FROM conversations WHERE type = 'support'");
+            DB::statement("ALTER TABLE conversations MODIFY COLUMN type ENUM('direct', 'group') DEFAULT 'direct'");
+        }
     }
 };
