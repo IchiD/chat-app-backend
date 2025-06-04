@@ -74,15 +74,15 @@
               <i class="fas fa-tachometer-alt me-2"></i> ダッシュボード
             </a>
             <a href="{{ route('admin.users') }}" class="nav-link {{ request()->routeIs('admin.users') ? 'active' : '' }}">
-              <i class="fas fa-users me-2"></i> ユーザー管理
+              <i class="fas fa-users me-2"></i> ユーザー
             </a>
             <a href="{{ route('admin.support') }}" class="nav-link {{ request()->routeIs('admin.support*') ? 'active' : '' }}">
-              <i class="fas fa-comments me-2"></i> お問い合わせ管理
+              <i class="fas fa-comments me-2"></i> お問い合わせ
               <span id="unread-support-badge" class="badge bg-danger rounded-circle ms-2" style="display: none;">0</span>
             </a>
             @if(auth('admin')->user() && auth('admin')->user()->isSuperAdmin())
             <a href="{{ route('admin.admins') }}" class="nav-link {{ request()->routeIs('admin.admins') ? 'active' : '' }}">
-              <i class="fas fa-user-shield me-2"></i> アドミン管理
+              <i class="fas fa-user-shield me-2"></i> 管理者
             </a>
             @endif
           </nav>
