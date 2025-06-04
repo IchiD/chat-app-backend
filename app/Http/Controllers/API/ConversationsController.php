@@ -274,9 +274,17 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'アカウントが削除されています。'], 403);
     }
 
-    $conversation = Conversation::where('room_token', $room_token)
-      ->whereNull('deleted_at') // 削除されていない会話のみ
-      ->firstOrFail();
+    // まず削除状態に関係なく会話を検索
+    $conversation = Conversation::where('room_token', $room_token)->first();
+
+    if (!$conversation) {
+      return response()->json(['message' => '会話が見つかりません。'], 404);
+    }
+
+    // 削除された会話の場合は403エラーを返す
+    if ($conversation->isDeleted()) {
+      return response()->json(['message' => 'この会話は削除されています。'], 403);
+    }
 
     // ユーザーがこの会話の参加者であることを確認
     if (!$conversation->participants()->where('user_id', $user->id)->exists()) {
