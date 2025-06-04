@@ -11,109 +11,133 @@ use Tests\TestCase;
 
 class AuthTest extends TestCase
 {
-    use RefreshDatabase;
+  use RefreshDatabase;
 
-    public function test_user_can_register(): void
-    {
-        $response = $this->postJson('/api/register', [
-            'email' => 'test@example.com',
-            'name' => 'Test User',
-            'password' => 'password',
-            'password_confirmation' => 'password',
-        ]);
+  public function test_user_can_register(): void
+  {
+    $response = $this->postJson('/api/register', [
+      'email' => 'test@example.com',
+      'name' => 'Test User',
+      'password' => 'password',
+      'password_confirmation' => 'password',
+    ]);
 
-        $response->assertCreated()
-            ->assertJson(['status' => 'success']);
+    $response->assertCreated()
+      ->assertJson(['status' => 'success']);
 
-        $this->assertDatabaseHas('users', [
-            'email' => 'test@example.com',
-            'is_verified' => false,
-        ]);
-    }
+    $this->assertDatabaseHas('users', [
+      'email' => 'test@example.com',
+      'is_verified' => false,
+    ]);
+  }
 
-    public function test_email_verification(): void
-    {
-        $this->postJson('/api/register', [
-            'email' => 'verify@example.com',
-            'name' => 'Verify User',
-            'password' => 'password',
-            'password_confirmation' => 'password',
-        ]);
+  public function test_email_verification(): void
+  {
+    $user = User::factory()->create([
+      'email' => 'verify@example.com',
+      'is_verified' => false,
+    ]);
 
-        $user = User::where('email', 'verify@example.com')->first();
+    $this->assertNotNull($user->email_verification_token);
 
-        $response = $this->getJson('/api/verify?token=' . $user->email_verification_token);
+    $response = $this->getJson('/api/verify?token=' . $user->email_verification_token);
 
-        $response->assertOk()->assertJson(['status' => 'success']);
-        $this->assertTrue($user->fresh()->is_verified);
-    }
+    $response->assertOk()->assertJson(['status' => 'success']);
 
-    public function test_user_can_login(): void
-    {
-        $user = User::factory()->create([
-            'password' => bcrypt('password'),
-            'is_verified' => true,
-        ]);
+    $updatedUser = $user->fresh();
+    $this->assertTrue((bool)$updatedUser->is_verified);
+  }
 
-        $response = $this->postJson('/api/login', [
-            'email' => $user->email,
-            'password' => 'password',
-        ]);
+  public function test_user_can_login(): void
+  {
+    $user = User::factory()->create([
+      'password' => bcrypt('password'),
+      'is_verified' => true,
+    ]);
 
-        $response->assertOk()
-            ->assertJson(['status' => 'success'])
-            ->assertJsonStructure(['access_token']);
-    }
+    $response = $this->postJson('/api/login', [
+      'email' => $user->email,
+      'password' => 'password',
+    ]);
 
-    public function test_login_fails_with_invalid_credentials(): void
-    {
-        $user = User::factory()->create([
-            'password' => bcrypt('password'),
-            'is_verified' => true,
-        ]);
+    $response->assertOk()
+      ->assertJson(['status' => 'success'])
+      ->assertJsonStructure(['access_token']);
+  }
 
-        $response = $this->postJson('/api/login', [
-            'email' => $user->email,
-            'password' => 'wrong-password',
-        ]);
+  public function test_login_fails_with_invalid_credentials(): void
+  {
+    $user = User::factory()->create([
+      'password' => bcrypt('password'),
+      'is_verified' => true,
+    ]);
 
-        $response->assertStatus(401)
-            ->assertJson(['error_type' => 'invalid_credentials']);
-    }
+    $response = $this->postJson('/api/login', [
+      'email' => $user->email,
+      'password' => 'wrong-password',
+    ]);
 
-    public function test_user_can_logout(): void
-    {
-        $user = User::factory()->create([
-            'password' => bcrypt('password'),
-            'is_verified' => true,
-        ]);
+    $response->assertStatus(401)
+      ->assertJson(['error_type' => 'invalid_credentials']);
+  }
 
-        Sanctum::actingAs($user);
+  public function test_user_can_logout(): void
+  {
+    $user = User::factory()->create([
+      'password' => bcrypt('password'),
+      'is_verified' => true,
+    ]);
 
-        $response = $this->postJson('/api/logout');
+    Sanctum::actingAs($user);
 
-        $response->assertOk();
-        $this->assertDatabaseCount('personal_access_tokens', 0);
-    }
+    $response = $this->postJson('/api/logout');
 
-    public function test_password_reset(): void
-    {
-        $user = User::factory()->create([
-            'password' => bcrypt('oldpass'),
-            'is_verified' => true,
-        ]);
+    $response->assertOk();
+    $this->assertDatabaseCount('personal_access_tokens', 0);
+  }
 
-        $token = Password::broker()->createToken($user);
+  public function test_password_reset(): void
+  {
+    $user = User::factory()->create([
+      'password' => bcrypt('oldpass'),
+      'is_verified' => true,
+    ]);
 
-        $response = $this->postJson('/api/password/reset', [
-            'email' => $user->email,
-            'token' => $token,
-            'password' => 'newpassword',
-            'password_confirmation' => 'newpassword',
-        ]);
+    $token = Password::broker()->createToken($user);
 
-        $response->assertOk()->assertJson(['status' => 'success']);
+    $response = $this->postJson('/api/password/reset', [
+      'email' => $user->email,
+      'token' => $token,
+      'password' => 'newpassword',
+      'password_confirmation' => 'newpassword',
+    ]);
 
-        $this->assertTrue(Hash::check('newpassword', $user->fresh()->password));
-    }
+    $response->assertOk()->assertJson(['status' => 'success']);
+
+    $this->assertTrue(Hash::check('newpassword', $user->fresh()->password));
+  }
+
+  public function test_unverified_user_cannot_login(): void
+  {
+    $user = User::factory()->create([
+      'password' => bcrypt('password'),
+      'is_verified' => false,
+    ]);
+
+    $response = $this->postJson('/api/login', [
+      'email' => $user->email,
+      'password' => 'password',
+    ]);
+
+    $response->assertStatus(401)
+      ->assertJson(['error_type' => 'not_verified']);
+  }
+
+  public function test_invalid_verification_token(): void
+  {
+    $response = $this->getJson('/api/verify?token=invalid_token');
+
+    $response->assertStatus(400)
+      ->assertJson(['error_type' => 'token_invalid']);
+  }
 }

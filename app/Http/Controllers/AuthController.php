@@ -482,7 +482,7 @@ class AuthController extends Controller
       ]);
 
       // 確認メールを再送信
-      Mail::to($user->email)->queue(new PreRegistrationEmail($user));
+      Mail::to($user->email)->send(new PreRegistrationEmail($user));
 
       Log::info('確認メール再送信が完了しました', ['email' => $email]);
 
