@@ -7,12 +7,9 @@
 ```
 PHPUnit 11.5.6 by Sebastian Bergmann and contributors.
 
-................................................................. 65 / 84 ( 77%)
-...................                                              84 / 84 (100%)
+Time: 00:01.552, Memory: 56.50 MB
 
-Time: 00:01.56, Memory: 52.50 MB
-
-OK (84 tests, 193 assertions)
+OK (91 tests, 206 assertions)
 ```
 
 ### **テストスイート別結果**
@@ -21,6 +18,7 @@ OK (84 tests, 193 assertions)
 | -------------------------------- | -------- | -------------- | ---------- |
 | **AppConfigTest**                | 1        | 1              | ✅ 全成功  |
 | **AuthTest**                     | 8        | 21             | ✅ 全成功  |
+| **GoogleAuthTest**               | 7        | 13             | ✅ 全成功  |
 | **AuthorizationTest**            | 15       | 26             | ✅ 全成功  |
 | **ConversationTest**             | 5        | 11             | ✅ 全成功  |
 | **FriendshipTest**               | 9        | 21             | ✅ 全成功  |
@@ -42,7 +40,7 @@ OK (84 tests, 193 assertions)
 
 | **機能カテゴリ**       | **Feature 層テスト** | **API 層テスト** | **Validation 層テスト** | **Unit 層テスト** | **合計カバレッジ** |
 | ---------------------- | -------------------- | ---------------- | ----------------------- | ----------------- | ------------------ |
-| **認証機能**           | 8 テスト（完全）     | 4 テスト（補完） | 2 テスト（検証）        | -                 | **100%**           |
+| **認証機能**           | 15 テスト（完全）    | 4 テスト（補完） | 2 テスト（検証）        | -                 | **100%**           |
 | **友達関係機能**       | 9 テスト（完全）     | 3 テスト（補完） | 2 テスト（検証）        | 3 テスト（基盤）  | **100%**           |
 | **会話機能**           | 5 テスト（完全）     | 5 テスト（補完） | -                       | 3 テスト（基盤）  | **100%**           |
 | **メッセージ機能**     | 4 テスト（完全）     | 2 テスト（補完） | 1 テスト（検証）        | 1 テスト（基盤）  | **100%**           |
@@ -53,7 +51,7 @@ OK (84 tests, 193 assertions)
 
 ### **テスト層構造の最適化**
 
-✅ **Feature Tests（54 テスト・137 アサーション）**
+✅ **Feature Tests（61 テスト・150 アサーション）**
 
 -   **ビジネスロジック**の完全テスト
 -   **セキュリティ要件**の包括的検証
@@ -84,11 +82,6 @@ OK (84 tests, 193 assertions)
 
 Laravel アプリケーションの包括的なテストスイート。
 
-# テストの実行方法
-
-開発環境および本番環境では MySQL を利用していますが、テストでは既存のデータベース
-を汚さないようにメモリ上の SQLite を使用します。
-
 ## 📋 **クイックスタート**
 
 1. **依存パッケージのインストール**
@@ -98,22 +91,12 @@ Laravel アプリケーションの包括的なテストスイート。
     ```
 
 2. **環境設定**
-   テストではメモリ上の SQLite データベースを使用します。`phpunit.xml` に設定済みのため、追加設定は不要です。必要に応じて `.env` ファイルを作成し `APP_KEY` を生成してください。
-
-    ```bash
-    cp .env.example .env
-    php artisan key:generate
-    ```
+   テストではメモリ上の SQLite データベースを使用します。`phpunit.xml` に設定済みのため、追加設定は不要です。
 
 3. **全テスト実行**
 
     ```bash
     ./vendor/bin/phpunit
-    ```
-
-4. **読みやすい形式でテスト実行**
-    ```bash
-    ./vendor/bin/phpunit --testdox
     ```
 
 ---
@@ -125,14 +108,15 @@ Laravel アプリケーションの包括的なテストスイート。
 API エンドポイント全体の動作を統合的にテスト
 
 -   **AuthTest.php** - 認証機能の API 全体
+-   **GoogleAuthTest.php** - Google OAuth 認証機能の包括的テスト
 -   **AuthorizationTest.php** - 認可・セキュリティ機能の包括的テスト
 -   **FriendshipTest.php** - 友達機能の API 全体
 -   **ConversationTest.php** - チャット機能の API 全体
 -   **MessageTest.php** - メッセージ機能の API 全体
 -   **ValidationTest.php** - バリデーション機能の包括的テスト
 -   **ErrorHandlingTest.php** - エラーハンドリング機能の包括的テスト
--   **AppConfigTest.php** - アプリ設定 API
 -   **EdgeCaseTest.php** - エッジケース・極限状況の包括的テスト
+-   **AppConfigTest.php** - アプリ設定 API
 
 ### **API Tests（API 層テスト）** - `tests/Feature/API/`
 
@@ -156,9 +140,7 @@ REST API エンドポイントの動作を具体的にテスト
 
 ## 🔐 **認証機能テストの詳細**
 
-### **テスト対象機能**
-
-`AuthTest.php` で以下の認証機能 API をテスト：
+### **基本認証テスト** - `AuthTest.php`
 
 ✅ **基本認証機能**
 
@@ -174,34 +156,26 @@ REST API エンドポイントの動作を具体的にテスト
 -   未認証ユーザーのログイン制限
 -   無効なメール認証トークン
 
-### **認証機能テストの実行**
+### **Google OAuth 認証テスト** - `GoogleAuthTest.php`
 
-```bash
-# 認証機能テストのみ実行
-./vendor/bin/phpunit tests/Feature/AuthTest.php --testdox
+✅ **Google 認証フロー**
 
-# 特定のテストメソッドのみ実行
-./vendor/bin/phpunit --filter test_user_can_login
+-   **認証リダイレクト**: Google OAuth への適切なリダイレクト処理
+-   **新規ユーザー作成**: Google 認証による新規ユーザー自動作成
+-   **既存ユーザー認証**: Google ID による既存ユーザー認証・自動認証
+-   **認証エラー処理**: Google 認証失敗時の適切なエラーハンドリング
 
-# 認証関連のテストのみ実行
-./vendor/bin/phpunit --filter "auth|login|register"
-```
+✅ **セキュリティ制限**
 
-**期待される出力:**
+-   **パスワード変更制限**: Google 認証ユーザーのパスワード変更制限
+-   **メール変更制限**: Google 認証ユーザーのメールアドレス変更制限
+-   **無効トークン処理**: 無効な Google 認証トークンの適切な拒否
 
-```
-Auth (Tests\Feature\Auth)
- ✔ User can register
- ✔ Email verification
- ✔ User can login
- ✔ Login fails with invalid credentials
- ✔ User can logout
- ✔ Password reset
- ✔ Unverified user cannot login
- ✔ Invalid verification token
+✅ **高度なテスト技法**
 
-OK (8 tests, 21 assertions)
-```
+-   **Laravel Socialite モッキング**: 外部 API 依存の排除
+-   **データベース整合性確認**: 新規・既存ユーザー処理の検証
+-   **設定ファイル連携**: Google OAuth 設定の動作確認
 
 ---
 
@@ -238,42 +212,6 @@ OK (8 tests, 21 assertions)
 
 -   **友達申請制限**: 削除・バンされたユーザーへの友達申請不可
 -   **検索制限**: 削除・バンされたユーザーはフレンド ID 検索に表示されない
-
-### **認可・セキュリティテストの実行**
-
-```bash
-# セキュリティテストのみ実行
-./vendor/bin/phpunit tests/Feature/AuthorizationTest.php --testdox
-
-# 特定のセキュリティテストのみ実行
-./vendor/bin/phpunit --filter test_deleted_user_cannot_access_api
-
-# 認可関連のテストのみ実行
-./vendor/bin/phpunit --filter "authorization|access|permission"
-```
-
-**期待される出力:**
-
-```
-Authorization (Tests\Feature\Authorization)
- ✔ Unauthenticated user cannot access protected api
- ✔ User cannot accept friend request of others
- ✔ User cannot access conversation they do not participate in
- ✔ User cannot delete message of other user
- ✔ Deleted user cannot access api
- ✔ Banned user cannot access api
- ✔ User cannot send message to unfriended conversation
- ✔ User cannot access messages from unfriended conversation
- ✔ User cannot send friend request to deleted user
- ✔ User cannot send friend request to banned user
- ✔ User cannot search deleted or banned users by friend id
- ✔ User cannot access deleted conversation
- ✔ User cannot send message to deleted conversation
- ✔ Token revocation for deleted user
- ✔ Token revocation for banned user
-
-OK (15 tests, 26 assertions)
-```
 
 ---
 
@@ -327,60 +265,6 @@ OK (15 tests, 26 assertions)
 -   **配列型データ**: 不正な配列型入力の拒否
 -   **オブジェクト型データ**: 不正なオブジェクト型入力の拒否
 
-### **バリデーションテストの実行**
-
-```bash
-# バリデーションテストのみ実行
-./vendor/bin/phpunit tests/Feature/ValidationTest.php --testdox
-
-# エラーハンドリング確認（HTTPエラー）
-./vendor/bin/phpunit tests/Feature/ErrorHandlingTest.php --testdox
-
-# セキュリティ確認（権限チェック）
-
-# 特定のバリデーションテストのみ実行
-./vendor/bin/phpunit --filter test_friend_request_input_validation
-
-# バリデーション関連のテストのみ実行
-./vendor/bin/phpunit --filter "validation|input"
-```
-
-**期待される出力:**
-
-```
-Validation (Tests\Feature\Validation)
- ✔ Friend request input validation
- ✔ Message send input validation
- ✔ User registration input validation
- ✔ User update validation
- ✔ Login validation
- ✔ Friend id search validation
- ✔ Invalid format data returns error
-
-OK (7 tests, 34 assertions)
-```
-
-### **バリデーションテストの特徴**
-
-✅ **包括的エラーケース**
-
--   **必須項目**: 未入力、null 値、空文字列
--   **データ型**: 文字列・数値・配列・オブジェクトの型検証
--   **フォーマット**: メール形式、パスワード形式、文字数制限
--   **ビジネスルール**: 存在性チェック、重複防止、権限確認
-
-✅ **実装準拠テスト**
-
--   **ステータスコード**: 422（バリデーションエラー）、500（例外処理）
--   **レスポンス構造**: 実際の API 実装に即した検証
--   **エラーハンドリング**: try-catch 処理の考慮
-
-✅ **品質保証効果**
-
--   **不正入力防止**: 悪意のある入力やミス入力の検出
--   **データ整合性**: データベース制約違反の事前防止
--   **セキュリティ**: インジェクション攻撃等への対策確認
-
 ---
 
 ## 🎯 **友達機能テストの詳細**
@@ -404,43 +288,11 @@ OK (7 tests, 34 assertions)
 -   自分自身への申請防止
 -   存在しないユーザーへの申請エラー
 
-### **友達機能テストの実行**
-
-```bash
-# 友達機能テストのみ実行
-./vendor/bin/phpunit tests/Feature/FriendshipTest.php --testdox
-
-# 特定のテストメソッドのみ実行
-./vendor/bin/phpunit --filter test_send_friend_request
-
-# 友達申請関連のテストのみ実行
-./vendor/bin/phpunit --filter "friend_request"
-```
-
-**期待される出力:**
-
-```
-Friendship (Tests\Feature\Friendship)
- ✔ Send friend request
- ✔ Accept friend request
- ✔ Reject friend request
- ✔ Cancel friend request
- ✔ Unfriend
- ✔ Get friends list
- ✔ Prevent duplicate requests
- ✔ Cannot send request to self
- ✔ Error when user not found
-
-OK (9 tests, 21 assertions)
-```
-
 ---
 
 ## 🔗 **モデルリレーションテストの詳細**
 
-### **テスト対象機能**
-
-`UserRelationshipTest.php` で以下のモデルリレーション機能を詳細にテスト：
+### **User モデルリレーション** - `UserRelationshipTest.php`
 
 ✅ **User と Friendship のリレーション**
 
@@ -466,65 +318,7 @@ OK (9 tests, 21 assertions)
 -   **friendRequests() メソッド**: 受信した申請のみ取得するフィルタリング
 -   **ステータス制御**: PENDING/ACCEPTED の適切な分離確認
 
-### **モデルリレーションテストの実行**
-
-```bash
-# モデルリレーションテストのみ実行
-./vendor/bin/phpunit tests/Unit/UserRelationshipTest.php --testdox
-
-# 特定のリレーションテストのみ実行
-./vendor/bin/phpunit --filter test_user_and_friendship_relationships
-
-# Unit テスト全体の実行
-./vendor/bin/phpunit tests/Unit --testdox
-```
-
-**期待される出力:**
-
-```
-User Relationship (Tests\Unit\UserRelationship)
- ✔ User and friendship relationships
- ✔ User and conversation relationship
- ✔ User and message relationship
- ✔ Friends method returns accepted friends
- ✔ Friend requests method returns pending received requests
-
-OK (5 tests, 8 assertions)
-```
-
-### **モデルリレーションテストの特徴**
-
-✅ **Eloquent リレーション検証**
-
--   **HasMany リレーション**: sentFriendships, receivedFriendships, messages
--   **HasManyThrough リレーション**: conversations（Participant 経由）
--   **双方向関係**: user_id ⇔ friend_id の相互リレーション
-
-✅ **データ整合性確認**
-
--   **外部キー制約**: 正しい ID 関連付けの確認
--   **中間テーブル**: Participant テーブル経由の整合性
--   **レコード存在**: contains() による関係確認
-
-✅ **ビジネスロジック検証**
-
--   **ステータスフィルタリング**: friends() の ACCEPTED のみ取得
--   **方向性制御**: friendRequests() の受信申請のみ取得
--   **除外ロジック**: 適切な条件での関係除外
-
-✅ **保守性向上**
-
--   **モデル変更検知**: リレーション定義変更時の早期発見
--   **依存関係明確化**: モデル間の関係性の明文化
--   **データ層品質**: ORM レベルでの動作保証
-
----
-
-## 🎯 **Conversation モデルリレーションテストの詳細**
-
-### **テスト対象機能**
-
-`ConversationRelationshipTest.php` で以下の Conversation モデルリレーション機能を詳細にテスト：
+### **Conversation モデルリレーション** - `ConversationRelationshipTest.php`
 
 ✅ **Conversation と User のリレーション**
 
@@ -544,64 +338,9 @@ OK (5 tests, 8 assertions)
 -   **latestMessage() メソッド**: 最新メッセージ取得（削除済み除外）
 -   **削除済みメッセージ除外**: deleted_at が null のメッセージのみ取得
 
-### **Conversation モデルリレーションテストの実行**
-
-```bash
-# Conversationモデルリレーションテストのみ実行
-./vendor/bin/phpunit tests/Unit/ConversationRelationshipTest.php --testdox
-
-# 特定のリレーションテストのみ実行
-./vendor/bin/phpunit --filter test_conversation_user_relationship
-
-# Unit テスト全体の実行
-./vendor/bin/phpunit tests/Unit --testdox
-```
-
-**期待される出力:**
-
-```
-Conversation Relationship (Tests\Unit\ConversationRelationship)
- ✔ Conversation user relationship
- ✔ Conversation message relationship
- ✔ Participants method returns all users
- ✔ Latest message method returns latest non deleted message
-
-OK (4 tests, 10 assertions)
-```
-
-### **Conversation モデルリレーションテストの特徴**
-
-✅ **Eloquent リレーション検証**
-
--   **HasManyThrough リレーション**: participants（Participant テーブル経由）
--   **HasMany リレーション**: messages（conversation_id 経由）
--   **複数参加者管理**: 会話の参加者複数人の関係確認
-
-✅ **データ整合性確認**
-
--   **外部キー制約**: conversation_id, user_id の正しい関連付け
--   **中間テーブル**: Participant テーブル経由の整合性確認
--   **レコード存在**: contains() による関係確認
-
-✅ **ビジネスロジック検証**
-
--   **メッセージ順序**: sent_at 降順での正しい順序取得
--   **削除済み除外**: latestMessage() の deleted_at != null 除外
--   **参加者管理**: 複数ユーザーの会話参加関係確認
-
-✅ **チャット機能品質保証**
-
--   **会話基盤安定性**: Conversation モデルの基本動作保証
--   **メッセージ整合性**: 会話とメッセージの正確な関係確認
--   **参加者権限**: 会話参加者の適切な管理確認
-
 ---
 
 ## 🎯 **API エンドポイントテストの詳細**
-
-### **テスト対象機能**
-
-`tests/Feature/API/` で以下の REST API エンドポイントを個別にテスト：
 
 ### **会話 API テスト** - `ConversationsApiTest.php`
 
@@ -635,11 +374,6 @@ OK (4 tests, 10 assertions)
 -   **メッセージ一覧取得** (`GET /api/conversations/room/{room_token}/messages`)
 -   **メッセージ送信** (`POST /api/conversations/room/{room_token}/messages`)
 
-✅ **友達関係との連携**
-
--   **友達間でのメッセージ送受信確認**
--   **データベース整合性チェック**
-
 ### **ユーザー API テスト** - `UserApiTest.php`
 
 ✅ **ユーザー情報管理**
@@ -648,83 +382,6 @@ OK (4 tests, 10 assertions)
 -   **ユーザー名更新** (`PUT /api/user/update-name`)
 -   **パスワード更新** (`PUT /api/user/update-password`)
 -   **メールアドレス変更要求** (`PUT /api/user/update-email`)
-
-✅ **セキュリティ機能**
-
--   **認証トークン検証**
--   **パスワード確認ロジック**
--   **データ検証とバリデーション**
-
-### **API テストの実行**
-
-```bash
-# 全APIテストの実行
-./vendor/bin/phpunit tests/Feature/API/ --testdox
-
-# 特定APIテストファイルの実行
-./vendor/bin/phpunit tests/Feature/API/ConversationsApiTest.php --testdox
-./vendor/bin/phpunit tests/Feature/API/FriendshipApiTest.php --testdox
-./vendor/bin/phpunit tests/Feature/API/MessagesApiTest.php --testdox
-./vendor/bin/phpunit tests/Feature/API/UserApiTest.php --testdox
-
-# 特定のAPIエンドポイントテスト
-./vendor/bin/phpunit --filter test_index_returns_conversations
-./vendor/bin/phpunit --filter test_store_creates_message
-```
-
-**期待される出力:**
-
-```
-Conversations Api (Tests\Feature\API\ConversationsApi)
- ✔ Index returns conversations
- ✔ Store creates conversation
- ✔ Show by token returns conversation
- ✔ Mark as read
- ✔ Support conversation flow
-
-Friendship Api (Tests\Feature\API\FriendshipApi)
- ✔ Get sent requests
- ✔ Get received requests
- ✔ Search by friend id
-
-Messages Api (Tests\Feature\API\MessagesApi)
- ✔ Index returns messages
- ✔ Store creates message
-
-User Api (Tests\Feature\API\UserApi)
- ✔ Get current user
- ✔ Update name
- ✔ Update password
- ✔ Request email change
-
-OK (14 tests, 30 assertions)
-```
-
-### **API テストの特徴**
-
-✅ **REST API 仕様準拠**
-
--   **HTTP ステータスコード**の正確な検証
--   **JSON レスポンス構造**の確認
--   **リクエスト・レスポンス**の完全性チェック
-
-✅ **認証・認可テスト**
-
--   **Laravel Sanctum**による認証確認
--   **権限に基づく**アクセス制御テスト
--   **セキュリティ要件**の遵守確認
-
-✅ **データ整合性テスト**
-
--   **データベース状態**の確認
--   **友達関係前提条件**の適切な設定
--   **会話・メッセージ連携**の正確性確認
-
-✅ **エンドポイント間連携**
-
--   **友達関係 → 会話作成 → メッセージ送信**の流れをテスト
--   **API レイヤー**での統合動作確認
--   **実際のフロントエンド使用パターン**の再現
 
 ---
 
@@ -746,32 +403,6 @@ OK (14 tests, 30 assertions)
 -   友達でない相手との会話作成を拒否
 -   重複会話の防止（既存の会話がある場合は同じ会話を返す）
 
-### **チャット機能テストの実行**
-
-```bash
-# チャット機能テストのみ実行
-./vendor/bin/phpunit tests/Feature/ConversationTest.php --testdox
-
-# 特定のテストメソッドのみ実行
-./vendor/bin/phpunit --filter test_create_conversation
-
-# 会話作成関連のテストのみ実行
-./vendor/bin/phpunit --filter "conversation"
-```
-
-**期待される出力:**
-
-```
-Conversation (Tests\Feature\Conversation)
- ✔ Create conversation
- ✔ Create conversation between friends returns existing conversation
- ✔ Cannot create conversation with non friend
- ✔ Get conversation list
- ✔ Admin can delete conversation
-
-OK (5 tests, 11 assertions)
-```
-
 ---
 
 ## 💬 **メッセージ機能テストの詳細**
@@ -791,226 +422,6 @@ OK (5 tests, 11 assertions)
 -   権限のない会話へのメッセージ送信を拒否
 -   参加していない会話のメッセージ閲覧を拒否
 
-### **メッセージ機能テストの実行**
-
-```bash
-# メッセージ機能テストのみ実行
-./vendor/bin/phpunit tests/Feature/MessageTest.php --testdox
-
-# 特定のテストメソッドのみ実行
-./vendor/bin/phpunit --filter test_send_message
-
-# メッセージ関連のテストのみ実行
-./vendor/bin/phpunit --filter "message"
-```
-
-**期待される出力:**
-
-```
-Message (Tests\Feature\Message)
- ✔ Send message
- ✔ Get messages
- ✔ Cannot send message to unauthorized conversation
- ✔ Admin can delete message
-
-OK (4 tests, 8 assertions)
-```
-
----
-
-## 🔧 **詳細なテスト実行オプション**
-
-### **1. テストスイート別実行**
-
-```bash
-# Unitテストのみ実行（高速）
-./vendor/bin/phpunit tests/Unit --testdox
-
-# Featureテストのみ実行（統合テスト）
-./vendor/bin/phpunit tests/Feature --testdox
-```
-
-### **2. 特定テストの実行**
-
-```bash
-# 特定のテストファイルを実行
-./vendor/bin/phpunit tests/Feature/FriendshipTest.php
-./vendor/bin/phpunit tests/Unit/UserModelTest.php
-
-# 特定のテストメソッドのみ実行
-./vendor/bin/phpunit --filter test_friend_id_is_generated_and_unique
-```
-
-### **3. テスト情報の確認**
-
-```bash
-# 利用可能なテストの一覧を表示
-./vendor/bin/phpunit --list-tests
-
-# 利用可能なテストスイートの一覧を表示
-./vendor/bin/phpunit --list-suites
-```
-
-### **4. デバッグ・詳細表示**
-
-```bash
-# デバッグ情報を含めてテスト実行
-./vendor/bin/phpunit --debug
-
-# 警告やエラーの詳細を表示
-./vendor/bin/phpunit --display-warnings --display-errors
-
-# 非推奨機能の使用箇所を表示
-./vendor/bin/phpunit --display-deprecations
-```
-
-### **5. エラー時の動作制御**
-
-```bash
-# エラー発生時に即座に停止
-./vendor/bin/phpunit --stop-on-error
-
-# 失敗発生時に即座に停止
-./vendor/bin/phpunit --stop-on-failure
-```
-
-### **6. コードカバレッジレポート（xdebug が必要）**
-
-```bash
-# HTMLでカバレッジレポートを生成
-./vendor/bin/phpunit --coverage-html coverage
-
-# テキスト形式でカバレッジを表示
-./vendor/bin/phpunit --coverage-text
-```
-
-### **7. 結果出力オプション**
-
-```bash
-# テスト結果をJUnit XML形式で出力
-./vendor/bin/phpunit --log-junit results.xml
-
-# テスト結果をJSON形式で出力
-./vendor/bin/phpunit --log-json results.json
-```
-
----
-
-## 📊 **テスト結果の読み方**
-
-### **成功時の表示**
-
-```
-PHPUnit 11.5.6 by Sebastian Bergmann and contributors.
-
-................................................................. 65 / 84 ( 77%)
-...................                                              84 / 84 (100%)
-
-Time: 00:01.56, Memory: 52.50 MB
-
-OK (84 tests, 193 assertions)
-```
-
-### **失敗時の表示**
-
-失敗した場合はエラーメッセージが表示されます。内容を確認して修正を行ってください。
-
----
-
-## 💡 **開発時のテスト活用法**
-
-### **開発フロー**
-
-1. **機能開発中**: Unit テストで小刻みに検証
-2. **モデル変更時**: Unit テスト（モデルリレーション）で整合性確認
-3. **API 実装後**: Feature テスト + API テストで統合確認
-4. **セキュリティ確認**: Authorization テストで権限チェック
-5. **入力検証確認**: Validation テストでバリデーション確認
-6. **リリース前**: 全テスト実行で総合チェック
-
-### **効率的なテスト実行**
-
-```bash
-# 開発中（高速チェック）
-./vendor/bin/phpunit tests/Unit --testdox
-
-# モデル変更時（リレーション確認）
-./vendor/bin/phpunit tests/Unit/UserRelationshipTest.php --testdox
-./vendor/bin/phpunit tests/Unit/ConversationRelationshipTest.php --testdox
-
-# 機能完成時（統合チェック）
-./vendor/bin/phpunit tests/Feature/FriendshipTest.php --testdox
-
-# API層の動作確認
-./vendor/bin/phpunit tests/Feature/API/ --testdox
-
-# バリデーション確認（入力検証）
-./vendor/bin/phpunit tests/Feature/ValidationTest.php --testdox
-
-# セキュリティ確認（権限チェック）
-./vendor/bin/phpunit tests/Feature/AuthorizationTest.php --testdox
-
-# 最終確認（全体チェック）
-./vendor/bin/phpunit --testdox
-```
-
-### **レイヤー別テスト戦略**
-
-```bash
-# Unit層テスト（モデル・コンポーネント単体確認）
-./vendor/bin/phpunit tests/Unit --testdox
-
-# Feature層テスト（ビジネスロジック確認）
-./vendor/bin/phpunit tests/Feature/ --exclude-group=api --testdox
-
-# API層テスト（エンドポイント動作確認）
-./vendor/bin/phpunit tests/Feature/API/ --testdox
-
-# 認証・認可関連の変更時
-./vendor/bin/phpunit tests/Feature/AuthTest.php tests/Feature/AuthorizationTest.php --testdox
-
-# バリデーション関連の変更時
-./vendor/bin/phpunit tests/Feature/ValidationTest.php --testdox
-
-# エラーハンドリング関連の変更時
-./vendor/bin/phpunit tests/Feature/ErrorHandlingTest.php --testdox
-
-# モデルリレーション関連の変更時
-./vendor/bin/phpunit tests/Unit/UserRelationshipTest.php --testdox
-./vendor/bin/phpunit tests/Unit/ConversationRelationshipTest.php --testdox
-
-# 新機能追加時のセキュリティチェック
-./vendor/bin/phpunit --filter "auth|authorization|permission|access|validation" --testdox
-```
-
-### **テスト駆動開発（TDD）での活用**
-
-```bash
-# 1. 新機能のテストから開始
-./vendor/bin/phpunit --filter test_new_feature_name
-
-# 2. モデル層での単体確認
-./vendor/bin/phpunit tests/Unit/UserRelationshipTest.php --testdox
-./vendor/bin/phpunit tests/Unit/ConversationRelationshipTest.php --testdox
-
-# 3. Feature層での機能実装確認
-./vendor/bin/phpunit tests/Feature/NewFeatureTest.php --testdox
-
-# 4. API層での動作確認
-./vendor/bin/phpunit tests/Feature/API/NewFeatureApiTest.php --testdox
-
-# 5. バリデーション追加・確認
-./vendor/bin/phpunit tests/Feature/ValidationTest.php --testdox
-
-# 6. エラーハンドリング追加・確認
-./vendor/bin/phpunit tests/Feature/ErrorHandlingTest.php --testdox
-
-# 7. セキュリティテストの追加・確認
-./vendor/bin/phpunit tests/Feature/AuthorizationTest.php --testdox
-```
-
-これらのオプションを組み合わせることで、効率的にテストの開発・デバッグを行うことができます。
-
 ---
 
 ## 📧 **メール送信処理について**
@@ -1024,27 +435,9 @@ OK (84 tests, 193 assertions)
 以下の 4 箇所で`Mail::to()->send()`を使用:
 
 1. **新規登録時の確認メール** (`AuthService.php:60`)
-
-    ```php
-    Mail::to($user->email)->send(new PreRegistrationEmail($user));
-    ```
-
 2. **確認メール再送信** (`AuthController.php:484`)
-
-    ```php
-    Mail::to($user->email)->send(new PreRegistrationEmail($user));
-    ```
-
 3. **メールアドレス変更確認** (`AuthService.php:415`)
-
-    ```php
-    Mail::to($newEmail)->send(new EmailChangeVerification($user, $token));
-    ```
-
 4. **パスワードリセット完了通知** (`SendPasswordResetSuccessNotification.php:22`)
-    ```php
-    Mail::to($user->email)->send(new PasswordResetSuccess($user));
-    ```
 
 ### **🧪 テスト環境での動作**
 
@@ -1075,47 +468,23 @@ OK (84 tests, 193 assertions)
 -   **Procfile 準備済み**: キューワーカー起動設定が存在
 -   **一括変更可能**: 4 箇所の`send()`を`queue()`に変更するだけ
 
-```bash
-# 将来的な非同期化時の変更例
-- Mail::to($user->email)->send(new PreRegistrationEmail($user));
-+ Mail::to($user->email)->queue(new PreRegistrationEmail($user));
-```
-
 ---
-
-### **バリデーションテストの重要性**
-
-**ValidationTest** では以下の重要なバリデーション要件をテスト：
-
--   **7 個のテストケース**で 34 のアサーション
--   **必須項目チェック**から**データ型検証**まで包括的にカバー
--   **文字数制限**や**形式チェック**により適切な入力制御
--   **実装準拠**したエラーハンドリング確認
-
-### **モデルリレーションテストの重要性**
-
-**UserRelationshipTest** と **ConversationRelationshipTest** では以下の重要なモデル基盤要件をテスト：
-
--   **9 個のテストケース**で 18 のアサーション
--   **Eloquent リレーション**の動作検証による基盤安定性
--   **HasMany/HasManyThrough**の複雑なリレーション確認
--   **ビジネスロジックメソッド**の正確性保証
--   **チャット機能基盤**の信頼性確保
 
 ### **包括的テストスイートの価値**
 
-✅ **84 テスト・193 アサーション**により以下を保証：
+✅ **91 テスト・206 アサーション**により以下を保証：
 
 -   **API 仕様の正確性**（14 の API テスト）
--   **ビジネスロジックの完全性**（54 の機能テスト）
+-   **ビジネスロジックの完全性**（61 の機能テスト）
 -   **セキュリティ要件の遵守**（15 のセキュリティテスト）
 -   **入力バリデーションの確実性**（7 のバリデーションテスト）
 -   **エラーハンドリング品質**（4 のエラーハンドリングテスト）
 -   **エッジケースの堅牢性**（4 のエッジケーステスト）
+-   **Google OAuth 認証の安全性**（7 の Google 認証テスト）
 -   **モデル基盤の信頼性**（9 の Unit テスト）
 -   **データ整合性の維持**（全テストで DB 確認）
 
-このテストスイートにより、アプリケーションのセキュリティ、機能、入力検証、エラーハンドリング、エッジケース処理、およびモデル基盤が**本番環境レベルで保証**されています。
+このテストスイートにより、アプリケーションのセキュリティ、機能、入力検証、エラーハンドリング、エッジケース処理、OAuth 認証、およびモデル基盤が**本番環境レベルで保証**されています。
 
 ## ⚠️ **エラーハンドリングテストの詳細**
 
@@ -1147,31 +516,6 @@ OK (84 tests, 193 assertions)
 -   **例外処理**: Exception throw によるエラーハンドリング
 -   **動的ルート**: テスト専用ルートでのエラー再現
 
-### **エラーハンドリングテストの実行**
-
-```bash
-# エラーハンドリングテストのみ実行
-./vendor/bin/phpunit tests/Feature/ErrorHandlingTest.php --testdox
-
-# 特定のエラーテストのみ実行
-./vendor/bin/phpunit --filter test_not_found_returns_404
-
-# エラー関連のテストのみ実行
-./vendor/bin/phpunit --filter "error|404|403|422|500"
-```
-
-**期待される出力:**
-
-```
-Error Handling (Tests\Feature\ErrorHandling)
- ✔ Not found returns 404
- ✔ Forbidden returns 403
- ✔ Validation error returns 422
- ✔ Server error returns 500
-
-OK (4 tests, 4 assertions)
-```
-
 ### **エラーハンドリングテストの特徴**
 
 ✅ **主要 HTTP ステータスコード網羅**
@@ -1199,29 +543,7 @@ OK (4 tests, 4 assertions)
 -   **例外処理検証**: アプリケーション例外の適切なハンドリング
 -   **セキュリティ確認**: 権限外アクセスの適切な拒否
 
-### **エラーハンドリングテストの重要性**
-
-**ErrorHandlingTest** では以下の重要な HTTP エラーハンドリング要件をテスト：
-
--   **4 個のテストケース**で 4 のアサーション
--   **主要 HTTP ステータスコード**（404, 403, 422, 500）の完全網羅
--   **実践的なエラーシナリオ**によるアプリケーション品質保証
--   **例外処理とエラーレスポンス**の適切なハンドリング確認
-
-### **包括的テストスイートの価値**
-
-✅ **84 テスト・193 アサーション**により以下を保証：
-
--   **API 仕様の正確性**（14 の API テスト）
--   **ビジネスロジックの完全性**（54 の機能テスト）
--   **セキュリティ要件の遵守**（15 のセキュリティテスト）
--   **入力バリデーションの確実性**（7 のバリデーションテスト）
--   **エラーハンドリング品質**（4 のエラーハンドリングテスト）
--   **エッジケースの堅牢性**（4 のエッジケーステスト）
--   **モデル基盤の信頼性**（9 の Unit テスト）
--   **データ整合性の維持**（全テストで DB 確認）
-
-このテストスイートにより、アプリケーションのセキュリティ、機能、入力検証、エラーハンドリング、エッジケース処理、およびモデル基盤が**本番環境レベルで保証**されています。
+---
 
 ## ⚠️ **エッジケーステストの詳細**
 
@@ -1254,31 +576,6 @@ OK (4 tests, 4 assertions)
 -   **競合状態再現**: 複数リクエストによる同時会話作成シナリオ
 -   **データ整合性**: 結果的に単一会話のみ作成されることを確認
 
-### **エッジケーステストの実行**
-
-```bash
-# エッジケーステストのみ実行
-./vendor/bin/phpunit tests/Feature/EdgeCaseTest.php --testdox
-
-# 特定のエッジケーステストのみ実行
-./vendor/bin/phpunit --filter test_cannot_send_friend_request_to_deleted_user
-
-# エッジケース関連のテストのみ実行
-./vendor/bin/phpunit --filter "edge|deleted|banned|pagination|concurrent"
-```
-
-**期待される出力:**
-
-```
-Edge Case (Tests\Feature\EdgeCase)
- ✔ Cannot send friend request to deleted user
- ✔ Cannot send friend request to banned user
- ✔ Messages pagination with large dataset
- ✔ Concurrent conversation creation results in single conversation
-
-OK (4 tests, 11 assertions)
-```
-
 ### **エッジケーステストの特徴**
 
 ✅ **極限状況での堅牢性確認**
@@ -1304,27 +601,3 @@ OK (4 tests, 11 assertions)
 -   **データ整合性**: 削除・バンユーザーへの適切なアクセス制限
 -   **パフォーマンス**: 大量データでの安定したページネーション
 -   **同期安全性**: 競合状態での正確なデータ処理
-
-### **エッジケーステストの重要性**
-
-**EdgeCaseTest** では以下の重要なエッジケース・極限状況要件をテスト：
-
--   **4 個のテストケース**で 11 のアサーション
--   **極限状況での堅牢性**（削除・バンユーザー、大量データ、競合状態）確認
--   **実践的なエッジケースシナリオ**によるアプリケーション品質保証
--   **データ整合性とパフォーマンス**の適切な制御確認
-
-### **包括的テストスイートの価値**
-
-✅ **84 テスト・193 アサーション**により以下を保証：
-
--   **API 仕様の正確性**（14 の API テスト）
--   **ビジネスロジックの完全性**（54 の機能テスト）
--   **セキュリティ要件の遵守**（15 のセキュリティテスト）
--   **入力バリデーションの確実性**（7 のバリデーションテスト）
--   **エラーハンドリング品質**（4 のエラーハンドリングテスト）
--   **エッジケースの堅牢性**（4 のエッジケーステスト）
--   **モデル基盤の信頼性**（9 の Unit テスト）
--   **データ整合性の維持**（全テストで DB 確認）
-
-このテストスイートにより、アプリケーションのセキュリティ、機能、入力検証、エラーハンドリング、エッジケース処理、およびモデル基盤が**本番環境レベルで保証**されています。
