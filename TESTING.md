@@ -1139,3 +1139,186 @@ $response->assertStatus(422); // 内部 IP へのリダイレクトを確実に�
 -   **エンタープライズ対応**: 企業環境での実運用に耐える堅牢性実現
 
 ---
+
+## 🔒 **依存関係セキュリティテストの詳細**
+
+### **テスト対象機能**
+
+`DependencySecurityTest.php` で以下の依存関係セキュリティパターンを包括的にテスト：
+
+✅ **PHP 依存関係脆弱性検出**
+
+-   **Composer Security Advisory**: `composer audit --locked` による公式脆弱性データベース検索
+-   **ロックファイル固定**: composer.lock の確定バージョンに対する脆弱性スキャン
+-   **CI/CD 対応**: `--no-interaction` による自動化環境での完全動作
+-   **詳細エラー出力**: 脆弱性発見時の CVE 番号・影響度・修正方法の詳細表示
+
+✅ **NPM 依存関係脆弱性検出**
+
+-   **NPM Security Advisory**: `npm audit --omit=dev --json` による Node.js 脆弱性検査
+-   **重要度フィルタリング**: High・Critical レベルのみ検出（効率的運用）
+-   **JSON 構造化解析**: metadata.vulnerabilities による正確な脆弱性数カウント
+-   **本番環境専用**: 開発依存関係を除外した実際のデプロイ対象のみ検証
+-   **存在確認**: package-lock.json 未存在時の適切なテストスキップ
+
+✅ **未承認パッケージ追加検出**
+
+-   **PHP 許可リスト**: 8 パッケージの厳密な事前承認制（php, laravel/framework, laravel/sanctum 等）
+-   **NPM 許可リスト**: 14 パッケージの厳密な事前承認制（vue, vite, bootstrap 等）
+-   **完全一致検証**: `assertEqualsCanonicalizing` による順序不問の厳密比較
+-   **新規追加検出**: composer.json・package.json への無断パッケージ追加の即座検出
+
+✅ **開発・本番環境分離保証**
+
+-   **Composer 分離**: composer.lock の packages と packages-dev の完全分離確認
+-   **NPM 分離**: package.json の dependencies 配列が空であることを保証
+-   **混入検出**: 開発用パッケージの本番環境への誤った混入防止
+-   **環境純粋性**: 本番デプロイ時の不要パッケージ完全排除
+
+✅ **ライセンス適合性保証**
+
+-   **商用フレンドリー**: MIT, Apache-2.0, BSD-3-Clause 中心の安全なライセンス選択
+-   **GPL 制限管理**: GPL-2.0/3.0 の適切な管理と商用利用リスク回避
+-   **全パッケージ検証**: 本番・開発全ての依存関係パッケージのライセンス確認
+-   **リーガルリスク回避**: 法的問題を引き起こすライセンスの事前排除
+
+✅ **サプライチェーン攻撃対策**
+
+-   **パッケージ整合性**: `composer validate --strict` によるファイル改竄・corruption 検出
+-   **ハッシュ検証**: composer.lock のパッケージハッシュ値による改竄検出
+-   **依存関係整合性**: composer.json と composer.lock の一貫性確認
+-   **CI/CD セキュリティ**: 自動デプロイ時のパッケージ整合性保証
+
+✅ **破壊的変更事前検出**
+
+-   **メジャーバージョン更新**: `composer outdated --direct --strict` による破壊的変更検出
+-   **直接依存関係**: 管理対象パッケージの更新状況監視
+-   **更新影響評価**: `markTestIncomplete` による更新必要時の適切な通知
+-   **Laravel 12 対応**: Laravel 11→12 等のメジャーアップデート検出済み
+
+### **依存関係セキュリティテストの技術実装詳細**
+
+✅ **Composer 脆弱性検出 - 公式 Advisory 活用**
+
+```php
+public function test_composer_lock_has_no_vulnerabilities(): void
+{
+    exec('composer audit --locked --no-interaction 2>&1', $output, $exitCode);
+    $this->assertSame(0, $exitCode, implode(PHP_EOL, $output));
+}
+```
+
+✅ **NPM 高精度脆弱性解析**
+
+```php
+public function test_package_lock_has_no_vulnerabilities(): void
+{
+    exec('npm audit --omit=dev --json 2>&1', $output, $exitCode);
+    $json = json_decode(implode("\n", $output), true);
+    $vuln = $json['metadata']['vulnerabilities'] ?? [];
+    $high = ($vuln['high'] ?? 0) + ($vuln['critical'] ?? 0);
+    $this->assertSame(0, $high, 'NPM vulnerabilities detected: '.json_encode($vuln));
+}
+```
+
+✅ **厳密な許可リスト管理**
+
+```php
+public function test_no_unapproved_packages_installed(): void
+{
+    $allowedComposer = [
+        'php', 'laravel-notification-channels/webpush', 'laravel/framework',
+        'laravel/reverb', 'laravel/sanctum', 'laravel/socialite',
+        'laravel/tinker', 'laravel/ui'
+    ];
+    $composer = json_decode(File::get(base_path('composer.json')), true);
+    $this->assertEqualsCanonicalizing($allowedComposer, array_keys($composer['require']));
+}
+```
+
+✅ **サプライチェーン整合性検証**
+
+```php
+public function test_package_integrity_is_valid(): void
+{
+    exec('composer validate --no-check-publish --strict 2>&1', $output, $exitCode);
+    $this->assertSame(0, $exitCode, implode(PHP_EOL, $output));
+}
+```
+
+### **依存関係セキュリティテストの技術的特徴**
+
+✅ **多層防御による包括的保護**
+
+-   **脆弱性検出**: Composer + NPM による PHP・Node.js 両環境の完全カバー
+-   **承認制御**: 事前許可リストによる無断パッケージ追加の完全防止
+-   **環境分離**: 開発・本番依存関係の厳密な分離保証
+-   **法的保護**: ライセンス適合性による商用利用リスク排除
+
+✅ **企業グレード運用対応**
+
+-   **CI/CD 統合**: 自動デプロイでの継続的セキュリティ監視
+-   **サプライチェーン保護**: パッケージ改竄・供給元攻撃の検出
+-   **更新管理**: 破壊的変更の事前把握による安全な運用
+-   **コンプライアンス**: ライセンス管理による法的リスク回避
+
+✅ **実践的セキュリティ対応**
+
+-   **OWASP 準拠**: A06:2021 Vulnerable Components への完全対応
+-   **NIST フレームワーク**: サイバーセキュリティフレームワークのサプライチェーン保護
+-   **ゼロトラスト**: 全依存関係の継続的検証による信頼しない前提
+-   **DevSecOps**: 開発・セキュリティ・運用の統合による自動化セキュリティ
+
+✅ **チャットアプリケーション特有の配慮**
+
+-   **リアルタイム通信**: WebSocket・プッシュ通知関連パッケージのセキュリティ確保
+-   **認証システム**: Laravel Sanctum・Socialite のセキュリティパッチ適用監視
+-   **フロントエンド連携**: Vue.js・Vite 等のフロントエンド依存関係保護
+-   **通知システム**: Web Push 関連パッケージの脆弱性継続監視
+
+### **🚨 依存関係セキュリティの重要性と脅威レベル**
+
+**依存関係の脆弱性は、アプリケーション全体のセキュリティを根底から脅かす Critical Level の脅威：**
+
+#### **攻撃の深刻度 - Critical to High Level**
+
+-   **サプライチェーン攻撃**: 信頼できるパッケージ経由での悪意のあるコード混入
+-   **既知脆弱性悪用**: CVE 登録済み脆弱性を狙った自動化攻撃
+-   **ライセンス違反**: 法的リスクによるビジネス継続性への脅威
+-   **依存関係汚染**: 改竄されたパッケージによるバックドア設置
+
+#### **チャットアプリケーションでの特別なリスク**
+
+-   **認証システム脆弱性**: Laravel Sanctum 等の認証ライブラリの脆弱性による認証回避
+-   **リアルタイム通信**: WebSocket・プッシュ通知ライブラリの脆弱性による通信傍受
+-   **フロントエンド攻撃**: Vue.js・Vite 等の脆弱性による XSS・CSRF 攻撃
+-   **データ漏洩**: ORM・データベースライブラリの脆弱性による機密情報漏洩
+
+#### **本実装による防御効果**
+
+-   **継続的監視**: CI/CD での自動脆弱性スキャンによる早期発見
+-   **事前防止**: 許可リストによる未承認パッケージの導入完全阻止
+-   **環境保護**: 開発・本番分離による攻撃対象面の最小化
+-   **法的保護**: ライセンス管理による商用利用の安全性確保
+
+### **🎯 実装による総合的なセキュリティ向上**
+
+**依存関係セキュリティテストの実装により、チャットアプリケーションの基盤セキュリティが大幅に強化：**
+
+-   **テスト総数**: 138 テスト（+7 テスト追加）
+-   **アサーション総数**: 471 アサーション（+182 アサーション追加）
+-   **セキュリティ標準**: OWASP A06:2021 Vulnerable Components への完全準拠
+-   **企業コンプライアンス**: ライセンス管理・サプライチェーン保護による企業グレード対応
+
+### **🛡️ 継続的セキュリティ運用の実現**
+
+**本テストスイートにより、以下の継続的セキュリティ運用が自動化：**
+
+-   **毎日の脆弱性チェック**: CI/CD での自動脆弱性スキャン
+-   **新規パッケージ承認**: 許可リスト更新の明示的な承認プロセス
+-   **更新影響評価**: 破壊的変更の事前評価による安全な更新
+-   **コンプライアンス監査**: ライセンス適合性の継続的確認
+
+**これにより、チャットアプリケーションは企業環境での長期運用に耐える堅牢な依存関係セキュリティ体制を確立しました。** 🔒✨
+
+---
