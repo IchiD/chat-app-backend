@@ -9,6 +9,7 @@ use App\Http\Controllers\API\ConversationsController;
 use App\Http\Controllers\API\MessagesController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\AppConfigController;
+use App\Http\Controllers\API\ExternalResourceController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerificationEmail']);
@@ -26,6 +27,7 @@ Route::middleware(['web'])->group(function () {
 
 // アプリケーション設定情報取得
 Route::get('/config', [AppConfigController::class, 'getPublicConfig']);
+Route::post('/external/fetch', [ExternalResourceController::class, 'fetch']);
 
 // 認証済みユーザーのみアクセス可能なエンドポイント
 Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
