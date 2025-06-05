@@ -7,9 +7,9 @@
 ```
 PHPUnit 11.5.6 by Sebastian Bergmann and contributors.
 
-Time: 00:01.810, Memory: 56.50 MB
+Time: 00:02.215, Memory: 56.50 MB
 
-OK (124 tests, 276 assertions)
+OK (124 tests, 279 assertions)
 ```
 
 ### **テストスイート別結果**
@@ -20,7 +20,7 @@ OK (124 tests, 276 assertions)
 | **AuthTest**                     | 8        | 21             | ✅ 全成功  |
 | **GoogleAuthTest**               | 7        | 13             | ✅ 全成功  |
 | **SecurityTest**                 | 7        | 18             | ✅ 全成功  |
-| **SecurityHeadersTest**          | 7        | 8              | ✅ 全成功  |
+| **SecurityHeadersTest**          | 7        | 11             | ✅ 全成功  |
 | **MassAssignmentTest**           | 7        | 18             | ✅ 全成功  |
 | **HorizontalPrivilegeTest**      | 7        | 11             | ✅ 全成功  |
 | **IntegrationTest**              | 5        | 15             | ✅ 全成功  |
@@ -486,7 +486,7 @@ REST API エンドポイントの動作を具体的にテスト
 
 ### **包括的テストスイートの価値**
 
-✅ **124 テスト・276 アサーション**により以下を保証：
+✅ **124 テスト・279 アサーション**により以下を保証：
 
 -   **API 仕様の正確性**（14 の API テスト）
 -   **ビジネスロジックの完全性**（94 の機能テスト）
@@ -884,9 +884,12 @@ REST API エンドポイントの動作を具体的にテスト
 
 ✅ **コンテンツセキュリティポリシー (CSP)**
 
--   **Content-Security-Policy**: `default-src 'self'` による基本設定
--   **外部リソース制限**: 自サイトからのリソース読み込みのみ許可
--   **XSS 攻撃軽減**: 不正スクリプト実行の追加防御層
+-   **Content-Security-Policy**: 外部 CDN 対応の適切な CSP 設定
+-   **基本設定**: `default-src 'self'` による自サイトリソース許可
+-   **外部スタイル許可**: `style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com`
+-   **外部スクリプト許可**: `script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com`
+-   **外部フォント許可**: `font-src 'self' cdnjs.cloudflare.com`
+-   **管理画面対応**: Bootstrap・Font Awesome CDN からの安全なリソース読み込み
 
 ✅ **リファラー情報保護**
 
