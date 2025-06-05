@@ -254,7 +254,7 @@ class AdminDashboardController extends Controller
   /**
    * 会話詳細を表示
    */
-  public function conversationDetail($userId, $conversationId)
+  public function userConversationDetail($userId, $conversationId)
   {
     $admin = Auth::guard('admin')->user();
     $user = User::findOrFail($userId);
@@ -308,6 +308,98 @@ class AdminDashboardController extends Controller
     \App\Services\OperationLogService::log('backend', 'restore_conversation', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
     return redirect()->route('admin.users.conversations', $userId)
+      ->with('success', '会話の削除を取り消しました。');
+  }
+
+  /**
+   * 全トークルーム一覧表示・検索
+   */
+  public function conversations(Request $request)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    $search = $request->get('search');
+
+    $query = Conversation::where('type', '!=', 'support')
+      ->withCount('messages')
+      ->with(['participants', 'latestMessage.sender', 'deletedByAdmin']);
+
+    if ($search) {
+      $query->where(function ($subQuery) use ($search) {
+        $subQuery->where('id', $search)
+          ->orWhereHas('messages', function ($messageQuery) use ($search) {
+            $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
+              ->whereNull('deleted_at')
+              ->whereNull('admin_deleted_at');
+          })
+          ->orWhereHas('participants', function ($userQuery) use ($search) {
+            $userQuery->where('name', 'LIKE', '%' . $search . '%');
+          });
+      });
+    }
+
+    $conversations = $query->orderBy('updated_at', 'desc')->paginate(20);
+    $conversations->appends($request->query());
+
+    return view('admin.conversations.index', compact('admin', 'conversations'));
+  }
+
+  /**
+   * トークルーム詳細表示
+   */
+  public function conversationDetail($id)
+  {
+    $admin = Auth::guard('admin')->user();
+    $conversation = Conversation::with(['participants', 'messages.sender', 'deletedByAdmin'])
+      ->findOrFail($id);
+
+    $messages = $conversation->messages()
+      ->with(['sender', 'adminDeletedBy'])
+      ->orderBy('sent_at', 'desc')
+      ->paginate(20);
+
+    return view('admin.conversations.detail', compact('admin', 'conversation', 'messages'));
+  }
+
+  /**
+   * トークルーム削除
+   */
+  public function deleteConversationDirect(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+    $conversation = Conversation::findOrFail($id);
+
+    if ($conversation->isDeleted()) {
+      return redirect()->back()->with('error', 'この会話は既に削除されています。');
+    }
+
+    $request->validate([
+      'reason' => 'nullable|string|max:500',
+    ]);
+
+    $conversation->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_conversation_admin', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+
+    return redirect()->route('admin.conversations')
+      ->with('success', '会話を削除しました。');
+  }
+
+  /**
+   * トークルーム削除の取り消し
+   */
+  public function restoreConversationDirect($id)
+  {
+    $admin = Auth::guard('admin')->user();
+    $conversation = Conversation::findOrFail($id);
+
+    if (!$conversation->isDeleted()) {
+      return redirect()->back()->with('error', 'この会話は削除されていません。');
+    }
+
+    $conversation->restoreByAdmin();
+    \App\Services\OperationLogService::log('backend', 'restore_conversation_admin', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+
+    return redirect()->route('admin.conversations')
       ->with('success', '会話の削除を取り消しました。');
   }
 
