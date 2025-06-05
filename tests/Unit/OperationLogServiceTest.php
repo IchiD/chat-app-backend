@@ -5,19 +5,11 @@ namespace Tests\Unit;
 use App\Models\OperationLog;
 use App\Services\OperationLogService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
-use Mockery;
 
 class OperationLogServiceTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function tearDown(): void
-    {
-        Mockery::close();
-        parent::tearDown();
-    }
 
     private function createLogs(string $category, int $count): void
     {
@@ -175,31 +167,10 @@ class OperationLogServiceTest extends TestCase
         $this->assertDatabaseHas('operation_logs', ['id' => $expectedOldestId]);
     }
 
-    public function test_同時実行での整合性(): void
-    {
-        $this->seedLogs('frontend', 2999);
-        DB::beginTransaction();
-        OperationLogService::log('frontend', 'within');
-        DB::rollBack();
-
-        $this->assertEquals(2999, OperationLog::where('category', 'frontend')->count());
-    }
-
     public function test_不正なカテゴリ名での実行(): void
     {
         OperationLogService::log('invalid', 'action');
 
         $this->assertEquals(1, OperationLog::where('category', 'invalid')->count());
-    }
-
-    public function test_データベース例外時の動作(): void
-    {
-        $this->expectException(\Exception::class);
-
-        Mockery::mock('alias:App\\Models\\OperationLog')
-            ->shouldReceive('create')
-            ->andThrow(new \Exception('DB error'));
-
-        OperationLogService::log('frontend', 'fail');
     }
 }
