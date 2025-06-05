@@ -41,9 +41,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     // User Conversations Management
     Route::get('users/{id}/conversations', [AdminDashboardController::class, 'userConversations'])->name('users.conversations');
-    Route::get('users/{userId}/conversations/{conversationId}', [AdminDashboardController::class, 'conversationDetail'])->name('users.conversations.detail');
+    Route::get('users/{userId}/conversations/{conversationId}', [AdminDashboardController::class, 'userConversationDetail'])->name('users.conversations.detail');
     Route::delete('users/{userId}/conversations/{conversationId}', [AdminDashboardController::class, 'deleteConversation'])->name('users.conversations.delete');
     Route::post('users/{userId}/conversations/{conversationId}/restore', [AdminDashboardController::class, 'restoreConversation'])->name('users.conversations.restore');
+
+    // Conversation Management Routes (全体のトークルーム管理)
+    Route::get('conversations', [AdminDashboardController::class, 'conversations'])->name('conversations');
+    Route::get('conversations/{id}', [AdminDashboardController::class, 'conversationDetail'])->name('conversations.detail');
+    Route::delete('conversations/{id}', [AdminDashboardController::class, 'deleteConversationDirect'])->name('conversations.delete');
+    Route::post('conversations/{id}/restore', [AdminDashboardController::class, 'restoreConversationDirect'])->name('conversations.restore');
 
     // Message Management
     Route::put('users/{userId}/conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'updateMessage'])->name('users.messages.update');
