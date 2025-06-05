@@ -63,6 +63,7 @@ class AuthService extends BaseService
       // throw new \Exception('テスト用例外: メール送信をスキップ');
 
       DB::commit();
+      \App\Services\OperationLogService::log('frontend', 'user_register', 'user_id:' . $user->id . ' google:false');
     } catch (\Exception $ex) {
       DB::rollBack();
       Log::error('登録処理中にエラーが発生しました: ' . $ex->getMessage(), [
@@ -206,6 +207,7 @@ class AuthService extends BaseService
       ]);
 
       Log::info('ログイン成功', ['user_id' => $user->id, 'email' => $email, 'ip' => $ip]);
+      \App\Services\OperationLogService::log('frontend', 'user_login', 'user_id:' . $user->id);
 
       return [
         'status'       => 'success',

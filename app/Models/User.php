@@ -309,7 +309,15 @@ class User extends Authenticatable
     }
 
     $friendship->status = Friendship::STATUS_ACCEPTED;
-    return $friendship->save();
+    $saved = $friendship->save();
+    if ($saved) {
+      \App\Services\OperationLogService::log(
+        'frontend',
+        'friend_accept',
+        'user:' . $this->id . ' friend:' . $userId
+      );
+    }
+    return $saved;
   }
 
   /**

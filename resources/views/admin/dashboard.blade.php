@@ -235,41 +235,63 @@
   </div>
 </div>
 
-<!-- 最近の活動 -->
+<!-- 操作ログ -->
 <div class="row mt-4">
   <div class="col-12">
     <div class="card">
       <div class="card-header">
         <h5 class="card-title mb-0">
-          <i class="fas fa-history me-2"></i>最近の活動
+          <i class="fas fa-history me-2"></i>操作ログ
         </h5>
       </div>
       <div class="card-body">
-        <div class="d-flex align-items-center py-2">
-          <div class="flex-shrink-0">
-            <i class="fas fa-user-plus text-success me-3"></i>
-          </div>
-          <div class="flex-grow-1">
-            <strong>新規ユーザー登録</strong>
-            <p class="text-muted mb-0">3名の新規ユーザーが登録されました</p>
-          </div>
-          <div class="flex-shrink-0">
-            <small class="text-muted">2時間前</small>
-          </div>
-        </div>
+        <h6 class="fw-bold">フロントエンド</h6>
+        <ul class="list-unstyled">
+          @foreach($frontendLogs->take(10) as $log)
+          <li class="mb-2">
+            <span class="text-muted small">{{ $log->created_at->format('Y-m-d H:i') }}</span>
+            <span class="ms-2">{{ $log->action }} - {{ $log->description }}</span>
+          </li>
+          @endforeach
+        </ul>
+        @if($frontendLogs->count() > 10)
+        <details>
+          <summary class="text-primary">さらに表示</summary>
+          <ul class="list-unstyled mt-2">
+            @foreach($frontendLogs->slice(10) as $log)
+            <li class="mb-2">
+              <span class="text-muted small">{{ $log->created_at->format('Y-m-d H:i') }}</span>
+              <span class="ms-2">{{ $log->action }} - {{ $log->description }}</span>
+            </li>
+            @endforeach
+          </ul>
+        </details>
+        @endif
+
         <hr>
-        <div class="d-flex align-items-center py-2">
-          <div class="flex-shrink-0">
-            <i class="fas fa-sign-in-alt text-primary me-3"></i>
-          </div>
-          <div class="flex-grow-1">
-            <strong>管理者ログイン</strong>
-            <p class="text-muted mb-0">{{ $admin->name }} がログインしました</p>
-          </div>
-          <div class="flex-shrink-0">
-            <small class="text-muted">現在</small>
-          </div>
-        </div>
+
+        <h6 class="fw-bold">バックエンド</h6>
+        <ul class="list-unstyled">
+          @foreach($backendLogs->take(10) as $log)
+          <li class="mb-2">
+            <span class="text-muted small">{{ $log->created_at->format('Y-m-d H:i') }}</span>
+            <span class="ms-2">{{ $log->action }} - {{ $log->description }}</span>
+          </li>
+          @endforeach
+        </ul>
+        @if($backendLogs->count() > 10)
+        <details>
+          <summary class="text-primary">さらに表示</summary>
+          <ul class="list-unstyled mt-2">
+            @foreach($backendLogs->slice(10) as $log)
+            <li class="mb-2">
+              <span class="text-muted small">{{ $log->created_at->format('Y-m-d H:i') }}</span>
+              <span class="ms-2">{{ $log->action }} - {{ $log->description }}</span>
+            </li>
+            @endforeach
+          </ul>
+        </details>
+        @endif
       </div>
     </div>
   </div>
