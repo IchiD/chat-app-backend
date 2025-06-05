@@ -31,8 +31,11 @@ return new class extends Migration
     // 外部キー制約の追加（既存チェック）
     Schema::table('conversations', function (Blueprint $table) {
       // 外部キー制約が既に存在するかチェック
-      $foreignKeys = Schema::getConnection()->getDoctrineSchemaManager()
-        ->listTableForeignKeys('conversations');
+      $foreignKeys = [];
+      if (method_exists(Schema::getConnection(), 'getDoctrineSchemaManager')) {
+        $foreignKeys = Schema::getConnection()->getDoctrineSchemaManager()
+          ->listTableForeignKeys('conversations');
+      }
 
       $hasDeletedByForeignKey = false;
       foreach ($foreignKeys as $foreignKey) {
@@ -55,8 +58,11 @@ return new class extends Migration
   {
     Schema::table('conversations', function (Blueprint $table) {
       // 外部キー制約の削除（存在チェック付き）
-      $foreignKeys = Schema::getConnection()->getDoctrineSchemaManager()
-        ->listTableForeignKeys('conversations');
+      $foreignKeys = [];
+      if (method_exists(Schema::getConnection(), 'getDoctrineSchemaManager')) {
+        $foreignKeys = Schema::getConnection()->getDoctrineSchemaManager()
+          ->listTableForeignKeys('conversations');
+      }
 
       foreach ($foreignKeys as $foreignKey) {
         if (in_array('deleted_by', $foreignKey->getLocalColumns())) {
