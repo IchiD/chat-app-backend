@@ -14,10 +14,12 @@ return new class extends Migration
     Schema::table('users', function (Blueprint $table) {
       // チャットや友達申請に使用する固有のIDを追加
       // 6桁のランダム文字列を使用
-      $table->string('friend_id', 6)->unique()->nullable()->after('id');
+      if (!Schema::hasColumn('users', 'friend_id')) {
+        $table->string('friend_id', 6)->unique()->nullable()->after('id');
 
-      // 友達申請用の検索インデックスを追加
-      $table->index('friend_id');
+        // 友達申請用の検索インデックスを追加
+        $table->index('friend_id');
+      }
     });
   }
 
@@ -27,9 +29,11 @@ return new class extends Migration
   public function down(): void
   {
     Schema::table('users', function (Blueprint $table) {
-      // インデックスと列を削除
-      $table->dropIndex(['friend_id']);
-      $table->dropColumn('friend_id');
+      if (Schema::hasColumn('users', 'friend_id')) {
+        // インデックスと列を削除
+        $table->dropIndex(['friend_id']);
+        $table->dropColumn('friend_id');
+      }
     });
   }
 };

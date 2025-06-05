@@ -10,18 +10,29 @@ class AddVerificationColumnsToUsersTable extends Migration
   {
     Schema::table('users', function (Blueprint $table) {
       // 仮登録か本登録かを区別するフラグ。初期値はfalse（仮登録状態）
-      $table->boolean('is_verified')->default(false);
+      if (!Schema::hasColumn('users', 'is_verified')) {
+        $table->boolean('is_verified')->default(false);
+      }
       // 認証リンク用トークン（null許容）
-      $table->string('email_verification_token')->nullable();
+      if (!Schema::hasColumn('users', 'email_verification_token')) {
+        $table->string('email_verification_token')->nullable();
+      }
       // トークンの有効期限（null許容）
-      $table->timestamp('token_expires_at')->nullable();
+      if (!Schema::hasColumn('users', 'token_expires_at')) {
+        $table->timestamp('token_expires_at')->nullable();
+      }
     });
   }
 
   public function down()
   {
     Schema::table('users', function (Blueprint $table) {
-      $table->dropColumn(['is_verified', 'email_verification_token', 'token_expires_at']);
+      $columnsToCheck = ['is_verified', 'email_verification_token', 'token_expires_at'];
+      foreach ($columnsToCheck as $column) {
+        if (Schema::hasColumn('users', $column)) {
+          $table->dropColumn($column);
+        }
+      }
     });
   }
 }

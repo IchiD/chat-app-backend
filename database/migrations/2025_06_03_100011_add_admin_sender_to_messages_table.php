@@ -13,10 +13,12 @@ return new class extends Migration
   {
     Schema::table('messages', function (Blueprint $table) {
       // 管理者からのメッセージを識別するためのカラムを追加
-      $table->unsignedBigInteger('admin_sender_id')->nullable()->after('sender_id');
+      if (!Schema::hasColumn('messages', 'admin_sender_id')) {
+        $table->unsignedBigInteger('admin_sender_id')->nullable()->after('sender_id');
 
-      // 外部キー制約
-      $table->foreign('admin_sender_id')->references('id')->on('admins')->onDelete('set null');
+        // 外部キー制約
+        $table->foreign('admin_sender_id')->references('id')->on('admins')->onDelete('set null');
+      }
     });
   }
 
@@ -26,8 +28,10 @@ return new class extends Migration
   public function down(): void
   {
     Schema::table('messages', function (Blueprint $table) {
-      $table->dropForeign(['admin_sender_id']);
-      $table->dropColumn('admin_sender_id');
+      if (Schema::hasColumn('messages', 'admin_sender_id')) {
+        $table->dropForeign(['admin_sender_id']);
+        $table->dropColumn('admin_sender_id');
+      }
     });
   }
 };

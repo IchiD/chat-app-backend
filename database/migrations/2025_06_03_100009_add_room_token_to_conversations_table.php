@@ -12,7 +12,9 @@ return new class extends Migration
   public function up(): void
   {
     Schema::table('conversations', function (Blueprint $table) {
-      $table->string('room_token')->unique()->after('id');
+      if (!Schema::hasColumn('conversations', 'room_token')) {
+        $table->string('room_token')->unique()->after('id');
+      }
     });
   }
 
@@ -22,7 +24,9 @@ return new class extends Migration
   public function down(): void
   {
     Schema::table('conversations', function (Blueprint $table) {
-      $table->dropColumn('room_token');
+      if (Schema::hasColumn('conversations', 'room_token')) {
+        $table->dropColumn('room_token');
+      }
     });
   }
 };
