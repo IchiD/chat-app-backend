@@ -45,11 +45,11 @@ class AdminDashboardController extends Controller
 
     $frontendLogs = \App\Models\OperationLog::where('category', 'frontend')
       ->orderBy('created_at', 'desc')
-      ->take(30)
+      ->take(50)
       ->get();
     $backendLogs = \App\Models\OperationLog::where('category', 'backend')
       ->orderBy('created_at', 'desc')
-      ->take(30)
+      ->take(50)
       ->get();
 
     return view('admin.dashboard', compact(
