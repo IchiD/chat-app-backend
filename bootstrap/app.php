@@ -22,12 +22,16 @@ return Application::configure(basePath: dirname(__DIR__))
     $middleware->alias([
       'admin' => \App\Http\Middleware\AdminMiddleware::class,
       'check.user.status' => \App\Http\Middleware\CheckUserStatus::class,
+      'security.headers' => \App\Http\Middleware\SecurityHeaders::class,
     ]);
 
     // 既存のCSRFミドルウェアをカスタムCSRFミドルウェアに置き換え
     $middleware->web(replace: [
       \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class => \App\Http\Middleware\VerifyCsrfToken::class,
     ]);
+
+    $middleware->web(append: ['security.headers']);
+    $middleware->api(append: ['security.headers']);
   })
   ->withExceptions(function (Exceptions $exceptions) {
     $exceptions->render(function (AuthenticationException $e, Request $request) {
