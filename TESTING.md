@@ -13,8 +13,8 @@ Laravel チャットアプリケーションの包括的なテストスイート
 ```
 PHPUnit 11.5.6 by Sebastian Bergmann and contributors.
 
-Tests: 145, Assertions: 515, Incomplete: 1
-Time: 00:05.777, Memory: 58.50 MB
+Tests: 151, Assertions: 528, Incomplete: 1
+Time: 00:05.234, Memory: 58.50 MB
 
 OK, but there were issues!
 ```
@@ -32,6 +32,7 @@ OK, but there were issues!
 | **SSRFTest**                | 7            | 10                 | ✅ 全成功      |
 | **DependencySecurityTest**  | 7            | 182                | ✅ 全成功      |
 | **DataLeakageTest**         | 7            | 44                 | ✅ 全成功      |
+| **EmailChangeTest**         | 6            | 13                 | ✅ 全成功      |
 | **IntegrationTest**         | 5            | 15                 | ✅ 全成功      |
 | **AuthorizationTest**       | 15           | 26                 | ✅ 全成功      |
 | **ConversationTest**        | 5            | 11                 | ✅ 全成功      |
@@ -186,6 +187,23 @@ OK, but there were issues!
 -   **完全削除保証**: 物理削除の完全性確保と GDPR 準拠
 
 **テスト数**: 7 テスト・44 アサーション
+
+---
+
+### **📧 EmailChangeTest - メールアドレス変更セキュリティ**
+
+**テスト対象**: メールアドレス変更機能のセキュリティ・ワークフロー検証
+
+**✅ 実装機能**:
+
+-   **メール変更リクエスト**: `PUT /api/user/update-email` による安全なメール変更プロセス開始
+-   **変更確認フロー**: `GET /api/verify-email-change` によるトークンベース確認
+-   **Google ユーザー制限**: Google 認証ユーザーのメール変更完全禁止
+-   **トークン検証**: 無効・期限切れトークンの適切な拒否
+-   **重複メール防止**: 既存ユーザーとの重複メールアドレス検出・防止
+-   **通知機能**: メール変更時の自動通知送信とセキュリティ確認
+
+**テスト数**: 6 テスト・13 アサーション
 
 ---
 
@@ -362,7 +380,7 @@ composer install
 
 ### **多層テストアプローチ**
 
-✅ **Feature Tests（102 テスト）**: ビジネスロジック・セキュリティ・統合フローの包括的検証
+✅ **Feature Tests（108 テスト）**: ビジネスロジック・セキュリティ・統合フローの包括的検証
 ✅ **API Tests（14 テスト）**: REST API エンドポイントの動作確認
 ✅ **Unit Tests（29 テスト）**: モデル・コンポーネントの単体機能検証
 
@@ -374,7 +392,7 @@ composer install
 
 ### **品質保証体制**
 
-✅ **145 テスト・515 アサーション**: 包括的な機能・セキュリティカバレッジ
+✅ **151 テスト・528 アサーション**: 包括的な機能・セキュリティカバレッジ
 ✅ **CI/CD 統合**: 自動化されたテスト実行・品質監視
 ✅ **継続的改善**: 新機能追加時の既存テスト拡張・新規テスト作成
 
