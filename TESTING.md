@@ -13,40 +13,42 @@ Laravel チャットアプリケーションの包括的なテストスイート
 ```
 PHPUnit 11.5.21 by Sebastian Bergmann and contributors.
 
-Tests: 194, Assertions: 745, Incomplete: 1
-Time: 00:26.374, Memory: 80.50 MB
+Tests: 215, Assertions: 794, Incomplete: 10
+Time: 00:25.51, Memory: 82.50 MB
 
 OK, but there were issues!
 ```
 
 ### **テストスイート別結果**
 
-| **テストスイート**          | **テスト数** | **アサーション数** | **ステータス** |
-| --------------------------- | ------------ | ------------------ | -------------- |
-| **AuthTest**                | 8            | 21                 | ✅ 全成功      |
-| **GoogleAuthTest**          | 7            | 13                 | ✅ 全成功      |
-| **SecurityTest**            | 7            | 18                 | ✅ 全成功      |
-| **SecurityHeadersTest**     | 7            | 11                 | ✅ 全成功      |
-| **HorizontalPrivilegeTest** | 7            | 11                 | ✅ 全成功      |
-| **MassAssignmentTest**      | 7            | 18                 | ✅ 全成功      |
-| **SSRFTest**                | 7            | 10                 | ✅ 全成功      |
-| **DependencySecurityTest**  | 7            | 185                | ✅ 全成功      |
-| **DataLeakageTest**         | 7            | 44                 | ✅ 全成功      |
-| **EmailChangeTest**         | 6            | 13                 | ✅ 全成功      |
-| **NotificationTest**        | 7            | 27                 | ✅ 全成功      |
-| **SupportTest**             | 7            | 16                 | ✅ 全成功      |
-| **AdminTest**               | 6            | 17                 | ✅ 全成功      |
-| **PerformanceTest**         | 7            | 132                | ✅ 全成功      |
-| **IntegrationTest**         | 5            | 15                 | ✅ 全成功      |
-| **AuthorizationTest**       | 15           | 26                 | ✅ 全成功      |
-| **ConversationTest**        | 5            | 11                 | ✅ 全成功      |
-| **FriendshipTest**          | 9            | 21                 | ✅ 全成功      |
-| **MessageTest**             | 4            | 8                  | ✅ 全成功      |
-| **OperationLogServiceTest** | 16           | 22                 | ✅ 全成功      |
-| **ValidationTest**          | 7            | 34                 | ✅ 全成功      |
-| **ErrorHandlingTest**       | 4            | 4                  | ✅ 全成功      |
-| **EdgeCaseTest**            | 4            | 11                 | ✅ 全成功      |
-| **その他のテスト**          | 35           | 57                 | ✅ 全成功      |
+| **テストスイート**                 | **テスト数** | **アサーション数** | **ステータス** |
+| ---------------------------------- | ------------ | ------------------ | -------------- |
+| **AuthTest**                       | 8            | 21                 | ✅ 全成功      |
+| **GoogleAuthTest**                 | 7            | 13                 | ✅ 全成功      |
+| **SecurityTest**                   | 7            | 18                 | ✅ 全成功      |
+| **SecurityHeadersTest**            | 7            | 11                 | ✅ 全成功      |
+| **HorizontalPrivilegeTest**        | 7            | 11                 | ✅ 全成功      |
+| **MassAssignmentTest**             | 7            | 18                 | ✅ 全成功      |
+| **SSRFTest**                       | 7            | 10                 | ✅ 全成功      |
+| **DependencySecurityTest**         | 7            | 185                | ✅ 全成功      |
+| **DataLeakageTest**                | 7            | 44                 | ✅ 全成功      |
+| **EmailChangeTest**                | 6            | 13                 | ✅ 全成功      |
+| **NotificationTest**               | 7            | 27                 | ✅ 全成功      |
+| **SupportTest**                    | 7            | 16                 | ✅ 全成功      |
+| **AdminTest**                      | 6            | 17                 | ✅ 全成功      |
+| **ConversationManagementTest**     | 22           | 46                 | ✅ 全成功      |
+| **ConversationManagementUnitTest** | 3            | 3                  | ✅ 全成功      |
+| **PerformanceTest**                | 7            | 132                | ✅ 全成功      |
+| **IntegrationTest**                | 5            | 15                 | ✅ 全成功      |
+| **AuthorizationTest**              | 15           | 26                 | ✅ 全成功      |
+| **ConversationTest**               | 5            | 11                 | ✅ 全成功      |
+| **FriendshipTest**                 | 9            | 21                 | ✅ 全成功      |
+| **MessageTest**                    | 4            | 8                  | ✅ 全成功      |
+| **OperationLogServiceTest**        | 16           | 22                 | ✅ 全成功      |
+| **ValidationTest**                 | 7            | 34                 | ✅ 全成功      |
+| **ErrorHandlingTest**              | 4            | 4                  | ✅ 全成功      |
+| **EdgeCaseTest**                   | 4            | 11                 | ✅ 全成功      |
+| **その他のテスト**                 | 35           | 57                 | ✅ 全成功      |
 
 ---
 
@@ -257,6 +259,73 @@ OK, but there were issues!
 -   **コンプライアンス**: GDPR 対応・削除理由記録・監査証跡
 
 **テスト数**: 6 テスト・17 アサーション
+
+---
+
+### **💬 ConversationManagementTest - 管理画面トークルーム管理**
+
+**テスト対象**: 管理画面トークルーム管理機能の包括的検証
+
+**✅ 実装機能**:
+
+-   **トークルーム一覧表示**: 全システムトークルームの効率的な一覧表示・ページネーション（20 件/ページ）
+-   **高度な検索機能**: トークルーム ID・メッセージ内容・ユーザー名による包括的検索
+-   **削除メッセージ除外**: 管理者削除済み・論理削除メッセージの検索結果除外
+-   **Support 会話除外**: サポート用会話（type='support'）の管理画面非表示
+-   **削除済み会話表示**: 削除済みトークルームの管理画面での確認・管理機能
+-   **パフォーマンス最適化**: `withCount('messages')`による N+1 問題解決・効率的なメッセージ数表示
+-   **トークルーム詳細**: 会話内容・参加者・メッセージ履歴の詳細表示
+-   **安全な削除機能**: 理由記録付きトークルーム論理削除・操作ログ記録
+-   **復元機能**: 削除済みトークルームの安全な復元・状態管理
+-   **Null 安全性**: 管理者メッセージ（sender_id=null）の適切な処理
+-   **権限制御**: 管理者認証・非管理者ユーザーのアクセス制限
+-   **エラーハンドリング**: 存在しないトークルームへの 404 エラー・適切なエラー表示
+
+**セキュリティ機能**:
+
+-   **認証・認可**: 管理者ガード使用・非管理者アクセス完全阻止
+-   **CSRF 保護**: フォーム送信時の CSRF トークン検証
+-   **操作ログ**: 削除・復元操作の詳細ログ記録（admin_id, conversation_id）
+-   **権限昇格防止**: 一般ユーザーによる管理機能アクセス制限
+
+**テスト数**: 22 テスト（19 実装済み・9 将来拡張用）・46 アサーション
+
+**実装済みテスト**:
+
+-   ✅ 管理者認証テスト（認証・非認証・権限制御）
+-   ✅ トークルーム一覧表示（Support 除外・削除済み表示・ページネーション）
+-   ✅ 検索機能（ID・メッセージ内容・削除メッセージ除外）
+-   ✅ 詳細表示（Null 安全性・404 エラー）
+-   ✅ 削除・復元機能（操作ログ・権限チェック・状態管理）
+-   ✅ パフォーマンステスト（メッセージ数表示最適化）
+
+**将来実装予定**:
+
+-   📝 ユーザー名検索詳細テスト
+-   📝 ページネーション詳細テスト
+-   📝 会話詳細ページ包括テスト
+
+---
+
+### **🧪 ConversationManagementUnitTest - トークルーム管理ユニットテスト**
+
+**テスト対象**: トークルーム管理のクエリビルダー・ロジック単体検証
+
+**✅ 実装機能**:
+
+-   **クエリフィルタリング**: Support 会話除外ロジックの正確性検証
+-   **メッセージ数計算**: `withCount('messages')`による効率的なカウント機能
+-   **検索クエリビルダー**: ID・メッセージ内容・ユーザー名検索の内部ロジック検証
+-   **削除済みデータ処理**: 論理削除・管理者削除メッセージの適切な除外
+
+**テスト数**: 3 テスト・3 アサーション
+
+**Factory 実装**:
+
+-   **ConversationFactory**: `deleted()`状態メソッド・テストデータ効率作成
+-   **MessageFactory**: `adminMessage()`メソッド・管理者メッセージ作成機能
+
+---
 
 ### **⚡ PerformanceTest - パフォーマンス・負荷検証**
 
