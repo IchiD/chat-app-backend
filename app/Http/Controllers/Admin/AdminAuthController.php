@@ -53,6 +53,7 @@ class AdminAuthController extends Controller
         'ip' => $request->ip(),
         'user_agent' => $request->userAgent()
       ]);
+      \App\Services\OperationLogService::log('backend', 'admin_login', 'admin_id:' . Auth::guard('admin')->id());
 
       return redirect()->intended(route('admin.dashboard'));
     }
@@ -86,6 +87,7 @@ class AdminAuthController extends Controller
       'ip' => $request->ip(),
       'user_agent' => $request->userAgent()
     ]);
+    \App\Services\OperationLogService::log('backend', 'admin_logout', 'admin_id:' . ($admin ? $admin->id : ''));
 
     Auth::guard('admin')->logout();
 

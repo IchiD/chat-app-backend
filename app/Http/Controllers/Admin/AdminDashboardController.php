@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Friendship;
+use App\Models\OperationLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -42,6 +43,15 @@ class AdminDashboardController extends Controller
     // システム状態チェック
     $systemStatus = $this->checkSystemStatus();
 
+    $frontendLogs = \App\Models\OperationLog::where('category', 'frontend')
+      ->orderBy('created_at', 'desc')
+      ->take(30)
+      ->get();
+    $backendLogs = \App\Models\OperationLog::where('category', 'backend')
+      ->orderBy('created_at', 'desc')
+      ->take(30)
+      ->get();
+
     return view('admin.dashboard', compact(
       'admin',
       'userCount',
@@ -49,7 +59,9 @@ class AdminDashboardController extends Controller
       'chatRoomCount',
       'todayMessagesCount',
       'todayActiveUsersCount',
-      'systemStatus'
+      'systemStatus',
+      'frontendLogs',
+      'backendLogs'
     ));
   }
 
@@ -164,6 +176,7 @@ class AdminDashboardController extends Controller
       'is_verified' => $request->boolean('is_verified'),
       'friend_id' => strtoupper($request->friend_id),
     ]);
+    \App\Services\OperationLogService::log('backend', 'update_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
     return redirect()->route('admin.users.show', $user->id)
       ->with('success', 'ユーザー情報を更新しました。');
@@ -186,6 +199,7 @@ class AdminDashboardController extends Controller
     ]);
 
     $user->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
     // ユーザーが参加している会話も削除
     $conversations = $user->conversations;
@@ -212,6 +226,7 @@ class AdminDashboardController extends Controller
     }
 
     $user->restoreByAdmin();
+    \App\Services\OperationLogService::log('backend', 'restore_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
     return redirect()->route('admin.users.show', $user->id)
       ->with('success', 'ユーザーの削除を取り消しました。');
@@ -271,6 +286,7 @@ class AdminDashboardController extends Controller
     ]);
 
     $conversation->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_conversation', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
     return redirect()->route('admin.users.conversations', $userId)
       ->with('success', '会話を削除しました。');
@@ -289,6 +305,7 @@ class AdminDashboardController extends Controller
     }
 
     $conversation->restoreByAdmin();
+    \App\Services\OperationLogService::log('backend', 'restore_conversation', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
     return redirect()->route('admin.users.conversations', $userId)
       ->with('success', '会話の削除を取り消しました。');
@@ -310,6 +327,7 @@ class AdminDashboardController extends Controller
       'text_content' => $request->text_content,
       'edited_at' => now(),
     ]);
+    \App\Services\OperationLogService::log('backend', 'update_message', 'admin:' . $admin->id . ' message:' . $message->id);
 
     return redirect()->back()->with('success', 'メッセージを更新しました。');
   }
@@ -331,6 +349,7 @@ class AdminDashboardController extends Controller
     ]);
 
     $message->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_message', 'admin:' . $admin->id . ' message:' . $message->id);
 
     return redirect()->back()->with('success', 'メッセージを削除しました。');
   }
@@ -375,6 +394,7 @@ class AdminDashboardController extends Controller
       'password' => Hash::make($request->password),
       'role' => $request->role,
     ]);
+    \App\Services\OperationLogService::log('backend', 'create_admin', 'admin:' . $admin->id . ' email:' . $request->email);
 
     return redirect()->route('admin.admins')->with('success', 'アドミンが作成されました。');
   }
@@ -857,6 +877,7 @@ class AdminDashboardController extends Controller
 
     $reason = $validated['reason'] ?? '管理者による削除';
     $friendship->deleteByAdmin($admin->id, $reason);
+    \App\Services\OperationLogService::log('backend', 'delete_friendship', 'admin:' . $admin->id . ' friendship:' . $friendship->id);
 
     return redirect()
       ->route('admin.friendships.show', $friendship->id)
@@ -878,6 +899,7 @@ class AdminDashboardController extends Controller
     }
 
     $friendship->restoreByAdmin();
+    \App\Services\OperationLogService::log('backend', 'restore_friendship', 'admin:' . $admin->id . ' friendship:' . $friendship->id);
 
     return redirect()
       ->route('admin.friendships.show', $friendship->id)
@@ -960,6 +982,7 @@ class AdminDashboardController extends Controller
       'text_content' => $request->message,
       'sent_at' => now(),
     ]);
+    \App\Services\OperationLogService::log('backend', 'reply_support', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
     // 管理者が返信したので、この会話を既読にする
     \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);

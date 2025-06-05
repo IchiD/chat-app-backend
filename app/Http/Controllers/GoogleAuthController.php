@@ -139,6 +139,7 @@ class GoogleAuthController extends Controller
         ]);
 
         Log::info('新規ユーザーが作成されました', ['user_id' => $user->id]);
+        \App\Services\OperationLogService::log('frontend', 'user_register', 'user_id:' . $user->id . ' google:true');
       }
 
       // 共通の処理
@@ -181,6 +182,7 @@ class GoogleAuthController extends Controller
         'user_id' => $user->id,
         'email' => $user->email
       ]);
+      \App\Services\OperationLogService::log('frontend', 'user_login', 'user_id:' . $user->id . ' google:true');
 
       // フロントエンドにトークンを渡してリダイレクト
       return $this->redirectWithSuccess($tokenResult->plainTextToken, $user);
