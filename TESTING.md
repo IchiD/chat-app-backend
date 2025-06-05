@@ -13,8 +13,8 @@ Laravel チャットアプリケーションの包括的なテストスイート
 ```
 PHPUnit 11.5.6 by Sebastian Bergmann and contributors.
 
-Tests: 151, Assertions: 528, Incomplete: 1
-Time: 00:05.234, Memory: 58.50 MB
+Tests: 158, Assertions: 555, Incomplete: 1
+Time: 00:05.204, Memory: 58.50 MB
 
 OK, but there were issues!
 ```
@@ -33,6 +33,7 @@ OK, but there were issues!
 | **DependencySecurityTest**  | 7            | 182                | ✅ 全成功      |
 | **DataLeakageTest**         | 7            | 44                 | ✅ 全成功      |
 | **EmailChangeTest**         | 6            | 13                 | ✅ 全成功      |
+| **NotificationTest**        | 7            | 27                 | ✅ 全成功      |
 | **IntegrationTest**         | 5            | 15                 | ✅ 全成功      |
 | **AuthorizationTest**       | 15           | 26                 | ✅ 全成功      |
 | **ConversationTest**        | 5            | 11                 | ✅ 全成功      |
@@ -204,6 +205,22 @@ OK, but there were issues!
 -   **通知機能**: メール変更時の自動通知送信とセキュリティ確認
 
 **テスト数**: 6 テスト・13 アサーション
+
+### **🔔 NotificationTest - プッシュ通知機能**
+
+**テスト対象**: プッシュ通知システムの包括的機能・セキュリティ検証
+
+**✅ 実装機能**:
+
+-   **通知購読登録**: `POST /api/notifications/subscribe` による Web Push 購読管理
+-   **通知購読解除**: `POST /api/notifications/unsubscribe` による購読削除・プライバシー保護
+-   **テスト通知送信**: `POST /api/notifications/test` による通知配信動作確認
+-   **メッセージ自動通知**: 新着メッセージ受信時の自動プッシュ通知配信
+-   **VAPID 鍵管理**: Web Push Voluntary Application Server Identification の適切な設定
+-   **ペイロード構造**: 通知データ形式・セキュリティ・表示内容の検証
+-   **エラーハンドリング**: 無効サブスクリプション・配信失敗の適切な処理
+
+**テスト数**: 7 テスト・27 アサーション
 
 ---
 
@@ -380,7 +397,7 @@ composer install
 
 ### **多層テストアプローチ**
 
-✅ **Feature Tests（108 テスト）**: ビジネスロジック・セキュリティ・統合フローの包括的検証
+✅ **Feature Tests（115 テスト）**: ビジネスロジック・セキュリティ・統合フローの包括的検証
 ✅ **API Tests（14 テスト）**: REST API エンドポイントの動作確認
 ✅ **Unit Tests（29 テスト）**: モデル・コンポーネントの単体機能検証
 
@@ -392,7 +409,7 @@ composer install
 
 ### **品質保証体制**
 
-✅ **151 テスト・528 アサーション**: 包括的な機能・セキュリティカバレッジ
+✅ **158 テスト・555 アサーション**: 包括的な機能・セキュリティカバレッジ
 ✅ **CI/CD 統合**: 自動化されたテスト実行・品質監視
 ✅ **継続的改善**: 新機能追加時の既存テスト拡張・新規テスト作成
 
