@@ -11,10 +11,10 @@ Laravel チャットアプリケーションの包括的なテストスイート
 ### **総合テスト結果**
 
 ```
-PHPUnit 11.5.6 by Sebastian Bergmann and contributors.
+PHPUnit 11.5.21 by Sebastian Bergmann and contributors.
 
-Tests: 178, Assertions: 720, Incomplete: 1
-Time: 00:06.349, Memory: 60.50 MB
+Tests: 194, Assertions: 745, Incomplete: 1
+Time: 00:26.374, Memory: 80.50 MB
 
 OK, but there were issues!
 ```
@@ -30,7 +30,7 @@ OK, but there were issues!
 | **HorizontalPrivilegeTest** | 7            | 11                 | ✅ 全成功      |
 | **MassAssignmentTest**      | 7            | 18                 | ✅ 全成功      |
 | **SSRFTest**                | 7            | 10                 | ✅ 全成功      |
-| **DependencySecurityTest**  | 7            | 182                | ✅ 全成功      |
+| **DependencySecurityTest**  | 7            | 185                | ✅ 全成功      |
 | **DataLeakageTest**         | 7            | 44                 | ✅ 全成功      |
 | **EmailChangeTest**         | 6            | 13                 | ✅ 全成功      |
 | **NotificationTest**        | 7            | 27                 | ✅ 全成功      |
@@ -42,6 +42,7 @@ OK, but there were issues!
 | **ConversationTest**        | 5            | 11                 | ✅ 全成功      |
 | **FriendshipTest**          | 9            | 21                 | ✅ 全成功      |
 | **MessageTest**             | 4            | 8                  | ✅ 全成功      |
+| **OperationLogServiceTest** | 16           | 22                 | ✅ 全成功      |
 | **ValidationTest**          | 7            | 34                 | ✅ 全成功      |
 | **ErrorHandlingTest**       | 4            | 4                  | ✅ 全成功      |
 | **EdgeCaseTest**            | 4            | 11                 | ✅ 全成功      |
@@ -172,7 +173,7 @@ OK, but there were issues!
 -   **サプライチェーン保護**: パッケージ整合性・署名検証による改竄検出
 -   **破壊的変更検出**: 自動更新による予期しない変更の事前検出
 
-**テスト数**: 7 テスト・182 アサーション
+**テスト数**: 7 テスト・185 アサーション
 
 ---
 
@@ -347,6 +348,35 @@ OK, but there were issues!
 
 ## ✅ **品質保証テスト詳細**
 
+### **📊 OperationLogServiceTest - 操作ログ管理**
+
+**テスト対象**: 管理者操作ログの記録・保持・削除機能の包括的検証
+
+**✅ 実装機能**:
+
+-   **ログ作成機能**: カテゴリ・アクション・説明付きログの正確な記録
+-   **必須項目管理**: category・action 必須、description 任意の適切な処理
+-   **カテゴリ別管理**: frontend・backend 独立したログ管理体系
+-   **自動削除機能**: 3000 件超過時の最古ログ自動削除（FIFO 方式）
+-   **データ保持戦略**: カテゴリ別に正確に 3000 件まで保持
+-   **削除精度**: 作成日時順による正確な削除対象特定
+-   **境界値処理**: 2999 件・3000 件・3001 件での適切な動作
+-   **パフォーマンス**: 大量ログ（10,000 件）削除処理 1 秒以内完了
+-   **独立性保証**: frontend・backend 相互影響なしの完全分離
+-   **データ整合性**: 新しいログ優先保持・古いログ確実削除
+-   **例外処理**: 不正カテゴリ名での安全な動作
+
+**重要性**:
+
+-   **監査証跡**: 管理者の重要操作（ユーザー削除・BAN 等）を長期保存
+-   **コンプライアンス**: GDPR・法的要件への対応と証跡管理
+-   **運用安全性**: 問題発生時の原因調査と責任追跡
+-   **容量管理**: 適切なログ保持によるストレージ効率化
+
+**テスト数**: 16 テスト・22 アサーション
+
+---
+
 ### **📋 ValidationTest - バリデーション**
 
 **テスト対象**: 入力バリデーション機能の包括的検証
@@ -440,6 +470,9 @@ composer install
 
 # データ漏洩防止テストのみ
 ./vendor/bin/phpunit tests/Feature/DataLeakageTest.php
+
+# 操作ログ管理テストのみ
+./vendor/bin/phpunit tests/Unit/OperationLogServiceTest.php
 ```
 
 ---
@@ -460,7 +493,7 @@ composer install
 
 ### **品質保証体制**
 
-✅ **178 テスト・720 アサーション**: 包括的な機能・セキュリティカバレッジ
+✅ **194 テスト・745 アサーション**: 包括的な機能・セキュリティカバレッジ
 ✅ **CI/CD 統合**: 自動化されたテスト実行・品質監視
 ✅ **継続的改善**: 新機能追加時の既存テスト拡張・新規テスト作成
 
