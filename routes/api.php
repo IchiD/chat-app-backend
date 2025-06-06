@@ -11,6 +11,7 @@ use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\AppConfigController;
 use App\Http\Controllers\API\ExternalResourceController;
 use App\Http\Controllers\API\StripeController;
+use App\Http\Controllers\API\StripeController;
 use App\Http\Controllers\API\GroupsController;
 use App\Http\Controllers\API\GroupMembersController;
 use App\Http\Controllers\API\GroupMessagesController;
@@ -87,6 +88,12 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
 
   // グループチャット機能
   Route::prefix('groups')->group(function () {
+  // Stripe 決済関連
+  Route::post('/stripe/create-checkout-session', [StripeController::class, 'createCheckoutSession']);
+
+// Stripe Webhook (認証不要)
+Route::post('/stripe/webhook', [StripeController::class, 'webhook']);
+
     Route::controller(GroupsController::class)->group(function () {
       Route::get('/', 'index');
       Route::post('/', 'store');
