@@ -89,6 +89,22 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::post('/test', 'sendTestNotification'); // テスト通知の送信（開発用）
   });
 
+  // グループチャット関連API
+  Route::prefix('groups')->controller(\App\Http\Controllers\API\GroupController::class)->group(function () {
+    Route::get('/', 'index');
+    Route::post('/', 'store');
+    Route::get('/{group}', 'show');
+    Route::put('/{group}', 'update');
+    Route::delete('/{group}', 'destroy');
+    Route::post('/{group}/members', 'addMember');
+    Route::delete('/{group}/members/{member}', 'removeMember');
+  });
+
+  Route::prefix('groups/{group}/messages')->controller(\App\Http\Controllers\API\GroupMessageController::class)->group(function () {
+    Route::get('/', 'index');
+    Route::post('/', 'store');
+  });
+
   // Stripe 決済関連
   Route::post('/stripe/create-checkout-session', [StripeController::class, 'createCheckoutSession']);
 
