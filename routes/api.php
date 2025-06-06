@@ -10,6 +10,9 @@ use App\Http\Controllers\API\MessagesController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\AppConfigController;
 use App\Http\Controllers\API\ExternalResourceController;
+use App\Http\Controllers\API\GroupsController;
+use App\Http\Controllers\API\GroupMembersController;
+use App\Http\Controllers\API\GroupMessagesController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerificationEmail']);
@@ -78,6 +81,27 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::prefix('room/{conversation:room_token}/messages')->controller(MessagesController::class)->group(function () {
       Route::get('/', 'index'); // メッセージ一覧
       Route::post('/', 'store')->middleware('throttle:10,1'); // メッセージ送信
+    });
+  });
+
+  // グループチャット機能
+  Route::prefix('groups')->group(function () {
+    Route::controller(GroupsController::class)->group(function () {
+      Route::get('/', 'index');
+      Route::post('/', 'store');
+      Route::get('/{group}', 'show');
+      Route::put('/{group}', 'update');
+      Route::delete('/{group}', 'destroy');
+    });
+
+    Route::prefix('{group}/members')->controller(GroupMembersController::class)->group(function () {
+      Route::post('/', 'store');
+      Route::delete('/{member}', 'destroy');
+    });
+
+    Route::prefix('{group}/messages')->controller(GroupMessagesController::class)->group(function () {
+      Route::get('/', 'index');
+      Route::post('/', 'store')->middleware('throttle:10,1');
     });
   });
 
