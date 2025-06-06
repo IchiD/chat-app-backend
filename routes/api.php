@@ -10,6 +10,7 @@ use App\Http\Controllers\API\MessagesController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\AppConfigController;
 use App\Http\Controllers\API\ExternalResourceController;
+use App\Http\Controllers\API\StripeController;
 use App\Http\Controllers\API\GroupsController;
 use App\Http\Controllers\API\GroupMembersController;
 use App\Http\Controllers\API\GroupMessagesController;
@@ -112,6 +113,9 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::post('/test', 'sendTestNotification'); // テスト通知の送信（開発用）
   });
 
+  // Stripe 決済関連
+  Route::post('/stripe/create-checkout-session', [StripeController::class, 'createCheckoutSession']);
+
   // メールアドレス変更関連
   Route::put('/user/update-email', [AuthController::class, 'requestEmailChange']);
 
@@ -124,6 +128,9 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
 
 // メールアドレス変更確認（認証不要）
 Route::get('/verify-email-change', [AuthController::class, 'confirmEmailChange']);
+
+// Stripe Webhook (認証不要)
+Route::post('/stripe/webhook', [StripeController::class, 'webhook']);
 
 // 既存のユーザー情報取得エンドポイント
 Route::middleware(['auth:sanctum', 'check.user.status'])->get('/user', function (Request $request) {
