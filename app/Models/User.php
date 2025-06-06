@@ -18,6 +18,9 @@ use App\Models\Conversation;
 use App\Models\Participant;
 use App\Models\Message;
 use App\Models\Admin;
+use App\Models\Group;
+use App\Models\GroupMember;
+use App\Models\Subscription;
 
 class User extends Authenticatable
 {
@@ -47,6 +50,8 @@ class User extends Authenticatable
     'google_id',
     'avatar',
     'social_type',
+    'plan',
+    'subscription_status',
   ];
 
   /**
@@ -502,5 +507,29 @@ class User extends Authenticatable
       ->each(function ($friendship) {
         $friendship->restoreByAdmin();
       });
+  }
+
+  /**
+   * ユーザーが所有するグループ
+   */
+  public function ownedGroups(): HasMany
+  {
+    return $this->hasMany(Group::class, 'owner_user_id');
+  }
+
+  /**
+   * ユーザーが参加するグループメンバーシップ
+   */
+  public function groupMemberships(): HasMany
+  {
+    return $this->hasMany(GroupMember::class);
+  }
+
+  /**
+   * ユーザーのサブスクリプション
+   */
+  public function subscriptions(): HasMany
+  {
+    return $this->hasMany(Subscription::class);
   }
 }
