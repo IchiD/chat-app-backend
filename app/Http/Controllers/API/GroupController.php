@@ -114,4 +114,50 @@ class GroupController extends Controller
     $member->delete();
     return response()->json(['message' => __('messages.member_removed')]);
   }
+
+  public function getQrCode(Group $group)
+  {
+    $user = Auth::user();
+    if ($group->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+    return response()->json(['qr_code_token' => $group->qr_code_token]);
+  }
+
+  public function regenerateQrCode(Group $group)
+  {
+    $user = Auth::user();
+    if ($group->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+    $group->regenerateQrToken();
+    return response()->json(['qr_code_token' => $group->qr_code_token]);
+  }
+
+  public function joinByToken(Request $request, string $token)
+  {
+    $request->validate([
+      'nickname' => 'required|string|max:50',
+    ]);
+
+    $group = Group::where('qr_code_token', $token)->firstOrFail();
+
+    // メンバー数制限チェック
+    if ($group->members()->count() >= $group->max_members) {
+      return response()->json(['message' => __('errors.group_full')], 422);
+    }
+
+    $user = Auth::user();
+    if ($user && $group->members()->where('user_id', $user->id)->exists()) {
+      return response()->json(['message' => __('errors.already_member')], 422);
+    }
+
+    $member = GroupMember::create([
+      'group_id' => $group->id,
+      'user_id' => $user?->id,
+      'nickname' => $request->nickname,
+    ]);
+
+    return response()->json($member, 201);
+  }
 }
