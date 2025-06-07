@@ -50,4 +50,9 @@ return [
         ],
     ],
 
+    'external' => [
+        'client_id' => env('EXTERNAL_CLIENT_ID', 'external-client'),
+        'client_secret' => env('EXTERNAL_CLIENT_SECRET', 'external-secret'),
+    ],
+
 ];
