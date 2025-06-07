@@ -11,6 +11,7 @@ use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\AppConfigController;
 use App\Http\Controllers\API\ExternalResourceController;
 use App\Http\Controllers\API\StripeController;
+use App\Http\Controllers\API\ExternalAuthController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerificationEmail']);
@@ -29,6 +30,12 @@ Route::middleware(['web'])->group(function () {
 // アプリケーション設定情報取得
 Route::get('/config', [AppConfigController::class, 'getPublicConfig']);
 Route::post('/external/fetch', [ExternalResourceController::class, 'fetch']);
+
+// 外部システム向け認証
+Route::prefix('auth/external')->controller(ExternalAuthController::class)->group(function () {
+    Route::post('/token', 'issueToken')->middleware('throttle:10,1');
+    Route::post('/verify', 'verifyToken')->middleware('throttle:30,1');
+});
 
 // 認証済みユーザーのみアクセス可能なエンドポイント
 Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
