@@ -98,6 +98,8 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::delete('/{group}', 'destroy');
     Route::post('/{group}/members', 'addMember');
     Route::delete('/{group}/members/{member}', 'removeMember');
+    Route::get('/{group}/qr-code', 'getQrCode');
+    Route::post('/{group}/qr-code/regenerate', 'regenerateQrCode');
   });
 
   Route::prefix('groups/{group}/messages')->controller(\App\Http\Controllers\API\GroupMessageController::class)->group(function () {
@@ -123,6 +125,9 @@ Route::get('/verify-email-change', [AuthController::class, 'confirmEmailChange']
 
 // Stripe Webhook (認証不要)
 Route::post('/stripe/webhook', [StripeController::class, 'webhook']);
+
+// QRコード参加 (認証不要)
+Route::post('/groups/join/{token}', [\App\Http\Controllers\API\GroupController::class, 'joinByToken']);
 
 // 既存のユーザー情報取得エンドポイント
 Route::middleware(['auth:sanctum', 'check.user.status'])->get('/user', function (Request $request) {
