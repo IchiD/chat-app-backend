@@ -33,8 +33,8 @@ Route::post('/external/fetch', [ExternalResourceController::class, 'fetch']);
 
 // 外部システム向け認証
 Route::prefix('auth/external')->controller(ExternalAuthController::class)->group(function () {
-    Route::post('/token', 'issueToken')->middleware('throttle:10,1');
-    Route::post('/verify', 'verifyToken')->middleware('throttle:30,1');
+  Route::post('/token', 'issueToken')->middleware('throttle:10,1');
+  Route::post('/verify', 'verifyToken')->middleware('throttle:30,1');
 });
 
 // 認証済みユーザーのみアクセス可能なエンドポイント
@@ -82,6 +82,19 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::get('/token/{room_token}', 'showByToken'); // トークンで特定の会話情報を取得
     Route::post('/{conversation}/read', 'markAsRead'); // idでの既読処理も残すか検討
 
+    // グループ管理
+    Route::prefix('groups')->group(function () {
+      Route::get('/', 'getGroups'); // グループ一覧
+      Route::post('/', 'createGroup'); // グループ作成
+      Route::get('/{conversation}', 'showGroup'); // グループ詳細
+      Route::put('/{conversation}', 'updateGroup'); // グループ更新
+      Route::delete('/{conversation}', 'destroyGroup'); // グループ削除
+      Route::post('/{conversation}/members', 'addGroupMember'); // メンバー追加
+      Route::delete('/{conversation}/members/{participant}', 'removeGroupMember'); // メンバー削除
+      Route::get('/{conversation}/qr-code', 'getGroupQrCode'); // QRコード取得
+      Route::post('/{conversation}/qr-code/regenerate', 'regenerateGroupQrCode'); // QRコード再生成
+    });
+
     // 特定の会話のメッセージ関連 (room_token を使用)
     Route::prefix('room/{conversation:room_token}/messages')->controller(MessagesController::class)->group(function () {
       Route::get('/', 'index'); // メッセージ一覧
@@ -96,23 +109,7 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::post('/test', 'sendTestNotification'); // テスト通知の送信（開発用）
   });
 
-  // グループチャット関連API
-  Route::prefix('groups')->controller(\App\Http\Controllers\API\GroupController::class)->group(function () {
-    Route::get('/', 'index');
-    Route::post('/', 'store');
-    Route::get('/{group}', 'show');
-    Route::put('/{group}', 'update');
-    Route::delete('/{group}', 'destroy');
-    Route::post('/{group}/members', 'addMember');
-    Route::delete('/{group}/members/{member}', 'removeMember');
-    Route::get('/{group}/qr-code', 'getQrCode');
-    Route::post('/{group}/qr-code/regenerate', 'regenerateQrCode');
-  });
 
-  Route::prefix('groups/{group}/messages')->controller(\App\Http\Controllers\API\GroupMessageController::class)->group(function () {
-    Route::get('/', 'index');
-    Route::post('/', 'store');
-  });
 
   // Stripe 決済関連
   Route::post('/stripe/create-checkout-session', [StripeController::class, 'createCheckoutSession']);
@@ -133,8 +130,8 @@ Route::get('/verify-email-change', [AuthController::class, 'confirmEmailChange']
 // Stripe Webhook (認証不要)
 Route::post('/stripe/webhook', [StripeController::class, 'webhook']);
 
-// QRコード参加 (認証不要)
-Route::post('/groups/join/{token}', [\App\Http\Controllers\API\GroupController::class, 'joinByToken']);
+// QRコード参加 (認証必須)
+Route::post('/conversations/groups/join/{token}', [ConversationsController::class, 'joinGroupByToken'])->middleware(['auth:sanctum', 'check.user.status']);
 
 // 既存のユーザー情報取得エンドポイント
 Route::middleware(['auth:sanctum', 'check.user.status'])->get('/user', function (Request $request) {

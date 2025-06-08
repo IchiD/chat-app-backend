@@ -18,8 +18,7 @@ use App\Models\Conversation;
 use App\Models\Participant;
 use App\Models\Message;
 use App\Models\Admin;
-use App\Models\Group;
-use App\Models\GroupMember;
+
 use App\Models\Subscription;
 
 class User extends Authenticatable
@@ -509,21 +508,17 @@ class User extends Authenticatable
       });
   }
 
-  /**
-   * ユーザーが所有するグループ
-   */
-  public function ownedGroups(): HasMany
-  {
-    return $this->hasMany(Group::class, 'owner_user_id');
-  }
+
 
   /**
-   * ユーザーが参加するグループメンバーシップ
+   * ユーザーが所有するグループ会話（新方式）
    */
-  public function groupMemberships(): HasMany
+  public function ownedGroupConversations(): HasMany
   {
-    return $this->hasMany(GroupMember::class);
+    return $this->hasMany(Conversation::class, 'owner_user_id')->where('type', 'group');
   }
+
+
 
   /**
    * ユーザーのサブスクリプション

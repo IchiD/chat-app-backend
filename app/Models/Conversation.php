@@ -14,6 +14,11 @@ class Conversation extends Model
 
   protected $fillable = [
     'type',
+    'name',
+    'description',
+    'max_members',
+    'owner_user_id',
+    'qr_code_token',
     'deleted_at',
     'deleted_reason',
     'deleted_by',
@@ -25,7 +30,7 @@ class Conversation extends Model
 
   /**
    * モデルの起動メソッド
-   * creatingイベントでroom_tokenを自動生成
+   * creatingイベントでroom_tokenとqr_code_tokenを自動生成
    */
   protected static function booted(): void
   {
@@ -36,6 +41,14 @@ class Conversation extends Model
           $token = Str::random(16);
         } while (static::where('room_token', $token)->exists());
         $conversation->room_token = $token;
+      }
+
+      // グループタイプでqr_code_tokenが空の場合は自動生成
+      if ($conversation->type === 'group' && empty($conversation->qr_code_token)) {
+        do {
+          $qrToken = Str::random(32);
+        } while (static::where('qr_code_token', $qrToken)->exists());
+        $conversation->qr_code_token = $qrToken;
       }
     });
   }
@@ -113,5 +126,57 @@ class Conversation extends Model
       'deleted_reason' => null,
       'deleted_by' => null,
     ]);
+  }
+
+  /**
+   * グループオーナーを取得
+   */
+  public function owner()
+  {
+    return $this->belongsTo(User::class, 'owner_user_id');
+  }
+
+  /**
+   * グループかどうかをチェック
+   */
+  public function isGroup(): bool
+  {
+    return $this->type === 'group';
+  }
+
+  /**
+   * QRコードトークンを再生成
+   */
+  public function regenerateQrToken(): void
+  {
+    if (!$this->isGroup()) {
+      return;
+    }
+
+    do {
+      $token = Str::random(32);
+    } while (static::where('qr_code_token', $token)->exists());
+
+    $this->update(['qr_code_token' => $token]);
+  }
+
+  /**
+   * グループメンバー数を取得
+   */
+  public function getMemberCount(): int
+  {
+    return $this->conversationParticipants()->count();
+  }
+
+  /**
+   * メンバー数制限チェック
+   */
+  public function canAddMember(): bool
+  {
+    if (!$this->isGroup()) {
+      return true;
+    }
+
+    return $this->getMemberCount() < $this->max_members;
   }
 }

@@ -445,4 +445,226 @@ class ConversationsController extends Controller
 
     return response()->json($conversation, 200);
   }
+
+  /**
+   * 新しいグループ会話を作成
+   */
+  public function createGroup(Request $request)
+  {
+    $request->validate([
+      'name' => 'required|string|max:100',
+      'description' => 'nullable|string',
+      'max_members' => 'nullable|integer|min:1|max:500',
+    ]);
+
+    $user = Auth::user();
+
+    $conversation = DB::transaction(function () use ($user, $request) {
+      // グループ会話を作成
+      $conversation = Conversation::create([
+        'type' => 'group',
+        'name' => $request->name,
+        'description' => $request->description,
+        'max_members' => $request->max_members ?? 50,
+        'owner_user_id' => $user->id,
+      ]);
+
+      // オーナーを参加者として追加
+      Participant::create([
+        'conversation_id' => $conversation->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+      ]);
+
+      return $conversation;
+    });
+
+    return response()->json($conversation, 201);
+  }
+
+  /**
+   * ユーザーのグループ会話一覧を取得
+   */
+  public function getGroups()
+  {
+    $user = Auth::user();
+    $groups = $user->ownedGroupConversations()
+      ->withCount('conversationParticipants as member_count')
+      ->get();
+
+    return response()->json($groups);
+  }
+
+  /**
+   * グループ会話の詳細を取得
+   */
+  public function showGroup(Conversation $conversation)
+  {
+    $user = Auth::user();
+
+    // グループタイプかチェック
+    if (!$conversation->isGroup()) {
+      return response()->json(['message' => 'グループ会話ではありません'], 400);
+    }
+
+    // オーナーかチェック
+    if ($conversation->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    $conversation->load('conversationParticipants.user');
+    return response()->json($conversation);
+  }
+
+  /**
+   * グループ会話を更新
+   */
+  public function updateGroup(Conversation $conversation, Request $request)
+  {
+    $request->validate([
+      'name' => 'sometimes|string|max:100',
+      'description' => 'nullable|string',
+      'max_members' => 'nullable|integer|min:1|max:500',
+    ]);
+
+    $user = Auth::user();
+
+    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    $conversation->update($request->only('name', 'description', 'max_members'));
+    return response()->json($conversation);
+  }
+
+  /**
+   * グループ会話を削除
+   */
+  public function destroyGroup(Conversation $conversation)
+  {
+    $user = Auth::user();
+
+    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    $conversation->delete();
+    return response()->json(['message' => 'グループが削除されました']);
+  }
+
+  /**
+   * グループにメンバーを追加
+   */
+  public function addGroupMember(Conversation $conversation, Request $request)
+  {
+    $request->validate([
+      'user_id' => 'required|exists:users,id',
+    ]);
+
+    $user = Auth::user();
+
+    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    // メンバー数制限チェック
+    if (!$conversation->canAddMember()) {
+      return response()->json(['message' => 'メンバー数が上限に達しています'], 422);
+    }
+
+    // 既に参加しているかチェック
+    if ($conversation->conversationParticipants()->where('user_id', $request->user_id)->exists()) {
+      return response()->json(['message' => '既に参加しています'], 422);
+    }
+
+    $participant = Participant::create([
+      'conversation_id' => $conversation->id,
+      'user_id' => $request->user_id,
+      'joined_at' => now(),
+    ]);
+
+    return response()->json($participant, 201);
+  }
+
+  /**
+   * グループからメンバーを削除
+   */
+  public function removeGroupMember(Conversation $conversation, Participant $participant)
+  {
+    $user = Auth::user();
+
+    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    if ($participant->conversation_id !== $conversation->id) {
+      return response()->json(['message' => '無効なメンバーです'], 422);
+    }
+
+    $participant->delete();
+    return response()->json(['message' => 'メンバーが削除されました']);
+  }
+
+  /**
+   * QRコードトークンを取得
+   */
+  public function getGroupQrCode(Conversation $conversation)
+  {
+    $user = Auth::user();
+
+    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    return response()->json(['qr_code_token' => $conversation->qr_code_token]);
+  }
+
+  /**
+   * QRコードトークンを再生成
+   */
+  public function regenerateGroupQrCode(Conversation $conversation)
+  {
+    $user = Auth::user();
+
+    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    $conversation->regenerateQrToken();
+    return response()->json(['qr_code_token' => $conversation->qr_code_token]);
+  }
+
+  /**
+   * QRコードトークンでグループに参加
+   */
+  public function joinGroupByToken(Request $request, string $token)
+  {
+    $request->validate([
+      // ログイン必須なのでニックネームは不要
+    ]);
+
+    $conversation = Conversation::where('qr_code_token', $token)
+      ->where('type', 'group')
+      ->firstOrFail();
+
+    $user = Auth::user();
+
+    // メンバー数制限チェック
+    if (!$conversation->canAddMember()) {
+      return response()->json(['message' => 'グループのメンバー数が上限に達しています'], 422);
+    }
+
+    // 既に参加しているかチェック
+    if ($conversation->conversationParticipants()->where('user_id', $user->id)->exists()) {
+      return response()->json(['message' => '既に参加しています'], 422);
+    }
+
+    $participant = Participant::create([
+      'conversation_id' => $conversation->id,
+      'user_id' => $user->id,
+      'joined_at' => now(),
+    ]);
+
+    return response()->json($participant, 201);
+  }
 }
