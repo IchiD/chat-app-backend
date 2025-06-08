@@ -219,6 +219,8 @@ class AuthController extends Controller
       'google_id' => $user->google_id,
       'avatar' => $user->avatar,
       'social_type' => $user->social_type,
+      'plan' => $user->plan,
+      'subscription_status' => $user->subscription_status,
     ]);
   }
 

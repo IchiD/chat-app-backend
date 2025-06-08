@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\DB;
 
 class GroupController extends Controller
 {
+  public function __construct()
+  {
+    $this->middleware(['auth:sanctum', 'premium-required'])->except(['joinByToken']);
+  }
+
   public function index()
   {
     $user = Auth::user();
@@ -148,8 +153,19 @@ class GroupController extends Controller
     }
 
     $user = Auth::user();
-    if ($user && $group->members()->where('user_id', $user->id)->exists()) {
-      return response()->json(['message' => __('errors.already_member')], 422);
+
+    // 認証されたユーザーの場合、プレミアムプランチェック
+    if ($user) {
+      if (!$user->plan || $user->plan === 'free') {
+        return response()->json([
+          'message' => 'This feature requires a premium plan',
+          'error' => 'premium_required'
+        ], 403);
+      }
+
+      if ($group->members()->where('user_id', $user->id)->exists()) {
+        return response()->json(['message' => __('errors.already_member')], 422);
+      }
     }
 
     $member = GroupMember::create([
