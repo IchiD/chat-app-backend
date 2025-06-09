@@ -48,10 +48,18 @@ class ConversationsController extends Controller
       ->where(function ($query) use ($user, $friendIds) {
         // サポート会話は常に表示
         $query->where('type', 'support')
-          // ダイレクトメッセージの場合は、友達関係が続いている場合のみ表示
-          ->orWhere('type', '!=', 'direct') // グループチャットは常に表示
+          // group_memberタイプは常に表示
+          ->orWhere('type', 'group_member')
+          // groupタイプで、chat_stylesに'group'が含まれている場合のみ表示
+          ->orWhere(function ($query) {
+            $query->where('type', 'group')
+              ->where(function ($subQuery) {
+                $subQuery->whereNull('chat_styles')
+                  ->orWhereJsonContains('chat_styles', 'group');
+              });
+          })
+          // ダイレクトメッセージで、かつ相手が友達である場合
           ->orWhere(function ($query) use ($user, $friendIds) {
-            // ダイレクトメッセージで、かつ相手が友達である場合
             $query->where('type', 'direct')
               ->whereHas('participants', function ($query) use ($user, $friendIds) {
                 $query->where('users.id', '!=', $user->id)
@@ -464,22 +472,45 @@ class ConversationsController extends Controller
     $chatStyles = $request->chatStyles;
 
     $conversation = DB::transaction(function () use ($user, $request, $chatStyles) {
-      // グループを作成（選択されたチャットスタイルを保存）
-      $conversation = Conversation::create([
-        'type' => 'group',
-        'name' => $request->name,
-        'description' => $request->description,
-        'max_members' => $request->max_members ?? 50,
-        'owner_user_id' => $user->id,
-        'chat_styles' => $chatStyles,
-      ]);
+      $conversation = null;
 
-      // オーナーを参加者として追加
-      Participant::create([
-        'conversation_id' => $conversation->id,
-        'user_id' => $user->id,
-        'joined_at' => now(),
-      ]);
+      // 'group'スタイルが選択されている場合のみ、グループ全体チャットを作成
+      if (in_array('group', $chatStyles)) {
+        $conversation = Conversation::create([
+          'type' => 'group',
+          'name' => $request->name,
+          'description' => $request->description,
+          'max_members' => $request->max_members ?? 50,
+          'owner_user_id' => $user->id,
+          'chat_styles' => $chatStyles,
+        ]);
+
+        // オーナーを参加者として追加
+        Participant::create([
+          'conversation_id' => $conversation->id,
+          'user_id' => $user->id,
+          'joined_at' => now(),
+        ]);
+      }
+
+      // 'group_member'スタイルのみが選択されている場合、親グループ情報を作成
+      if (!in_array('group', $chatStyles) && in_array('group_member', $chatStyles)) {
+        $conversation = Conversation::create([
+          'type' => 'group',  // 管理用の親グループレコード
+          'name' => $request->name,
+          'description' => $request->description,
+          'max_members' => $request->max_members ?? 50,
+          'owner_user_id' => $user->id,
+          'chat_styles' => $chatStyles,
+        ]);
+
+        // オーナーを参加者として追加
+        Participant::create([
+          'conversation_id' => $conversation->id,
+          'user_id' => $user->id,
+          'joined_at' => now(),
+        ]);
+      }
 
       return $conversation;
     });
