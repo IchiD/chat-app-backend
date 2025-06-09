@@ -19,6 +19,7 @@ class Conversation extends Model
     'max_members',
     'owner_user_id',
     'qr_code_token',
+    'group_conversation_id',
     'deleted_at',
     'deleted_reason',
     'deleted_by',
@@ -142,6 +143,14 @@ class Conversation extends Model
   public function isGroup(): bool
   {
     return $this->type === 'group';
+  }
+
+  /**
+   * 親グループ会話を取得（group_memberタイプの場合）
+   */
+  public function parentGroupConversation()
+  {
+    return $this->belongsTo(Conversation::class, 'group_conversation_id');
   }
 
   /**

@@ -93,6 +93,11 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
       Route::delete('/{conversation}/members/{participant}', 'removeGroupMember'); // メンバー削除
       Route::get('/{conversation}/qr-code', 'getGroupQrCode'); // QRコード取得
       Route::post('/{conversation}/qr-code/regenerate', 'regenerateGroupQrCode'); // QRコード再生成
+
+      // グループメンバー間チャット機能
+      Route::get('/{conversation}/members', 'getGroupMembers'); // グループメンバー一覧
+      Route::post('/{conversation}/member-chat', 'getOrCreateMemberChat'); // メンバー間チャット取得/作成
+      Route::post('/{conversation}/messages/bulk', 'sendBulkMessageToMembers'); // メンバーに一斉送信
     });
 
     // 特定の会話のメッセージ関連 (room_token を使用)

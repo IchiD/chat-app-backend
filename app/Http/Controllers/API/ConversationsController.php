@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Friendship;
+use App\Models\Message;
 use App\Models\Participant;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -666,5 +667,257 @@ class ConversationsController extends Controller
     ]);
 
     return response()->json($participant, 201);
+  }
+
+  /**
+   * グループメンバー一覧を取得
+   */
+  public function getGroupMembers(Conversation $conversation)
+  {
+    $user = Auth::user();
+
+    // グループタイプかチェック
+    if (!$conversation->isGroup()) {
+      return response()->json(['message' => 'グループ会話ではありません'], 400);
+    }
+
+    // グループメンバーかチェック
+    if (!$conversation->conversationParticipants()->where('user_id', $user->id)->exists()) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    $members = $conversation->conversationParticipants()
+      ->with('user:id,name,friend_id')
+      ->where('user_id', '!=', $user->id) // 自分以外のメンバー
+      ->get()
+      ->map(function ($participant) use ($conversation) {
+        return [
+          'id' => $participant->user->id,
+          'name' => $participant->user->name,
+          'friend_id' => $participant->user->friend_id,
+          'group_member_label' => $conversation->name . 'メンバー',
+        ];
+      });
+
+    return response()->json($members);
+  }
+
+  /**
+   * グループメンバーとの個別チャットルームを取得/作成
+   */
+  public function getOrCreateMemberChat($conversation, Request $request)
+  {
+    // 手動でConversationを取得
+    $groupConversation = Conversation::findOrFail($conversation);
+
+    \Log::info('個別チャット開始', [
+      'conversation_param' => $conversation,
+      'group_conversation_id' => $groupConversation->id,
+      'group_conversation_type' => $groupConversation->type,
+      'group_conversation_name' => $groupConversation->name,
+      'request_data' => $request->all()
+    ]);
+
+    try {
+      $request->validate([
+        'target_user_id' => 'required|exists:users,id',
+      ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+      \Log::error('個別チャットバリデーションエラー', [
+        'errors' => $e->errors(),
+        'request_data' => $request->all()
+      ]);
+      throw $e;
+    }
+
+    $user = Auth::user();
+    $targetUserId = $request->target_user_id;
+
+    \Log::info('バリデーション完了', [
+      'user_id' => $user->id,
+      'target_user_id' => $targetUserId
+    ]);
+
+    // グループタイプかチェック
+    if (!$groupConversation->isGroup()) {
+      \Log::error('グループ会話ではない', [
+        'conversation_id' => $groupConversation->id,
+        'conversation_type' => $groupConversation->type
+      ]);
+      return response()->json(['message' => 'グループ会話ではありません'], 400);
+    }
+
+    // 両方がグループメンバーかチェック
+    $userIsMember = $groupConversation->conversationParticipants()->where('user_id', $user->id)->exists();
+    $targetIsMember = $groupConversation->conversationParticipants()->where('user_id', $targetUserId)->exists();
+
+    if (!$userIsMember || !$targetIsMember) {
+      return response()->json(['message' => 'グループメンバーではありません'], 403);
+    }
+
+    // 既存のメンバー間チャットを検索
+    $existingConversation = Conversation::where('type', 'group_member')
+      ->where('group_conversation_id', $groupConversation->id)
+      ->whereHas('conversationParticipants', function ($query) use ($user) {
+        $query->where('user_id', $user->id);
+      })
+      ->whereHas('conversationParticipants', function ($query) use ($targetUserId) {
+        $query->where('user_id', $targetUserId);
+      })
+      ->first();
+
+    if ($existingConversation) {
+      return response()->json($existingConversation);
+    }
+
+    // 新しいメンバー間チャットを作成
+    $conversation = DB::transaction(function () use ($user, $targetUserId, $groupConversation) {
+      $targetUser = User::find($targetUserId);
+
+      $conversation = Conversation::create([
+        'type' => 'group_member',
+        'name' => $groupConversation->name . 'メンバー間チャット',
+        'group_conversation_id' => $groupConversation->id,
+      ]);
+
+      // 両方のユーザーを参加者として追加
+      Participant::create([
+        'conversation_id' => $conversation->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+      ]);
+
+      Participant::create([
+        'conversation_id' => $conversation->id,
+        'user_id' => $targetUserId,
+        'joined_at' => now(),
+      ]);
+
+      return $conversation;
+    });
+
+    return response()->json($conversation, 201);
+  }
+
+  /**
+   * グループメンバーに一斉メッセージ送信
+   */
+  public function sendBulkMessageToMembers($conversation, Request $request)
+  {
+    \Log::info('一斉送信開始', [
+      'conversation_id' => $conversation,
+      'request_data' => $request->all()
+    ]);
+
+    // Conversationモデルを明示的に取得
+    $groupConversation = Conversation::findOrFail($conversation);
+
+    $request->validate([
+      'target_user_ids' => 'required|array|min:1',
+      'target_user_ids.*' => 'exists:users,id',
+      'text_content' => 'required|string|max:5000',
+    ]);
+
+    $user = Auth::user();
+    $targetUserIds = $request->target_user_ids;
+    $textContent = $request->text_content;
+
+    \Log::info('バリデーション完了', [
+      'user_id' => $user->id,
+      'target_user_ids' => $targetUserIds,
+      'text_content_length' => strlen($textContent)
+    ]);
+
+    // グループタイプかチェック
+    if (!$groupConversation->isGroup()) {
+      return response()->json(['message' => 'グループ会話ではありません'], 400);
+    }
+
+    // 送信者がグループメンバーかチェック
+    if (!$groupConversation->conversationParticipants()->where('user_id', $user->id)->exists()) {
+      return response()->json(['message' => 'グループメンバーではありません'], 403);
+    }
+
+    // 送信対象がすべてグループメンバーかチェック
+    $validTargets = $groupConversation->conversationParticipants()
+      ->whereIn('user_id', $targetUserIds)
+      ->pluck('user_id')
+      ->toArray();
+
+    if (count($validTargets) !== count($targetUserIds)) {
+      return response()->json(['message' => '無効な送信対象が含まれています'], 422);
+    }
+
+    $sentMessages = [];
+
+    DB::transaction(function () use ($user, $validTargets, $textContent, $groupConversation, &$sentMessages) {
+      foreach ($validTargets as $targetUserId) {
+        // メンバー間チャットを取得/作成
+        $conversation = $this->getOrCreateMemberChatInternal($user->id, $targetUserId, $groupConversation);
+
+        // メッセージ送信
+        $message = Message::create([
+          'conversation_id' => $conversation->id,
+          'sender_id' => $user->id,
+          'text_content' => $textContent,
+          'sent_at' => now(),
+        ]);
+
+        $sentMessages[] = [
+          'conversation_id' => $conversation->id,
+          'target_user_id' => $targetUserId,
+          'message_id' => $message->id,
+        ];
+      }
+    });
+
+    return response()->json([
+      'message' => '一斉送信が完了しました',
+      'sent_count' => count($sentMessages),
+      'sent_messages' => $sentMessages,
+    ]);
+  }
+
+  /**
+   * 内部用：メンバー間チャットを取得/作成
+   */
+  private function getOrCreateMemberChatInternal($userId, $targetUserId, $groupConversation)
+  {
+    // 既存のメンバー間チャットを検索
+    $existingConversation = Conversation::where('type', 'group_member')
+      ->where('group_conversation_id', $groupConversation->id)
+      ->whereHas('conversationParticipants', function ($query) use ($userId) {
+        $query->where('user_id', $userId);
+      })
+      ->whereHas('conversationParticipants', function ($query) use ($targetUserId) {
+        $query->where('user_id', $targetUserId);
+      })
+      ->first();
+
+    if ($existingConversation) {
+      return $existingConversation;
+    }
+
+    // 新しいメンバー間チャットを作成
+    $conversation = Conversation::create([
+      'type' => 'group_member',
+      'name' => $groupConversation->name . 'メンバー間チャット',
+      'group_conversation_id' => $groupConversation->id,
+    ]);
+
+    // 両方のユーザーを参加者として追加
+    Participant::create([
+      'conversation_id' => $conversation->id,
+      'user_id' => $userId,
+      'joined_at' => now(),
+    ]);
+
+    Participant::create([
+      'conversation_id' => $conversation->id,
+      'user_id' => $targetUserId,
+      'joined_at' => now(),
+    ]);
+
+    return $conversation;
   }
 }
