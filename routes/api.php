@@ -16,7 +16,7 @@ use App\Http\Controllers\API\ExternalAuthController;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerificationEmail']);
 Route::get('/verify', [AuthController::class, 'verifyEmail']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->name('login');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware(['auth:sanctum', 'check.user.status']);
 Route::post('/password/email', [AuthController::class, 'sendResetLinkEmail']);
 Route::post('/password/reset', [AuthController::class, 'resetPassword'])->name('password.reset');
@@ -80,28 +80,28 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::get('/', 'index'); // ユーザーの会話一覧
     Route::post('/', 'store'); // 新規会話開始
     Route::get('/token/{room_token}', 'showByToken'); // トークンで特定の会話情報を取得
-    Route::post('/{conversation}/read', 'markAsRead'); // idでの既読処理も残すか検討
+    Route::post('/room/{chatRoom}/read', 'markAsReadByRoomId'); // チャットルームIDでの既読処理
 
     // グループ管理
     Route::prefix('groups')->group(function () {
       Route::get('/', 'getGroups'); // グループ一覧
       Route::post('/', 'createGroup'); // グループ作成
-      Route::get('/{conversation}', 'showGroup'); // グループ詳細
-      Route::put('/{conversation}', 'updateGroup'); // グループ更新
-      Route::delete('/{conversation}', 'destroyGroup'); // グループ削除
-      Route::post('/{conversation}/members', 'addGroupMember'); // メンバー追加
-      Route::delete('/{conversation}/members/{participant}', 'removeGroupMember'); // メンバー削除
-      Route::get('/{conversation}/qr-code', 'getGroupQrCode'); // QRコード取得
-      Route::post('/{conversation}/qr-code/regenerate', 'regenerateGroupQrCode'); // QRコード再生成
+      Route::get('/{group}', 'showGroup'); // グループ詳細
+      Route::put('/{group}', 'updateGroup'); // グループ更新
+      Route::delete('/{group}', 'destroyGroup'); // グループ削除
+      Route::post('/{group}/members', 'addGroupMember'); // メンバー追加
+      Route::delete('/{group}/members/{participant}', 'removeGroupMember'); // メンバー削除
+      Route::get('/{group}/qr-code', 'getGroupQrCode'); // QRコード取得
+      Route::post('/{group}/qr-code/regenerate', 'regenerateGroupQrCode'); // QRコード再生成
 
       // グループメンバー間チャット機能
-      Route::get('/{conversation}/members', 'getGroupMembers'); // グループメンバー一覧
-      Route::post('/{conversation}/member-chat', 'getOrCreateMemberChat'); // メンバー間チャット取得/作成
-      Route::post('/{conversation}/messages/bulk', 'sendBulkMessageToMembers'); // メンバーに一斉送信
+      Route::get('/{group}/members', 'getGroupMembers'); // グループメンバー一覧
+      Route::post('/{group}/member-chat', 'getOrCreateMemberChat'); // メンバー間チャット取得/作成
+      Route::post('/{group}/messages/bulk', 'sendBulkMessageToMembers'); // メンバーに一斉送信
     });
 
-    // 特定の会話のメッセージ関連 (room_token を使用)
-    Route::prefix('room/{conversation:room_token}/messages')->controller(MessagesController::class)->group(function () {
+    // 特定のチャットルームのメッセージ関連 (room_token を使用)
+    Route::prefix('room/{chatRoom:room_token}/messages')->controller(MessagesController::class)->group(function () {
       Route::get('/', 'index'); // メッセージ一覧
       Route::post('/', 'store')->middleware('throttle:10,1'); // メッセージ送信
     });

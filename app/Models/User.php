@@ -18,7 +18,7 @@ use App\Models\Conversation;
 use App\Models\Participant;
 use App\Models\Message;
 use App\Models\Admin;
-
+use App\Models\ChatRoom;
 use App\Models\Subscription;
 
 class User extends Authenticatable
@@ -380,11 +380,27 @@ class User extends Authenticatable
   }
 
   /**
+   * ユーザーが直接参加しているParticipantレコードを取得（alias）
+   */
+  public function participants(): HasMany
+  {
+    return $this->participations();
+  }
+
+  /**
    * ユーザーが送信したメッセージを取得
    */
   public function messages(): HasMany
   {
     return $this->hasMany(Message::class, 'sender_id');
+  }
+
+  /**
+   * ユーザーが参加しているチャットルーム（新構造）
+   */
+  public function chatRooms(): HasManyThrough
+  {
+    return $this->hasManyThrough(ChatRoom::class, Participant::class, 'user_id', 'id', 'id', 'chat_room_id');
   }
 
   /**
