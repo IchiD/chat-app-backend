@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Models\User;
 use App\Models\Conversation;
+use App\Models\ChatRoom;
+use App\Models\Group;
 use App\Models\Message;
 use App\Models\Friendship;
 use App\Models\OperationLog;
+use App\Models\Participant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -29,8 +32,8 @@ class AdminDashboardController extends Controller
     $userCount = User::count();
     $adminCount = Admin::count();
 
-    // チャットルーム数
-    $chatRoomCount = Conversation::count();
+    // チャットルーム数（新構造）
+    $chatRoomCount = ChatRoom::count();
 
     // 本日送信されたメッセージ数
     $todayMessagesCount = Message::whereDate('sent_at', date('Y-m-d'))->count();
@@ -130,18 +133,31 @@ class AdminDashboardController extends Controller
   public function showUser($id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::with(['deletedByAdmin', 'conversations.participants', 'messages'])
+    $user = User::with(['deletedByAdmin', 'messages'])
       ->findOrFail($id);
 
-    // ユーザーの統計情報
+    // ユーザーの統計情報（新構造に対応）
     $stats = [
-      'total_conversations' => $user->conversations()->count(),
+      'total_chat_rooms' => $user->chatRooms()->count(),
       'total_messages' => $user->messages()->count(),
       'friends_count' => $user->friends()->count(),
       'last_login' => null, // TODO: ログイン履歴があれば追加
     ];
 
-    return view('admin.users.show', compact('admin', 'user', 'stats'));
+    // ユーザーが参加しているチャットルームを取得（最新5件）
+    $chatRooms = $user->chatRooms()
+      ->with([
+        'latestMessage.sender',
+        'group',
+        'participant1',
+        'participant2',
+        'participants'
+      ])
+      ->orderBy('updated_at', 'desc')
+      ->take(5)
+      ->get();
+
+    return view('admin.users.show', compact('admin', 'user', 'stats', 'chatRooms'));
   }
 
   /**
@@ -201,11 +217,12 @@ class AdminDashboardController extends Controller
     $user->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
     \App\Services\OperationLogService::log('backend', 'delete_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
-    // ユーザーが参加している会話も削除
-    $conversations = $user->conversations;
-    foreach ($conversations as $conversation) {
-      if (!$conversation->isDeleted()) {
-        $conversation->deleteByAdmin($admin->id, 'ユーザー削除に伴う会話削除');
+    // ユーザーが参加しているチャットルームも削除（新構造対応）
+    $chatRooms = $user->chatRooms;
+    foreach ($chatRooms as $chatRoom) {
+      // 1対1チャットの場合のみ削除（グループチャットは残す）
+      if (in_array($chatRoom->type, ['friend_chat', 'member_chat'])) {
+        $chatRoom->delete();
       }
     }
 
@@ -238,77 +255,77 @@ class AdminDashboardController extends Controller
   public function userConversations($id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::with(['conversations' => function ($query) {
-      $query->where('type', '!=', 'support')
-        ->with(['participants', 'latestMessage.sender', 'deletedByAdmin', 'messages']);
-    }])->findOrFail($id);
+    $user = User::findOrFail($id);
 
-    $conversations = $user->conversations()
-      ->where('type', '!=', 'support')
-      ->with(['participants', 'latestMessage.sender', 'deletedByAdmin', 'messages'])
+    // ユーザーが参加しているチャットルーム（サポートチャット以外）
+    $chatRooms = $user->chatRooms()
+      ->where('type', '!=', 'support_chat')
+      ->with([
+        'latestMessage.sender',
+        'group',
+        'participant1',
+        'participant2',
+        'participants.user',
+        'messages'
+      ])
       ->paginate(10);
 
-    return view('admin.users.conversations', compact('admin', 'user', 'conversations'));
+    return view('admin.users.conversations', compact('admin', 'user', 'chatRooms'));
   }
 
   /**
    * 会話詳細を表示
    */
-  public function userConversationDetail($userId, $conversationId)
+  public function userConversationDetail($userId, $chatRoomId)
   {
     $admin = Auth::guard('admin')->user();
     $user = User::findOrFail($userId);
-    $conversation = Conversation::with(['participants', 'messages.sender', 'deletedByAdmin'])
-      ->findOrFail($conversationId);
+    $chatRoom = ChatRoom::with([
+      'participants.user',
+      'group',
+      'participant1',
+      'participant2',
+      'messages.sender',
+      'messages.adminDeletedBy'
+    ])->findOrFail($chatRoomId);
 
-    $messages = $conversation->messages()
+    $messages = $chatRoom->messages()
       ->with(['sender', 'adminDeletedBy'])
       ->orderBy('sent_at', 'desc')
       ->paginate(20);
 
-    return view('admin.users.conversation-detail', compact('admin', 'user', 'conversation', 'messages'));
+    return view('admin.users.conversation-detail', compact('admin', 'user', 'chatRoom', 'messages'));
   }
 
   /**
    * 会話削除（論理削除）
    */
-  public function deleteConversation(Request $request, $userId, $conversationId)
+  public function deleteConversation(Request $request, $userId, $chatRoomId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($conversationId);
+    $chatRoom = ChatRoom::findOrFail($chatRoomId);
 
-    if ($conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は既に削除されています。');
-    }
-
+    // ChatRoomモデルに削除機能が実装されていない場合は、単純な削除を行う
     $request->validate([
       'reason' => 'nullable|string|max:500',
     ]);
 
-    $conversation->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
-    \App\Services\OperationLogService::log('backend', 'delete_conversation', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+    // チャットルームを削除（物理削除）
+    $chatRoom->delete();
+    \App\Services\OperationLogService::log('backend', 'delete_chat_room', 'admin:' . $admin->id . ' chat_room:' . $chatRoom->id);
 
     return redirect()->route('admin.users.conversations', $userId)
-      ->with('success', '会話を削除しました。');
+      ->with('success', 'チャットルームを削除しました。');
   }
 
   /**
-   * 会話削除の取り消し
+   * 会話削除の取り消し（ChatRoomモデルでは現在未実装）
    */
-  public function restoreConversation($userId, $conversationId)
+  public function restoreConversation($userId, $chatRoomId)
   {
-    $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($conversationId);
-
-    if (!$conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は削除されていません。');
-    }
-
-    $conversation->restoreByAdmin();
-    \App\Services\OperationLogService::log('backend', 'restore_conversation', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
-
+    // ChatRoomモデルには論理削除機能が実装されていないため、現在は無効
     return redirect()->route('admin.users.conversations', $userId)
-      ->with('success', '会話の削除を取り消しました。');
+      ->with('error', 'チャットルームの復元機能は現在利用できません。');
   }
 
   /**
@@ -320,28 +337,38 @@ class AdminDashboardController extends Controller
 
     $search = $request->get('search');
 
-    $query = Conversation::where('type', '!=', 'support')
+    $query = ChatRoom::where('type', '!=', 'support_chat')
       ->withCount('messages')
-      ->with(['participants', 'latestMessage.sender', 'deletedByAdmin']);
+      ->with([
+        'participants.user',
+        'group',
+        'participant1',
+        'participant2',
+        'latestMessage.sender'
+      ]);
 
     if ($search) {
       $query->where(function ($subQuery) use ($search) {
         $subQuery->where('id', $search)
+          ->orWhere('room_token', 'LIKE', '%' . $search . '%')
           ->orWhereHas('messages', function ($messageQuery) use ($search) {
             $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
               ->whereNull('deleted_at')
               ->whereNull('admin_deleted_at');
           })
-          ->orWhereHas('participants', function ($userQuery) use ($search) {
+          ->orWhereHas('participants.user', function ($userQuery) use ($search) {
             $userQuery->where('name', 'LIKE', '%' . $search . '%');
+          })
+          ->orWhereHas('group', function ($groupQuery) use ($search) {
+            $groupQuery->where('name', 'LIKE', '%' . $search . '%');
           });
       });
     }
 
-    $conversations = $query->orderBy('updated_at', 'desc')->paginate(20);
-    $conversations->appends($request->query());
+    $chatRooms = $query->orderBy('updated_at', 'desc')->paginate(20);
+    $chatRooms->appends($request->query());
 
-    return view('admin.conversations.index', compact('admin', 'conversations'));
+    return view('admin.conversations.index', compact('admin', 'chatRooms'));
   }
 
   /**
@@ -350,15 +377,21 @@ class AdminDashboardController extends Controller
   public function conversationDetail($id)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::with(['participants', 'messages.sender', 'deletedByAdmin'])
-      ->findOrFail($id);
+    $chatRoom = ChatRoom::with([
+      'participants.user',
+      'group',
+      'participant1',
+      'participant2',
+      'messages.sender',
+      'messages.adminDeletedBy'
+    ])->findOrFail($id);
 
-    $messages = $conversation->messages()
+    $messages = $chatRoom->messages()
       ->with(['sender', 'adminDeletedBy'])
       ->orderBy('sent_at', 'desc')
       ->paginate(20);
 
-    return view('admin.conversations.detail', compact('admin', 'conversation', 'messages'));
+    return view('admin.conversations.detail', compact('admin', 'chatRoom', 'messages'));
   }
 
   /**
@@ -367,40 +400,28 @@ class AdminDashboardController extends Controller
   public function deleteConversationDirect(Request $request, $id)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($id);
-
-    if ($conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は既に削除されています。');
-    }
+    $chatRoom = ChatRoom::findOrFail($id);
 
     $request->validate([
       'reason' => 'nullable|string|max:500',
     ]);
 
-    $conversation->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
-    \App\Services\OperationLogService::log('backend', 'delete_conversation_admin', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+    // チャットルームを削除（物理削除）
+    $chatRoom->delete();
+    \App\Services\OperationLogService::log('backend', 'delete_chat_room_admin', 'admin:' . $admin->id . ' chat_room:' . $chatRoom->id);
 
     return redirect()->route('admin.conversations')
-      ->with('success', '会話を削除しました。');
+      ->with('success', 'チャットルームを削除しました。');
   }
 
   /**
-   * トークルーム削除の取り消し
+   * トークルーム削除の取り消し（ChatRoomモデルでは現在未実装）
    */
   public function restoreConversationDirect($id)
   {
-    $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($id);
-
-    if (!$conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は削除されていません。');
-    }
-
-    $conversation->restoreByAdmin();
-    \App\Services\OperationLogService::log('backend', 'restore_conversation_admin', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
-
+    // ChatRoomモデルには論理削除機能が実装されていないため、現在は無効
     return redirect()->route('admin.conversations')
-      ->with('success', '会話の削除を取り消しました。');
+      ->with('error', 'チャットルームの復元機能は現在利用できません。');
   }
 
   /**

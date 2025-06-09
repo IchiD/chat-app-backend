@@ -143,19 +143,19 @@
             <div class="card-body">
                 <div class="row text-center">
                     <div class="col-6 mb-3">
-                        <div class="fs-2 fw-bold text-primary">{{ $stats['total_conversations'] }}</div>
-                        <div class="text-muted">参加会話数</div>
+                        <div class="fs-2 fw-bold text-primary">{{ $stats['total_chat_rooms'] }}</div>
+                        <div class="text-muted">参加チャットルーム</div>
                     </div>
                     <div class="col-6 mb-3">
                         <div class="fs-2 fw-bold text-success">{{ $stats['total_messages'] }}</div>
-                        <div class="text-muted">送信メッセージ数</div>
+                        <div class="text-muted">送信メッセージ</div>
                     </div>
                     <div class="col-6">
                         <div class="fs-2 fw-bold text-info">{{ $stats['friends_count'] }}</div>
                         <div class="text-muted">友達数</div>
                     </div>
                     <div class="col-6">
-                        <div class="fs-6 fw-bold text-secondary">-</div>
+                        <div class="fs-6 fw-bold text-warning">{{ $stats['last_login'] ?? '-' }}</div>
                         <div class="text-muted">最終ログイン</div>
                     </div>
                 </div>
@@ -164,75 +164,91 @@
     </div>
 </div>
 
-<!-- 最近の会話 -->
+<!-- 最近のチャットルーム -->
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0">
-                    <i class="fas fa-comments me-2"></i>最近の会話
+                    <i class="fas fa-comments me-2"></i>最近のチャットルーム
                 </h5>
                 <a href="{{ route('admin.users.conversations', $user->id) }}" class="btn btn-sm btn-outline-primary">
-                    <i class="fas fa-external-link-alt me-1"></i>全ての会話を見る
+                    <i class="fas fa-external-link-alt me-1"></i>全てのチャットルームを見る
                 </a>
             </div>
             <div class="card-body">
-                @if($user->conversations->count() > 0)
+                @if($chatRooms->count() > 0)
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead>
                                 <tr>
-                                    <th>会話ID</th>
-                                    <th>参加者</th>
+                                    <th>チャットルームID</th>
+                                    <th>タイプ</th>
+                                    <th>参加者/グループ</th>
                                     <th>最新メッセージ</th>
                                     <th>最終更新</th>
-                                    <th>状態</th>
                                     <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($user->conversations->take(5) as $conversation)
+                                @foreach($chatRooms as $chatRoom)
                                 <tr>
                                     <td>
-                                        <span class="text-primary">#{{ $conversation->id }}</span>
+                                        <span class="text-primary">#{{ $chatRoom->id }}</span>
+                                        <br><small class="text-muted">{{ $chatRoom->room_token }}</small>
                                     </td>
                                     <td>
-                                        <small>
-                                            @foreach($conversation->participants->take(3) as $participant)
-                                                {{ $participant->name }}@if(!$loop->last), @endif
-                                            @endforeach
-                                            @if($conversation->participants->count() > 3)
-                                                <span class="text-muted">他{{ $conversation->participants->count() - 3 }}人</span>
+                                        @switch($chatRoom->type)
+                                            @case('friend_chat')
+                                                <span class="badge bg-primary">友達チャット</span>
+                                                @break
+                                            @case('group_chat')
+                                                <span class="badge bg-success">グループチャット</span>
+                                                @break
+                                            @case('member_chat')
+                                                <span class="badge bg-info">メンバーチャット</span>
+                                                @break
+                                            @case('support_chat')
+                                                <span class="badge bg-warning">サポートチャット</span>
+                                                @break
+                                            @default
+                                                <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
+                                        @endswitch
+                                    </td>
+                                    <td>
+                                        @if($chatRoom->type === 'group_chat' && $chatRoom->group)
+                                            <strong>{{ $chatRoom->group->name }}</strong>
+                                            <br><small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
+                                        @elseif(in_array($chatRoom->type, ['friend_chat', 'member_chat']))
+                                            @if($chatRoom->participant1 && $chatRoom->participant2)
+                                                {{ $chatRoom->participant1->id === $user->id ? $chatRoom->participant2->name : $chatRoom->participant1->name }}
+                                            @else
+                                                <span class="text-muted">参加者情報不明</span>
                                             @endif
-                                        </small>
+                                        @else
+                                            <span class="text-muted">サポート</span>
+                                        @endif
                                     </td>
                                     <td>
-                                        @if($conversation->latestMessage)
+                                        @if($chatRoom->latestMessage)
                                             <small class="text-truncate d-inline-block" style="max-width: 200px;">
-                                                {{ $conversation->latestMessage->text_content }}
+                                                {{ $chatRoom->latestMessage->text_content }}
                                             </small>
                                         @else
                                             <span class="text-muted">メッセージなし</span>
                                         @endif
                                     </td>
                                     <td>
-                                        @if($conversation->latestMessage)
+                                        @if($chatRoom->latestMessage)
                                             <small class="text-muted">
-                                                {{ $conversation->latestMessage->sent_at->format('m/d H:i') }}
+                                                {{ $chatRoom->latestMessage->sent_at->format('m/d H:i') }}
                                             </small>
                                         @else
                                             <span class="text-muted">-</span>
                                         @endif
                                     </td>
                                     <td>
-                                        @if($conversation->isDeleted())
-                                            <span class="badge bg-danger">削除済み</span>
-                                        @else
-                                            <span class="badge bg-success">アクティブ</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        <a href="{{ route('admin.users.conversations.detail', [$user->id, $conversation->id]) }}" 
+                                        <a href="{{ route('admin.users.conversations.detail', [$user->id, $chatRoom->id]) }}" 
                                            class="btn btn-sm btn-outline-primary">
                                             <i class="fas fa-eye"></i>
                                         </a>
@@ -245,7 +261,7 @@
                 @else
                     <div class="text-center py-3">
                         <i class="fas fa-comments fa-2x text-muted mb-2"></i>
-                        <div class="text-muted">参加している会話がありません</div>
+                        <div class="text-muted">参加しているチャットルームがありません</div>
                     </div>
                 @endif
             </div>

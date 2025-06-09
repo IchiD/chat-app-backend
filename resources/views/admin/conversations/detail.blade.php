@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 
-@section('title', '会話詳細')
+@section('title', 'チャットルーム詳細')
 
 @section('content')
 <div class="row mb-4">
@@ -8,13 +8,13 @@
     <div class="d-flex justify-content-between align-items-center">
       <div>
         <h1 class="h3 mb-0">
-          <i class="fas fa-comment-dots me-2"></i>会話詳細
+          <i class="fas fa-comment-dots me-2"></i>チャットルーム詳細
         </h1>
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">ダッシュボード</a></li>
             <li class="breadcrumb-item"><a href="{{ route('admin.conversations') }}">チャットルーム</a></li>
-            <li class="breadcrumb-item active">会話 #{{ $conversation->id }}</li>
+            <li class="breadcrumb-item active">チャットルーム #{{ $chatRoom->id }}</li>
           </ol>
         </nav>
       </div>
@@ -29,14 +29,14 @@
 
 <div class="row mb-4">
   <div class="col-12">
-    <div class="card {{ $conversation->isDeleted() ? 'border-danger' : '' }}">
-      <div class="card-header {{ $conversation->isDeleted() ? 'bg-danger text-white' : '' }}">
+    <div class="card {{ $chatRoom->isDeleted() ? 'border-danger' : '' }}">
+      <div class="card-header {{ $chatRoom->isDeleted() ? 'bg-danger text-white' : '' }}">
         <div class="d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">
             <i class="fas fa-info-circle me-2"></i>会話情報
           </h5>
-          @if($conversation->isDeleted())
-          <form method="POST" action="{{ route('admin.conversations.restore', $conversation->id) }}" class="d-inline">
+          @if($chatRoom->isDeleted())
+          <form method="POST" action="{{ route('admin.conversations.restore', $chatRoom->id) }}" class="d-inline">
             @csrf
             <button type="submit" class="btn btn-sm btn-outline-light" onclick="return confirm('この会話の削除を取り消しますか？')">
               <i class="fas fa-undo me-1"></i>削除を取り消し
@@ -50,17 +50,17 @@
         </div>
       </div>
       <div class="card-body">
-        @if($conversation->isDeleted())
+        @if($chatRoom->isDeleted())
         <div class="alert alert-danger mb-3">
           <i class="fas fa-exclamation-triangle me-2"></i>
           <strong>この会話は削除されています</strong>
           <div class="mt-2">
-            <strong>削除日時:</strong> {{ $conversation->deleted_at->format('Y/m/d H:i') }}<br>
-            @if($conversation->deletedByAdmin)
-            <strong>削除者:</strong> {{ $conversation->deletedByAdmin->name }}<br>
+            <strong>削除日時:</strong> {{ $chatRoom->deleted_at->format('Y/m/d H:i') }}<br>
+            @if($chatRoom->deletedByAdmin)
+            <strong>削除者:</strong> {{ $chatRoom->deletedByAdmin->name }}<br>
             @endif
-            @if($conversation->deleted_reason)
-            <strong>削除理由:</strong> {{ $conversation->deleted_reason }}
+            @if($chatRoom->deleted_reason)
+            <strong>削除理由:</strong> {{ $chatRoom->deleted_reason }}
             @endif
           </div>
         </div>
@@ -70,22 +70,22 @@
           <div class="col-md-6">
             <div class="mb-3">
               <label class="form-label text-muted">会話ID</label>
-              <div class="fw-bold">#{{ $conversation->id }}</div>
+              <div class="fw-bold">#{{ $chatRoom->id }}</div>
             </div>
             <div class="mb-3">
               <label class="form-label text-muted">ルームトークン</label>
-              <div><code class="bg-light p-2 rounded">{{ $conversation->room_token }}</code></div>
+              <div><code class="bg-light p-2 rounded">{{ $chatRoom->room_token }}</code></div>
             </div>
             <div class="mb-3">
               <label class="form-label text-muted">作成日時</label>
-              <div>{{ $conversation->created_at->format('Y/m/d H:i') }}</div>
+              <div>{{ $chatRoom->created_at->format('Y/m/d H:i') }}</div>
             </div>
           </div>
           <div class="col-md-6">
             <div class="mb-3">
-              <label class="form-label text-muted">参加者 ({{ $conversation->participants->count() }}人)</label>
+              <label class="form-label text-muted">参加者 ({{ $chatRoom->participants->count() }}人)</label>
               <div class="d-flex flex-wrap gap-1">
-                @foreach($conversation->participants as $participant)
+                @foreach($chatRoom->participants as $participant)
                 <span class="badge bg-light text-dark border">{{ $participant->name }}</span>
                 @endforeach
               </div>
@@ -176,7 +176,7 @@
         <h5 class="modal-title">会話削除確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST" action="{{ route('admin.conversations.delete', $conversation->id) }}">
+      <form method="POST" action="{{ route('admin.conversations.delete', $chatRoom->id) }}">
         @csrf
         @method('DELETE')
         <div class="modal-body">

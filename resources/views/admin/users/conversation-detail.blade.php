@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 
-@section('title', '会話詳細')
+@section('title', 'チャットルーム詳細')
 
 @section('content')
 <div class="row mb-4">
@@ -8,108 +8,111 @@
     <div class="d-flex justify-content-between align-items-center">
       <div>
         <h1 class="h3 mb-0">
-          <i class="fas fa-comment-dots me-2"></i>会話詳細
+          <i class="fas fa-comment-dots me-2"></i>チャットルーム詳細
         </h1>
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">ダッシュボード</a></li>
             <li class="breadcrumb-item"><a href="{{ route('admin.users') }}">ユーザー管理</a></li>
             <li class="breadcrumb-item"><a href="{{ route('admin.users.show', $user->id) }}">{{ $user->name }}</a></li>
-            <li class="breadcrumb-item"><a href="{{ route('admin.users.conversations', $user->id) }}">会話管理</a></li>
-            <li class="breadcrumb-item active">会話 #{{ $conversation->id }}</li>
+            <li class="breadcrumb-item"><a href="{{ route('admin.users.conversations', $user->id) }}">チャットルーム管理</a></li>
+            <li class="breadcrumb-item active">チャットルーム #{{ $chatRoom->id }}</li>
           </ol>
         </nav>
       </div>
       <div>
         <a href="{{ route('admin.users.conversations', $user->id) }}" class="btn btn-outline-secondary">
-          <i class="fas fa-arrow-left me-1"></i>会話一覧に戻る
+          <i class="fas fa-arrow-left me-1"></i>チャットルーム一覧に戻る
         </a>
       </div>
     </div>
   </div>
 </div>
 
-<!-- 会話情報カード -->
+<!-- チャットルーム情報カード -->
 <div class="row mb-4">
   <div class="col-12">
-    <div class="card {{ $conversation->isDeleted() ? 'border-danger' : '' }}">
-      <div class="card-header {{ $conversation->isDeleted() ? 'bg-danger text-white' : '' }}">
-        <div class="d-flex justify-content-between align-items-center">
-          <h5 class="card-title mb-0">
-            <i class="fas fa-info-circle me-2"></i>会話情報
-          </h5>
-          @if($conversation->isDeleted())
-          <form method="POST" action="{{ route('admin.users.conversations.restore', [$user->id, $conversation->id]) }}" class="d-inline">
-            @csrf
-            <button type="submit"
-              class="btn btn-sm btn-outline-light"
-              onclick="return confirm('この会話の削除を取り消しますか？')">
-              <i class="fas fa-undo me-1"></i>削除を取り消し
-            </button>
-          </form>
-          @else
-          <button type="button"
-            class="btn btn-sm btn-outline-danger"
-            onclick="showDeleteConversationModal()">
-            <i class="fas fa-trash me-1"></i>会話を削除
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">
+          <i class="fas fa-info-circle me-2"></i>チャットルーム情報
+        </h5>
+        <div class="mt-2">
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="showDeleteConversationModal()">
+            <i class="fas fa-trash me-1"></i>チャットルームを削除
           </button>
-          @endif
         </div>
       </div>
       <div class="card-body">
-        @if($conversation->isDeleted())
-        <div class="alert alert-danger mb-3">
-          <i class="fas fa-exclamation-triangle me-2"></i>
-          <strong>この会話は削除されています</strong>
-          <div class="mt-2">
-            <strong>削除日時:</strong> {{ $conversation->deleted_at->format('Y年m月d日 H:i') }}<br>
-            @if($conversation->deletedByAdmin)
-            <strong>削除者:</strong> {{ $conversation->deletedByAdmin->name }}<br>
-            @endif
-            @if($conversation->deleted_reason)
-            <strong>削除理由:</strong> {{ $conversation->deleted_reason }}
-            @endif
-          </div>
-        </div>
-        @endif
-
         <div class="row">
           <div class="col-md-6">
             <div class="mb-3">
-              <label class="form-label text-muted">会話ID</label>
-              <div class="fw-bold">#{{ $conversation->id }}</div>
+              <label class="form-label text-muted">チャットルームID</label>
+              <div class="fw-bold">#{{ $chatRoom->id }}</div>
             </div>
             <div class="mb-3">
               <label class="form-label text-muted">ルームトークン</label>
-              <div><code class="bg-light p-2 rounded">{{ $conversation->room_token }}</code></div>
+              <div><code class="bg-light p-2 rounded">{{ $chatRoom->room_token }}</code></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-muted">チャットタイプ</label>
+              <div>
+                @switch($chatRoom->type)
+                  @case('friend_chat')
+                    <span class="badge bg-primary">友達チャット</span>
+                    @break
+                  @case('group_chat')
+                    <span class="badge bg-success">グループチャット</span>
+                    @break
+                  @case('member_chat')
+                    <span class="badge bg-info">メンバーチャット</span>
+                    @break
+                  @case('support_chat')
+                    <span class="badge bg-warning">サポートチャット</span>
+                    @break
+                  @default
+                    <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
+                @endswitch
+              </div>
             </div>
             <div class="mb-3">
               <label class="form-label text-muted">作成日時</label>
-              <div>{{ $conversation->created_at->format('Y年m月d日 H:i') }}</div>
+              <div>{{ $chatRoom->created_at->format('Y年m月d日 H:i') }}</div>
             </div>
           </div>
           <div class="col-md-6">
             <div class="mb-3">
-              <label class="form-label text-muted">参加者 ({{ $conversation->participants->count() }}人)</label>
-              <div class="d-flex flex-wrap gap-1">
-                @foreach($conversation->participants as $participant)
-                <span class="badge bg-light text-dark border {{ $participant->id == $user->id ? 'border-primary' : '' }}">
-                  {{ $participant->name }}
-                  @if($participant->id == $user->id)
-                  <i class="fas fa-star text-warning ms-1" title="対象ユーザー"></i>
+              <label class="form-label text-muted">参加者</label>
+              <div>
+                @if($chatRoom->type === 'group_chat' && $chatRoom->group)
+                  <strong>{{ $chatRoom->group->name }}</strong>
+                  <div class="mt-1">
+                    <small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
+                    @if($chatRoom->participants)
+                      <br><small class="text-muted">{{ $chatRoom->participants->count() }}人参加</small>
+                    @endif
+                  </div>
+                @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
+                  @if($chatRoom->participant1 && $chatRoom->participant2)
+                    <div class="d-flex flex-column gap-1">
+                      <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
+                      <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
+                    </div>
+                  @else
+                    <span class="text-muted">参加者情報不明</span>
                   @endif
-                </span>
-                @endforeach
+                @else
+                  <span class="text-muted">サポート</span>
+                @endif
               </div>
             </div>
             <div class="mb-3">
-              <label class="form-label text-muted">メッセージ統計</label>
-              <div>
-                <span class="badge bg-primary">総数: {{ $messages->total() }}</span>
-                <span class="badge bg-success">アクティブ: {{ $messages->whereNull('admin_deleted_at')->whereNull('deleted_at')->count() }}</span>
-                <span class="badge bg-warning">ユーザー削除: {{ $messages->whereNotNull('deleted_at')->whereNull('admin_deleted_at')->count() }}</span>
-                <span class="badge bg-danger">管理者削除: {{ $messages->whereNotNull('admin_deleted_at')->count() }}</span>
-              </div>
+              <label class="form-label text-muted">最終更新</label>
+              <div>{{ $chatRoom->updated_at->format('Y年m月d日 H:i') }}</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-muted">メッセージ数</label>
+              <div><span class="badge bg-info">{{ $chatRoom->messages->count() }}</span></div>
             </div>
           </div>
         </div>
@@ -184,7 +187,7 @@
                   {{ $message->text_content }}
                 </div>
                 <div class="message-edit-form d-none" id="message-edit-{{ $message->id }}">
-                  <form method="POST" action="{{ route('admin.users.messages.update', [$user->id, $conversation->id, $message->id]) }}">
+                  <form method="POST" action="{{ route('admin.users.messages.update', [$user->id, $chatRoom->id, $message->id]) }}">
                     @csrf
                     @method('PUT')
                     <div class="mb-2">
@@ -203,7 +206,7 @@
                 @endif
               </div>
 
-              @if(!$message->isAdminDeleted() && !$conversation->isDeleted())
+              @if(!$message->isAdminDeleted() && !$chatRoom->isDeleted())
               <div class="dropdown">
                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
                   type="button"
@@ -261,7 +264,7 @@
         <h5 class="modal-title">会話削除確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST" action="{{ route('admin.users.conversations.delete', [$user->id, $conversation->id]) }}">
+      <form method="POST" action="{{ route('admin.users.conversations.delete', [$user->id, $chatRoom->id]) }}">
         @csrf
         @method('DELETE')
         <div class="modal-body">
@@ -322,7 +325,7 @@
   }
 
   function showDeleteMessageModal(messageId) {
-    document.getElementById('deleteMessageForm').action = `/admin/users/{{ $user->id }}/conversations/{{ $conversation->id }}/messages/${messageId}`;
+    document.getElementById('deleteMessageForm').action = `/admin/users/{{ $user->id }}/conversations/{{ $chatRoom->id }}/messages/${messageId}`;
     document.getElementById('deleteMessageReason').value = '';
     new bootstrap.Modal(document.getElementById('deleteMessageModal')).show();
   }
