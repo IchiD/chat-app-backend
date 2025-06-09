@@ -41,13 +41,16 @@ class ConversationsController extends Controller
 
     // チャットルーム一覧を取得
     $chatRooms = ChatRoom::whereIn('id', $chatRoomIds)
-      ->whereIn('type', ['member_chat', 'friend_chat']) // メンバー間チャットと友達チャット
+      ->whereIn('type', ['member_chat', 'friend_chat', 'group_chat', 'support_chat']) // メンバー間チャット、友達チャット、グループチャット、サポートチャット
       ->with([
         'participant1' => function ($query) {
           $query->select('id', 'name', 'friend_id', 'deleted_at');
         },
         'participant2' => function ($query) {
           $query->select('id', 'name', 'friend_id', 'deleted_at');
+        },
+        'group' => function ($query) {
+          $query->select('id', 'name');
         },
         'latestMessage' => function ($query) {
           $query->with(['sender' => function ($senderQuery) {
@@ -70,11 +73,6 @@ class ConversationsController extends Controller
     //   });
 
     $processedChatRooms = $filteredChatRooms->map(function ($chatRoom) use ($user) {
-      // 相手の情報を追加
-      $otherParticipant = $chatRoom->participant1_id === $user->id
-        ? $chatRoom->participant2
-        : $chatRoom->participant1;
-
       // 未読メッセージ数を計算
       $lastReadAt = Participant::where('chat_room_id', $chatRoom->id)
         ->where('user_id', $user->id)
@@ -90,7 +88,7 @@ class ConversationsController extends Controller
         })
         ->count();
 
-      return [
+      $result = [
         'id' => $chatRoom->id,
         'type' => $chatRoom->type,
         'room_token' => $chatRoom->room_token,
@@ -99,10 +97,47 @@ class ConversationsController extends Controller
         'participant2_id' => $chatRoom->participant2_id,
         'created_at' => $chatRoom->created_at,
         'updated_at' => $chatRoom->updated_at,
-        'other_participant' => $otherParticipant,
         'latest_message' => $chatRoom->latestMessage,
         'unread_messages_count' => $unreadCount,
       ];
+
+      // グループチャットの場合はグループ情報を追加
+      if ($chatRoom->type === 'group_chat' && $chatRoom->group) {
+        $result['name'] = $chatRoom->group->name;
+        $result['participants'] = [
+          [
+            'id' => $chatRoom->group->id,
+            'name' => $chatRoom->group->name,
+            'friend_id' => null,
+          ]
+        ];
+      } elseif ($chatRoom->type === 'support_chat') {
+        // サポートチャットの場合
+        $result['name'] = 'サポート';
+        $result['participants'] = [
+          [
+            'id' => 0,
+            'name' => 'サポート',
+            'friend_id' => null,
+          ]
+        ];
+      } else {
+        // 1対1チャットの場合は相手の情報を追加
+        $otherParticipant = $chatRoom->participant1_id === $user->id
+          ? $chatRoom->participant2
+          : $chatRoom->participant1;
+
+        $result['other_participant'] = $otherParticipant;
+        $result['participants'] = $otherParticipant ? [
+          [
+            'id' => $otherParticipant->id,
+            'name' => $otherParticipant->name,
+            'friend_id' => $otherParticipant->friend_id,
+          ]
+        ] : [];
+      }
+
+      return $result;
     })
       ->sortByDesc(function ($chatRoom) {
         return $chatRoom['latest_message'] ? $chatRoom['latest_message']->sent_at : $chatRoom['created_at'];
@@ -534,13 +569,12 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'アカウントが削除されています。'], 403);
     }
 
-    // 既存のサポート会話を検索
-    $existingConversation = $user->conversations()
-      ->where('type', 'support')
-      ->whereNull('deleted_at')
+    // 既存のサポートチャットルームを検索
+    $existingChatRoom = ChatRoom::where('type', 'support_chat')
+      ->where('participant1_id', $user->id)
       ->with([
-        'participants' => function ($query) use ($user) {
-          $query->where('users.id', '!=', $user->id)->select('users.id', 'users.name', 'users.friend_id');
+        'participant1' => function ($query) {
+          $query->select('id', 'name', 'friend_id');
         },
         'latestMessage' => function ($query) {
           $query->with(['sender' => function ($senderQuery) {
@@ -552,40 +586,65 @@ class ConversationsController extends Controller
       ])
       ->first();
 
-    if ($existingConversation) {
-      return response()->json($existingConversation, 200);
+    if ($existingChatRoom) {
+      return response()->json([
+        'id' => $existingChatRoom->id,
+        'type' => $existingChatRoom->type,
+        'room_token' => $existingChatRoom->room_token,
+        'participant1_id' => $existingChatRoom->participant1_id,
+        'participant2_id' => null, // サポートチャットは1対1ではない
+        'participants' => [
+          [
+            'id' => 0,
+            'name' => 'サポート',
+            'friend_id' => null,
+          ]
+        ],
+        'latest_message' => $existingChatRoom->latestMessage,
+        'unread_messages_count' => 0, // TODO: 未読数計算
+        'created_at' => $existingChatRoom->created_at,
+        'updated_at' => $existingChatRoom->updated_at,
+      ], 200);
     }
 
-    // 新しいサポート会話を作成
-    $conversation = null;
-    DB::transaction(function () use ($user, &$conversation) {
-      $newConversation = Conversation::create([
-        'type' => 'support',
+    // 新しいサポートチャットルームを作成
+    $chatRoom = null;
+    DB::transaction(function () use ($user, &$chatRoom) {
+      $newChatRoom = ChatRoom::create([
+        'type' => 'support_chat',
+        'participant1_id' => $user->id,
+        'participant2_id' => null, // サポートチャットは管理者が後から参加
       ]);
 
-      // ユーザーを参加者として追加
-      $newConversation->conversationParticipants()->create([
+      // 参加者レコードを作成
+      Participant::create([
+        'chat_room_id' => $newChatRoom->id,
         'user_id' => $user->id,
+        'joined_at' => now(),
       ]);
 
-      $conversation = $newConversation;
+      $chatRoom = $newChatRoom;
     });
 
-    if ($conversation) {
-      $conversation = $conversation->fresh([
-        'participants' => function ($query) use ($user) {
-          $query->where('users.id', '!=', $user->id)->select('users.id', 'users.name', 'users.friend_id');
-        },
-        'latestMessage' => function ($query) {
-          $query->with(['sender' => function ($senderQuery) {
-            $senderQuery->select('id', 'name');
-          }, 'adminSender' => function ($adminQuery) {
-            $adminQuery->select('id', 'name');
-          }]);
-        }
-      ]);
-
-      return response()->json($conversation, 201);
+    if ($chatRoom) {
+      return response()->json([
+        'id' => $chatRoom->id,
+        'type' => $chatRoom->type,
+        'room_token' => $chatRoom->room_token,
+        'participant1_id' => $chatRoom->participant1_id,
+        'participant2_id' => null,
+        'participants' => [
+          [
+            'id' => 0,
+            'name' => 'サポート',
+            'friend_id' => null,
+          ]
+        ],
+        'latest_message' => null,
+        'unread_messages_count' => 0,
+        'created_at' => $chatRoom->created_at,
+        'updated_at' => $chatRoom->updated_at,
+      ], 201);
     }
 
     return response()->json(['message' => 'サポート会話の作成に失敗しました。'], 500);
@@ -603,12 +662,11 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'アカウントが削除されています。'], 403);
     }
 
-    $conversation = $user->conversations()
-      ->where('type', 'support')
-      ->whereNull('deleted_at')
+    $chatRoom = ChatRoom::where('type', 'support_chat')
+      ->where('participant1_id', $user->id)
       ->with([
-        'participants' => function ($query) use ($user) {
-          $query->where('users.id', '!=', $user->id)->select('users.id', 'users.name', 'users.friend_id');
+        'participant1' => function ($query) {
+          $query->select('id', 'name', 'friend_id');
         },
         'latestMessage' => function ($query) {
           $query->with(['sender' => function ($senderQuery) {
@@ -620,11 +678,28 @@ class ConversationsController extends Controller
       ])
       ->first();
 
-    if (!$conversation) {
+    if (!$chatRoom) {
       return response()->json(['message' => 'サポート会話が見つかりません。'], 404);
     }
 
-    return response()->json($conversation, 200);
+    return response()->json([
+      'id' => $chatRoom->id,
+      'type' => $chatRoom->type,
+      'room_token' => $chatRoom->room_token,
+      'participant1_id' => $chatRoom->participant1_id,
+      'participant2_id' => null,
+      'participants' => [
+        [
+          'id' => 0,
+          'name' => 'サポート',
+          'friend_id' => null,
+        ]
+      ],
+      'latest_message' => $chatRoom->latestMessage,
+      'unread_messages_count' => 0, // TODO: 未読数計算
+      'created_at' => $chatRoom->created_at,
+      'updated_at' => $chatRoom->updated_at,
+    ], 200);
   }
 
   /**
@@ -715,7 +790,13 @@ class ConversationsController extends Controller
     }
 
     $group->load(['chatRooms', 'participants.user']);
-    return response()->json($group);
+
+    // グループ全体チャットのroom_tokenを追加
+    $groupChatRoom = $group->groupChatRoom()->first();
+    $groupData = $group->toArray();
+    $groupData['room_token'] = $groupChatRoom ? $groupChatRoom->room_token : null;
+
+    return response()->json($groupData);
   }
 
   /**

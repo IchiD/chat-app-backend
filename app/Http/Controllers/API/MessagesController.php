@@ -31,6 +31,31 @@ class MessagesController extends Controller
       return response()->json(['message' => 'アクセス権がありません。'], 403);
     }
 
+    // グループチャットの場合、グループメンバーかどうかを確認
+    if ($chatRoom->isGroupChat()) {
+      if ($chatRoom->group_id) {
+        $group = $chatRoom->group;
+        if ($group) {
+          // ユーザーがグループメンバーかチェック
+          $userIsMember = $chatRoom->participants()->where('user_id', $user->id)->exists();
+
+          if (!$userIsMember) {
+            return response()->json([
+              'message' => 'グループメンバーではないため、このチャットにアクセスできません。',
+            ], 403);
+          }
+        } else {
+          return response()->json([
+            'message' => 'グループが見つかりません。',
+          ], 404);
+        }
+      } else {
+        return response()->json([
+          'message' => 'グループIDが見つかりません。',
+        ], 404);
+      }
+    }
+
     // メンバーチャットの場合、グループメンバーかどうかを確認
     if ($chatRoom->isMemberChat()) {
       // グループが存在し、両方のユーザーがそのグループのメンバーであることを確認
@@ -131,6 +156,39 @@ class MessagesController extends Controller
       }
 
       Log::info('基本権限チェック完了');
+
+      // グループチャットの場合、グループメンバーかどうかを確認
+      if ($chatRoom->isGroupChat()) {
+        Log::info('グループチャット権限チェック開始');
+
+        if ($chatRoom->group_id) {
+          $group = $chatRoom->group;
+          if ($group) {
+            // ユーザーがグループメンバーかチェック
+            $userIsMember = $chatRoom->participants()->where('user_id', $user->id)->exists();
+
+            if (!$userIsMember) {
+              Log::warning('グループメンバーではないためメッセージ送信拒否', [
+                'user_id' => $user->id,
+                'group_id' => $group->id
+              ]);
+              return response()->json([
+                'message' => 'グループメンバーではないため、このチャットにメッセージを送信できません。',
+              ], 403);
+            }
+
+            Log::info('グループメンバーチェック完了');
+          } else {
+            return response()->json([
+              'message' => 'グループが見つかりません。',
+            ], 404);
+          }
+        } else {
+          return response()->json([
+            'message' => 'グループIDが見つかりません。',
+          ], 404);
+        }
+      }
 
       // メンバーチャットの場合、グループメンバーかどうかを確認
       if ($chatRoom->isMemberChat()) {
