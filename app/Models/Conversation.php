@@ -20,6 +20,7 @@ class Conversation extends Model
     'owner_user_id',
     'qr_code_token',
     'group_conversation_id',
+    'chat_styles',
     'deleted_at',
     'deleted_reason',
     'deleted_by',
@@ -27,6 +28,7 @@ class Conversation extends Model
 
   protected $casts = [
     'deleted_at' => 'datetime',
+    'chat_styles' => 'array',
   ];
 
   /**

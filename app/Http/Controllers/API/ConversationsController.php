@@ -456,18 +456,22 @@ class ConversationsController extends Controller
       'name' => 'required|string|max:100',
       'description' => 'nullable|string',
       'max_members' => 'nullable|integer|min:1|max:500',
+      'chatStyles' => 'required|array|min:1',
+      'chatStyles.*' => 'in:group,group_member',
     ]);
 
     $user = Auth::user();
+    $chatStyles = $request->chatStyles;
 
-    $conversation = DB::transaction(function () use ($user, $request) {
-      // グループ会話を作成
+    $conversation = DB::transaction(function () use ($user, $request, $chatStyles) {
+      // グループを作成（選択されたチャットスタイルを保存）
       $conversation = Conversation::create([
         'type' => 'group',
         'name' => $request->name,
         'description' => $request->description,
         'max_members' => $request->max_members ?? 50,
         'owner_user_id' => $user->id,
+        'chat_styles' => $chatStyles,
       ]);
 
       // オーナーを参加者として追加
@@ -480,7 +484,11 @@ class ConversationsController extends Controller
       return $conversation;
     });
 
-    return response()->json($conversation, 201);
+    return response()->json([
+      'message' => 'グループが作成されました',
+      'conversation' => $conversation,
+      'chat_styles' => $chatStyles,
+    ], 201);
   }
 
   /**
@@ -578,13 +586,66 @@ class ConversationsController extends Controller
       return response()->json(['message' => '既に参加しています'], 422);
     }
 
-    $participant = Participant::create([
-      'conversation_id' => $conversation->id,
-      'user_id' => $request->user_id,
+    $result = DB::transaction(function () use ($conversation, $request, $user) {
+      // グループに参加者を追加
+      $participant = Participant::create([
+        'conversation_id' => $conversation->id,
+        'user_id' => $request->user_id,
+        'joined_at' => now(),
+      ]);
+
+      // group_memberスタイルが選択されている場合、作成者との個別チャットを作成
+      if ($conversation->chat_styles && in_array('group_member', $conversation->chat_styles)) {
+        $this->createOwnerMemberChat($conversation, $request->user_id);
+      }
+
+      return $participant;
+    });
+
+    return response()->json($result, 201);
+  }
+
+  /**
+   * グループオーナーと新メンバー間の個別チャットを作成
+   */
+  private function createOwnerMemberChat(Conversation $groupConversation, int $memberId)
+  {
+    // 既存の個別チャットがあるかチェック
+    $existingChat = Conversation::where('type', 'group_member')
+      ->where('group_conversation_id', $groupConversation->id)
+      ->whereHas('conversationParticipants', function ($query) use ($groupConversation) {
+        $query->where('user_id', $groupConversation->owner_user_id);
+      })
+      ->whereHas('conversationParticipants', function ($query) use ($memberId) {
+        $query->where('user_id', $memberId);
+      })
+      ->first();
+
+    if ($existingChat) {
+      return $existingChat;
+    }
+
+    // 新しい個別チャットを作成
+    $memberChat = Conversation::create([
+      'type' => 'group_member',
+      'name' => $groupConversation->name . ' - 作成者とメンバー間チャット',
+      'group_conversation_id' => $groupConversation->id,
+    ]);
+
+    // オーナーとメンバーを参加者として追加
+    Participant::create([
+      'conversation_id' => $memberChat->id,
+      'user_id' => $groupConversation->owner_user_id,
       'joined_at' => now(),
     ]);
 
-    return response()->json($participant, 201);
+    Participant::create([
+      'conversation_id' => $memberChat->id,
+      'user_id' => $memberId,
+      'joined_at' => now(),
+    ]);
+
+    return $memberChat;
   }
 
   /**
@@ -660,13 +721,23 @@ class ConversationsController extends Controller
       return response()->json(['message' => '既に参加しています'], 422);
     }
 
-    $participant = Participant::create([
-      'conversation_id' => $conversation->id,
-      'user_id' => $user->id,
-      'joined_at' => now(),
-    ]);
+    $result = DB::transaction(function () use ($conversation, $user) {
+      // グループに参加者を追加
+      $participant = Participant::create([
+        'conversation_id' => $conversation->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+      ]);
 
-    return response()->json($participant, 201);
+      // group_memberスタイルが選択されている場合、作成者との個別チャットを作成
+      if ($conversation->chat_styles && in_array('group_member', $conversation->chat_styles)) {
+        $this->createOwnerMemberChat($conversation, $user->id);
+      }
+
+      return $participant;
+    });
+
+    return response()->json($result, 201);
   }
 
   /**
