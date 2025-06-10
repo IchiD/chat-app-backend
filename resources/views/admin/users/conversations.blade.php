@@ -90,53 +90,53 @@
                 </td>
                 <td>
                   @switch($chatRoom->type)
-                    @case('friend_chat')
-                      <span class="badge bg-primary">友達チャット</span>
-                      @break
-                    @case('group_chat')
-                      <span class="badge bg-success">グループチャット</span>
-                      @break
-                    @case('member_chat')
-                      <span class="badge bg-info">メンバーチャット</span>
-                      @break
-                    @case('support_chat')
-                      <span class="badge bg-warning">サポートチャット</span>
-                      @break
-                    @default
-                      <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
+                  @case('friend_chat')
+                  <span class="badge bg-primary">友達チャット</span>
+                  @break
+                  @case('group_chat')
+                  <span class="badge bg-success">グループチャット</span>
+                  @break
+                  @case('member_chat')
+                  <span class="badge bg-info">メンバーチャット</span>
+                  @break
+                  @case('support_chat')
+                  <span class="badge bg-warning">サポートチャット</span>
+                  @break
+                  @default
+                  <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
                   @endswitch
                 </td>
                 <td>
                   @if($chatRoom->type === 'group_chat' && $chatRoom->group)
-                    <div class="d-flex align-items-center">
-                      <strong>{{ $chatRoom->group->name }}</strong>
-                    </div>
-                    <small class="text-muted">
-                      グループID: {{ $chatRoom->group->id }}
-                      @if($chatRoom->participants)
-                        | {{ $chatRoom->participants->count() }}人参加
-                      @endif
-                    </small>
-                  @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
-                    @if($chatRoom->participant1 && $chatRoom->participant2)
-                      <div class="d-flex flex-wrap gap-1">
-                        <span class="badge bg-light text-dark border">
-                          {{ $chatRoom->participant1->name }}
-                        </span>
-                        <span class="badge bg-light text-dark border">
-                          {{ $chatRoom->participant2->name }}
-                        </span>
-                      </div>
-                      <small class="text-muted">2人参加</small>
-                    @else
-                      <span class="text-muted">参加者情報不明</span>
+                  <div class="d-flex align-items-center">
+                    <strong>{{ $chatRoom->group->name }}</strong>
+                  </div>
+                  <small class="text-muted">
+                    グループID: {{ $chatRoom->group->id }}
+                    @if($chatRoom->participants)
+                    | {{ $chatRoom->participants->count() }}人参加
                     @endif
+                  </small>
+                  @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
+                  @if($chatRoom->participant1 && $chatRoom->participant2)
+                  <div class="d-flex flex-wrap gap-1">
+                    <span class="badge bg-light text-dark border">
+                      {{ $chatRoom->participant1->name }}
+                    </span>
+                    <span class="badge bg-light text-dark border">
+                      {{ $chatRoom->participant2->name }}
+                    </span>
+                  </div>
+                  <small class="text-muted">2人参加</small>
                   @else
-                    <span class="text-muted">サポート</span>
+                  <span class="text-muted">参加者情報不明</span>
+                  @endif
+                  @else
+                  <span class="text-muted">サポート</span>
                   @endif
                 </td>
                 <td>
-                  @if($chatRoom->latestMessage)
+                  @if($chatRoom->latestMessage && $chatRoom->latestMessage->sent_at)
                   <div class="text-truncate" style="max-width: 200px;">
                     <strong>{{ $chatRoom->latestMessage->sender->name ?? 'ユーザー' }}:</strong>
                     {{ $chatRoom->latestMessage->text_content }}

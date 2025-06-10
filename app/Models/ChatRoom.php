@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class ChatRoom extends Model
 {
-  use HasFactory;
+  use HasFactory, SoftDeletes;
 
   protected $fillable = [
     'type',
@@ -18,6 +19,13 @@ class ChatRoom extends Model
     'participant1_id',
     'participant2_id',
     'room_token',
+    'deleted_at',
+    'deleted_by',
+    'deleted_reason',
+  ];
+
+  protected $dates = [
+    'deleted_at',
   ];
 
   /**
@@ -149,5 +157,45 @@ class ChatRoom extends Model
     }
 
     return '不明なユーザー';
+  }
+
+  /**
+   * 削除を実行した管理者を取得
+   */
+  public function deletedByAdmin(): BelongsTo
+  {
+    return $this->belongsTo(Admin::class, 'deleted_by');
+  }
+
+  /**
+   * チャットルームが論理削除されているかチェック
+   */
+  public function isDeleted(): bool
+  {
+    return !is_null($this->deleted_at);
+  }
+
+  /**
+   * 管理者によるチャットルーム削除
+   */
+  public function deleteByAdmin(?int $adminId, string $reason = null): bool
+  {
+    return $this->update([
+      'deleted_at' => now(),
+      'deleted_reason' => $reason,
+      'deleted_by' => $adminId,
+    ]);
+  }
+
+  /**
+   * チャットルームの削除を取り消し
+   */
+  public function restoreByAdmin(): bool
+  {
+    return $this->update([
+      'deleted_at' => null,
+      'deleted_reason' => null,
+      'deleted_by' => null,
+    ]);
   }
 }
