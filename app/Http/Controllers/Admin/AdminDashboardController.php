@@ -535,6 +535,107 @@ class AdminDashboardController extends Controller
   }
 
   /**
+   * アドミン編集画面（スーパーアドミンのみ）
+   */
+  public function editAdmin($id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isSuperAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    // 自分自身の編集を禁止
+    if ($admin->id == $id) {
+      return redirect()->route('admin.admins')->with('error', '自分自身は編集できません。');
+    }
+
+    $editAdmin = Admin::findOrFail($id);
+
+    return view('admin.admins.edit', compact('admin', 'editAdmin'));
+  }
+
+  /**
+   * アドミン更新（スーパーアドミンのみ）
+   */
+  public function updateAdmin(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isSuperAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    // 自分自身の編集を禁止
+    if ($admin->id == $id) {
+      return redirect()->route('admin.admins')->with('error', '自分自身は編集できません。');
+    }
+
+    $editAdmin = Admin::findOrFail($id);
+
+    $validationRules = [
+      'name' => 'required|string|max:255',
+      'email' => 'required|string|email|max:255|unique:admins,email,' . $id,
+      'role' => 'required|in:admin,super_admin',
+    ];
+
+    // パスワードが入力された場合のみバリデーション
+    if ($request->filled('password')) {
+      $validationRules['password'] = 'string|min:8';
+    }
+
+    $request->validate($validationRules);
+
+    $updateData = [
+      'name' => $request->name,
+      'email' => $request->email,
+      'role' => $request->role,
+    ];
+
+    // パスワードが入力された場合のみ更新
+    if ($request->filled('password')) {
+      $updateData['password'] = Hash::make($request->password);
+    }
+
+    $editAdmin->update($updateData);
+
+    \App\Services\OperationLogService::log('backend', 'update_admin', 'admin:' . $admin->id . ' target:' . $editAdmin->id . ' email:' . $editAdmin->email);
+
+    return redirect()->route('admin.admins')->with('success', 'アドミン情報が更新されました。');
+  }
+
+  /**
+   * アドミン削除（スーパーアドミンのみ）
+   */
+  public function deleteAdmin(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isSuperAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    // 自分自身の削除を禁止
+    if ($admin->id == $id) {
+      return redirect()->route('admin.admins')->with('error', '自分自身は削除できません。');
+    }
+
+    $deleteAdmin = Admin::findOrFail($id);
+
+    // 削除理由のバリデーション
+    $request->validate([
+      'reason' => 'required|string|max:500',
+    ]);
+
+    \App\Services\OperationLogService::log('backend', 'delete_admin', 'admin:' . $admin->id . ' target:' . $deleteAdmin->id . ' email:' . $deleteAdmin->email . ' reason:' . $request->reason);
+
+    // 物理削除を実行
+    $deleteAdmin->delete();
+
+    return redirect()->route('admin.admins')->with('success', 'アドミンが削除されました。');
+  }
+
+  /**
    * システム状態をチェック
    */
   private function checkSystemStatus()

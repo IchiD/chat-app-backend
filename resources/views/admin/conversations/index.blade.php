@@ -56,15 +56,15 @@
           <table class="table table-hover">
             <thead class="table-light">
               <tr>
-                <th>チャットルームID</th>
-                <th>タイプ</th>
-                <th>room_token</th>
-                <th>参加者/グループ</th>
-                <th>最新メッセージ</th>
-                <th>作成日時</th>
-                <th>最終更新</th>
-                <th>メッセージ数</th>
-                <th>操作</th>
+                <th style="width: 80px;">ID</th>
+                <th style="width: 120px;">タイプ</th>
+                <th style="width: 140px;">ルームトークン</th>
+                <th style="width: 180px;">参加者/グループ</th>
+                <th style="width: 250px;">最新メッセージ</th>
+                <th style="width: 120px;">作成日時</th>
+                <th style="width: 120px;">最終更新</th>
+                <th style="width: 70px; white-space: nowrap;">件数</th>
+                <th style="width: 100px;">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -74,19 +74,19 @@
                 <td>
                   @switch($chatRoom->type)
                   @case('friend_chat')
-                  <span class="badge bg-primary">友達チャット</span>
+                  <span class="badge badge-friend-chat">友達チャット</span>
                   @break
                   @case('group_chat')
-                  <span class="badge bg-success">グループチャット</span>
+                  <span class="badge badge-group-chat">グループチャット</span>
                   @break
                   @case('member_chat')
-                  <span class="badge bg-info">メンバーチャット</span>
+                  <span class="badge badge-member-chat">メンバーチャット</span>
                   @break
                   @case('support_chat')
-                  <span class="badge bg-warning">サポートチャット</span>
+                  <span class="badge badge-support-chat">サポートチャット</span>
                   @break
                   @default
-                  <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
+                  <span class="badge badge-admin">{{ $chatRoom->type }}</span>
                   @endswitch
                 </td>
                 <td><code>{{ $chatRoom->room_token }}</code></td>
@@ -120,7 +120,7 @@
                 </td>
                 <td>{{ $chatRoom->created_at->format('Y/m/d H:i') }}</td>
                 <td>{{ $chatRoom->updated_at->format('Y/m/d H:i') }}</td>
-                <td><span class="badge bg-info">{{ $chatRoom->messages_count ?? 0 }}</span></td>
+                <td><span class="badge badge-count">{{ $chatRoom->messages_count ?? 0 }}</span></td>
                 <td>
                   <div class="btn-group" role="group">
                     <a href="{{ route('admin.conversations.detail', $chatRoom->id) }}" class="btn btn-sm btn-outline-primary" title="詳細を見る">

@@ -58,20 +58,20 @@
               <label class="form-label text-muted">チャットタイプ</label>
               <div>
                 @switch($chatRoom->type)
-                  @case('friend_chat')
-                    <span class="badge bg-primary">友達チャット</span>
-                    @break
-                  @case('group_chat')
-                    <span class="badge bg-success">グループチャット</span>
-                    @break
-                  @case('member_chat')
-                    <span class="badge bg-info">メンバーチャット</span>
-                    @break
-                  @case('support_chat')
-                    <span class="badge bg-warning">サポートチャット</span>
-                    @break
-                  @default
-                    <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
+                @case('friend_chat')
+                <span class="badge badge-friend-chat">友達チャット</span>
+                @break
+                @case('group_chat')
+                <span class="badge badge-group-chat">グループチャット</span>
+                @break
+                @case('member_chat')
+                <span class="badge badge-member-chat">メンバーチャット</span>
+                @break
+                @case('support_chat')
+                <span class="badge badge-support-chat">サポートチャット</span>
+                @break
+                @default
+                <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
                 @endswitch
               </div>
             </div>
@@ -85,24 +85,24 @@
               <label class="form-label text-muted">参加者</label>
               <div>
                 @if($chatRoom->type === 'group_chat' && $chatRoom->group)
-                  <strong>{{ $chatRoom->group->name }}</strong>
-                  <div class="mt-1">
-                    <small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
-                    @if($chatRoom->participants)
-                      <br><small class="text-muted">{{ $chatRoom->participants->count() }}人参加</small>
-                    @endif
-                  </div>
-                @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
-                  @if($chatRoom->participant1 && $chatRoom->participant2)
-                    <div class="d-flex flex-column gap-1">
-                      <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
-                      <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
-                    </div>
-                  @else
-                    <span class="text-muted">参加者情報不明</span>
+                <strong>{{ $chatRoom->group->name }}</strong>
+                <div class="mt-1">
+                  <small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
+                  @if($chatRoom->participants)
+                  <br><small class="text-muted">{{ $chatRoom->participants->count() }}人参加</small>
                   @endif
+                </div>
+                @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
+                @if($chatRoom->participant1 && $chatRoom->participant2)
+                <div class="d-flex flex-column gap-1">
+                  <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
+                  <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
+                </div>
                 @else
-                  <span class="text-muted">サポート</span>
+                <span class="text-muted">参加者情報不明</span>
+                @endif
+                @else
+                <span class="text-muted">サポート</span>
                 @endif
               </div>
             </div>
@@ -112,7 +112,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label text-muted">メッセージ数</label>
-              <div><span class="badge bg-info">{{ $chatRoom->messages->count() }}</span></div>
+              <div><span class="badge badge-count">{{ $chatRoom->messages->count() }}</span></div>
             </div>
           </div>
         </div>

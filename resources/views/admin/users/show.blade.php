@@ -98,12 +98,26 @@
               <label class="form-label text-muted">認証状態</label>
               <div>
                 @if($user->is_verified)
-                <span class="badge bg-success">
+                <span class="badge badge-verified">
                   <i class="fas fa-check-circle me-1"></i>認証済み
                 </span>
                 @else
-                <span class="badge bg-warning">
+                <span class="badge badge-unverified">
                   <i class="fas fa-exclamation-circle me-1"></i>未認証
+                </span>
+                @endif
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-muted">登録方法</label>
+              <div>
+                @if($user->social_type === 'google')
+                <span class="badge bg-danger">
+                  <i class="fab fa-google me-1"></i>Googleアカウント
+                </span>
+                @else
+                <span class="badge bg-primary">
+                  <i class="fas fa-envelope me-1"></i>メール認証
                 </span>
                 @endif
               </div>
@@ -118,11 +132,11 @@
               <label class="form-label text-muted">アカウント状態</label>
               <div>
                 @if($user->isBanned())
-                <span class="badge bg-danger">
+                <span class="badge badge-banned">
                   <i class="fas fa-ban me-1"></i>バン済み
                 </span>
                 @else
-                <span class="badge bg-success">
+                <span class="badge badge-verified">
                   <i class="fas fa-check me-1"></i>アクティブ
                 </span>
                 @endif
@@ -200,16 +214,16 @@
                 <td>
                   @switch($chatRoom->type)
                   @case('friend_chat')
-                  <span class="badge bg-primary">友達チャット</span>
+                  <span class="badge badge-friend-chat">友達チャット</span>
                   @break
                   @case('group_chat')
-                  <span class="badge bg-success">グループチャット</span>
+                  <span class="badge badge-group-chat">グループチャット</span>
                   @break
                   @case('member_chat')
-                  <span class="badge bg-info">メンバーチャット</span>
+                  <span class="badge badge-member-chat">メンバーチャット</span>
                   @break
                   @case('support_chat')
-                  <span class="badge bg-warning">サポートチャット</span>
+                  <span class="badge badge-support-chat">サポートチャット</span>
                   @break
                   @default
                   <span class="badge bg-secondary">{{ $chatRoom->type }}</span>

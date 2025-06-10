@@ -91,16 +91,16 @@
                 <td>
                   @switch($chatRoom->type)
                   @case('friend_chat')
-                  <span class="badge bg-primary">友達チャット</span>
+                  <span class="badge badge-friend-chat">友達チャット</span>
                   @break
                   @case('group_chat')
-                  <span class="badge bg-success">グループチャット</span>
+                  <span class="badge badge-group-chat">グループチャット</span>
                   @break
                   @case('member_chat')
-                  <span class="badge bg-info">メンバーチャット</span>
+                  <span class="badge badge-member-chat">メンバーチャット</span>
                   @break
                   @case('support_chat')
-                  <span class="badge bg-warning">サポートチャット</span>
+                  <span class="badge badge-support-chat">サポートチャット</span>
                   @break
                   @default
                   <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
@@ -153,7 +153,7 @@
                   <small class="text-muted">{{ $chatRoom->updated_at->format('H:i') }}</small>
                 </td>
                 <td>
-                  <span class="badge bg-info">{{ $chatRoom->messages->count() }}</span>
+                  <span class="badge badge-count">{{ $chatRoom->messages->count() }}</span>
                 </td>
                 <td>
                   <div class="btn-group" role="group">

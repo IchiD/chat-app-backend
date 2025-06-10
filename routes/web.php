@@ -73,5 +73,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     // Super Admin Only Routes
     Route::get('admins', [AdminDashboardController::class, 'admins'])->name('admins');
     Route::post('admins', [AdminDashboardController::class, 'createAdmin'])->name('admins.create')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
+    Route::get('admins/{id}/edit', [AdminDashboardController::class, 'editAdmin'])->name('admins.edit');
+    Route::put('admins/{id}', [AdminDashboardController::class, 'updateAdmin'])->name('admins.update');
+    Route::delete('admins/{id}', [AdminDashboardController::class, 'deleteAdmin'])->name('admins.delete');
   });
 });

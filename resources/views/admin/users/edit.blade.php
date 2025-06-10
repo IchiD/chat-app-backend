@@ -172,6 +172,20 @@
           <label class="form-label text-muted">登録日時</label>
           <div>{{ $user->created_at->format('Y年m月d日 H:i') }}</div>
         </div>
+        <div class="mb-3">
+          <label class="form-label text-muted">登録方法</label>
+          <div>
+            @if($user->social_type === 'google')
+            <span class="badge bg-danger">
+              <i class="fab fa-google me-1"></i>Googleアカウント
+            </span>
+            @else
+            <span class="badge bg-primary">
+              <i class="fas fa-envelope me-1"></i>メール認証
+            </span>
+            @endif
+          </div>
+        </div>
         @if($user->email_verified_at)
         <div class="mb-3">
           <label class="form-label text-muted">認証日時</label>
@@ -261,7 +275,7 @@
         </h5>
       </div>
       <div class="card-body">
-        <p class="text-muted mb-3">この操作は取り消しが困難です。慎重に行ってください。</p>
+        <p class="text-muted mb-3">ユーザーを論理削除します。削除後も「削除取り消し」機能で復元可能です。</p>
         <button type="button" class="btn btn-danger w-100"
           onclick="showDeleteModal({{ $user->id }}, '{{ $user->name }}')">
           <i class="fas fa-trash me-1"></i>ユーザーを削除

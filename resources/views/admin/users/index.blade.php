@@ -113,17 +113,17 @@
                 </td>
                 <td>
                   @if($user->is_verified)
-                  <span class="badge bg-success">
+                  <span class="badge badge-verified">
                     <i class="fas fa-check-circle me-1"></i>認証済み
                   </span>
                   @else
-                  <span class="badge bg-warning">
+                  <span class="badge badge-unverified">
                     <i class="fas fa-exclamation-circle me-1"></i>未認証
                   </span>
                   @endif
 
                   @if($user->isBanned())
-                  <br><span class="badge bg-danger mt-1">
+                  <br><span class="badge badge-banned mt-1">
                     <i class="fas fa-ban me-1"></i>バン済み
                   </span>
                   @endif
