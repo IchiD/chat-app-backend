@@ -144,14 +144,15 @@ class AdminDashboardController extends Controller
       'last_login' => null, // TODO: ログイン履歴があれば追加
     ];
 
-    // ユーザーが参加しているチャットルームを取得（最新5件）
+    // ユーザーが参加しているチャットルームを取得（最新5件、論理削除されたものも含む）
     $chatRooms = $user->chatRooms()
+      ->withTrashed()
       ->with([
         'latestMessage.sender',
         'group',
         'participant1',
         'participant2',
-        'participants'
+        'deletedByAdmin' // 削除を実行した管理者情報も取得
       ])
       ->orderBy('updated_at', 'desc')
       ->take(5)
@@ -262,16 +263,18 @@ class AdminDashboardController extends Controller
     $admin = Auth::guard('admin')->user();
     $user = User::findOrFail($id);
 
-    // ユーザーが参加しているチャットルーム（サポートチャット以外）
+    // ユーザーが参加しているチャットルーム（サポートチャット以外、論理削除されたものも含む）
     $chatRooms = $user->chatRooms()
+      ->withTrashed()
       ->where('type', '!=', 'support_chat')
       ->with([
         'latestMessage.sender',
         'group',
         'participant1',
         'participant2',
-        'participants.user',
-        'messages'
+
+        'messages',
+        'deletedByAdmin' // 削除を実行した管理者情報も取得
       ])
       ->paginate(10);
 
@@ -285,13 +288,13 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
     $user = User::findOrFail($userId);
-    $chatRoom = ChatRoom::with([
-      'participants.user',
+    $chatRoom = ChatRoom::withTrashed()->with([
       'group',
       'participant1',
       'participant2',
       'messages.sender',
-      'messages.adminDeletedBy'
+      'messages.adminDeletedBy',
+      'deletedByAdmin' // 削除を実行した管理者情報も取得
     ])->findOrFail($conversationId);
 
     $messages = $chatRoom->messages()
@@ -350,14 +353,15 @@ class AdminDashboardController extends Controller
 
     $search = $request->get('search');
 
-    $query = ChatRoom::where('type', '!=', 'support_chat')
+    $query = ChatRoom::withTrashed()
+      ->where('type', '!=', 'support_chat')
       ->withCount('messages')
       ->with([
-        'participants.user',
         'group',
         'participant1',
         'participant2',
-        'latestMessage.sender'
+        'latestMessage.sender',
+        'deletedByAdmin' // 削除を実行した管理者情報も取得
       ]);
 
     if ($search) {
@@ -369,7 +373,10 @@ class AdminDashboardController extends Controller
               ->whereNull('deleted_at')
               ->whereNull('admin_deleted_at');
           })
-          ->orWhereHas('participants.user', function ($userQuery) use ($search) {
+          ->orWhereHas('participant1', function ($userQuery) use ($search) {
+            $userQuery->where('name', 'LIKE', '%' . $search . '%');
+          })
+          ->orWhereHas('participant2', function ($userQuery) use ($search) {
             $userQuery->where('name', 'LIKE', '%' . $search . '%');
           })
           ->orWhereHas('group', function ($groupQuery) use ($search) {
@@ -390,13 +397,13 @@ class AdminDashboardController extends Controller
   public function conversationDetail($id)
   {
     $admin = Auth::guard('admin')->user();
-    $chatRoom = ChatRoom::with([
-      'participants.user',
+    $chatRoom = ChatRoom::withTrashed()->with([
       'group',
       'participant1',
       'participant2',
       'messages.sender',
-      'messages.adminDeletedBy'
+      'messages.adminDeletedBy',
+      'deletedByAdmin' // 削除を実行した管理者情報も取得
     ])->findOrFail($id);
 
     $messages = $chatRoom->messages()

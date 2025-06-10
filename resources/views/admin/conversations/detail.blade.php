@@ -83,11 +83,20 @@
           </div>
           <div class="col-md-6">
             <div class="mb-3">
-              <label class="form-label text-muted">参加者 ({{ $chatRoom->participants->count() }}人)</label>
+              <label class="form-label text-muted">参加者</label>
               <div class="d-flex flex-wrap gap-1">
-                @foreach($chatRoom->participants as $participant)
-                <span class="badge bg-light text-dark border">{{ $participant->name }}</span>
+                @if($chatRoom->type === 'friend_chat')
+                @if($chatRoom->participant1)
+                <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
+                @endif
+                @if($chatRoom->participant2)
+                <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
+                @endif
+                @elseif($chatRoom->type === 'group_chat' && $chatRoom->group)
+                @foreach($chatRoom->group->members as $member)
+                <span class="badge bg-light text-dark border">{{ $member->user->name }}</span>
                 @endforeach
+                @endif
               </div>
             </div>
             <div class="mb-3">

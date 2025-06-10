@@ -243,17 +243,8 @@ Route::post('/test/create-friend-chat', function (Illuminate\Http\Request $reque
         'participant2_id' => $userId2,
       ]);
 
-      App\Models\Participant::create([
-        'chat_room_id' => $newChatRoom->id,
-        'user_id' => $userId1,
-        'joined_at' => now(),
-      ]);
-
-      App\Models\Participant::create([
-        'chat_room_id' => $newChatRoom->id,
-        'user_id' => $userId2,
-        'joined_at' => now(),
-      ]);
+      // 新アーキテクチャでは、participant1_idとparticipant2_idで参加者を管理するため
+      // 別途Participantテーブルへの登録は不要
     });
 
     return response()->json([

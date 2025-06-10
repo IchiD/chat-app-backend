@@ -11,7 +11,6 @@ class Message extends Model
   use HasFactory;
 
   protected $fillable = [
-    'conversation_id',
     'chat_room_id',
     'sender_id',
     'admin_sender_id',
@@ -32,13 +31,7 @@ class Message extends Model
     'admin_deleted_at' => 'datetime',
   ];
 
-  /**
-   * このメッセージが属する会話を取得
-   */
-  public function conversation(): BelongsTo
-  {
-    return $this->belongsTo(Conversation::class);
-  }
+
 
   /**
    * このメッセージの送信者を取得（ユーザー）
@@ -121,30 +114,5 @@ class Message extends Model
   public function chatRoom(): BelongsTo
   {
     return $this->belongsTo(ChatRoom::class);
-  }
-
-  /**
-   * 新構造を使用しているかチェック
-   */
-  public function usesNewStructure(): bool
-  {
-    return !is_null($this->chat_room_id);
-  }
-
-  /**
-   * 実際のチャットルームを取得（新旧構造対応）
-   */
-  public function getActiveChatRoom()
-  {
-    if ($this->usesNewStructure()) {
-      return $this->chatRoom;
-    }
-
-    // 旧構造の場合はConversationから対応するChatRoomを探す
-    if ($this->conversation) {
-      return ChatRoom::where('room_token', $this->conversation->room_token)->first();
-    }
-
-    return null;
   }
 }

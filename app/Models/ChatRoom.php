@@ -68,11 +68,26 @@ class ChatRoom extends Model
   }
 
   /**
-   * チャットルームの参加者（Participantテーブル経由）
+   * チャットルームの参加者を取得（新アーキテクチャ）
+   * ユーザーIDの配列を返す
    */
-  public function participants(): HasMany
+  public function getParticipants()
   {
-    return $this->hasMany(Participant::class);
+    if ($this->isGroupChat() && $this->group) {
+      // グループメンバー機能未実装のため、空のコレクションを返す
+      return collect();
+    }
+
+    // friend_chatやmember_chatの場合
+    $participants = collect();
+    if ($this->participant1_id) {
+      $participants->push($this->participant1_id);
+    }
+    if ($this->participant2_id) {
+      $participants->push($this->participant2_id);
+    }
+
+    return $participants->filter();
   }
 
   /**
@@ -116,7 +131,8 @@ class ChatRoom extends Model
   public function hasParticipant(int $userId): bool
   {
     if ($this->isGroupChat()) {
-      return $this->participants()->where('user_id', $userId)->exists();
+      // グループメンバー機能未実装のため、一時的にfalseを返す
+      return false;
     }
 
     return $this->participant1_id === $userId || $this->participant2_id === $userId;
@@ -197,5 +213,48 @@ class ChatRoom extends Model
       'deleted_reason' => null,
       'deleted_by' => null,
     ]);
+  }
+
+  /**
+   * 友達関係削除による論理削除
+   */
+  public function deleteByFriendshipRemoval(int $userId, string $reason = '友達関係の削除'): bool
+  {
+    return $this->update([
+      'deleted_at' => now(),
+      'deleted_reason' => $reason,
+      'deleted_by' => $userId,
+    ]);
+  }
+
+  /**
+   * 友達関係復活による復活
+   */
+  public function restoreByFriendshipRestore(): bool
+  {
+    return $this->update([
+      'deleted_at' => null,
+      'deleted_reason' => null,
+      'deleted_by' => null,
+    ]);
+  }
+
+  /**
+   * 2人のユーザー間の友達チャットを取得
+   */
+  public static function getFriendChat(int $userId1, int $userId2): ?self
+  {
+    return static::where('type', 'friend_chat')
+      ->where(function ($query) use ($userId1, $userId2) {
+        $query->where(function ($q) use ($userId1, $userId2) {
+          $q->where('participant1_id', $userId1)
+            ->where('participant2_id', $userId2);
+        })->orWhere(function ($q) use ($userId1, $userId2) {
+          $q->where('participant1_id', $userId2)
+            ->where('participant2_id', $userId1);
+        });
+      })
+      ->withTrashed() // 論理削除されたものも含める
+      ->first();
   }
 }

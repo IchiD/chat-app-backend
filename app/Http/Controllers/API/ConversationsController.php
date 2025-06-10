@@ -33,15 +33,19 @@ class ConversationsController extends Controller
     // 現在の友達IDリストを取得
     $friendIds = $user->friends()->pluck('id')->toArray();
 
-    // ユーザーが参加しているチャットルームIDを取得
-    $chatRoomIds = Participant::where('user_id', $user->id)
-      ->whereNotNull('chat_room_id')
-      ->pluck('chat_room_id')
+    // ユーザーが参加しているチャットルームIDを取得（新アーキテクチャ）
+    // グループメンバー機能未実装のため、現在は participant1_id/participant2_id のみで取得
+    $chatRoomIds = ChatRoom::where(function ($query) use ($user) {
+      $query->where('participant1_id', $user->id)
+        ->orWhere('participant2_id', $user->id);
+    })
+      ->pluck('id')
       ->toArray();
 
-    // チャットルーム一覧を取得
+    // チャットルーム一覧を取得（論理削除されていないもののみ）
     $chatRooms = ChatRoom::whereIn('id', $chatRoomIds)
       ->whereIn('type', ['member_chat', 'friend_chat', 'group_chat', 'support_chat']) // メンバー間チャット、友達チャット、グループチャット、サポートチャット
+      ->whereNull('deleted_at') // 論理削除されていないもののみ
       ->with([
         'participant1' => function ($query) {
           $query->select('id', 'name', 'friend_id', 'deleted_at');
@@ -92,20 +96,9 @@ class ConversationsController extends Controller
     });
 
     $processedChatRooms = $filteredChatRooms->map(function ($chatRoom) use ($user) {
-      // 未読メッセージ数を計算
-      $lastReadAt = Participant::where('chat_room_id', $chatRoom->id)
-        ->where('user_id', $user->id)
-        ->value('last_read_at');
-
-      $unreadCount = $chatRoom->messages()
-        ->where('sender_id', '!=', $user->id)
-        ->whereNull('admin_deleted_at')
-        ->when($lastReadAt, function ($query) use ($lastReadAt) {
-          return $query->where('sent_at', '>', $lastReadAt);
-        }, function ($query) {
-          return $query; // last_read_at が null の場合は全て未読
-        })
-        ->count();
+      // 未読メッセージ数を計算（新アーキテクチャでは既読管理が変更されるため一時的に0を返す）
+      // TODO: 新しい既読管理テーブルの実装後にここを更新する
+      $unreadCount = 0;
 
       $result = [
         'id' => $chatRoom->id,
@@ -122,8 +115,8 @@ class ConversationsController extends Controller
 
       // グループチャットの場合はグループ情報を追加
       if ($chatRoom->type === 'group_chat' && $chatRoom->group) {
-        // グループの参加者数を取得
-        $participantCount = Participant::where('chat_room_id', $chatRoom->id)->count();
+        // グループの参加者数を取得（新アーキテクチャ、グループメンバー機能未実装のため仮値）
+        $participantCount = 0;
 
         $result['name'] = $chatRoom->group->name;
         $result['group_name'] = $chatRoom->group->name;
@@ -443,27 +436,9 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'このチャットルームの参加者ではありません。'], 403);
     }
 
-    // 最新メッセージを取得
-    $latestMessage = $chatRoom->messages()
-      ->whereNull('deleted_at')
-      ->whereNull('admin_deleted_at')
-      ->latest('sent_at')
-      ->first();
-
-    if ($latestMessage) {
-      // 参加者テーブルから該当レコードを取得または作成
-      $participant = Participant::firstOrCreate([
-        'chat_room_id' => $chatRoom->id,
-        'user_id' => $user->id,
-      ], [
-        'joined_at' => now(),
-      ]);
-
-      $participant->update([
-        'last_read_message_id' => $latestMessage->id,
-        'last_read_at' => now(),
-      ]);
-    }
+    // 新アーキテクチャでは既読管理の仕組みが変更されるため、
+    // 現在は単純に成功レスポンスを返す
+    // TODO: 新しい既読管理テーブルの実装後にここを更新する
 
     return response()->json(['message' => '既読にしました。']);
   }

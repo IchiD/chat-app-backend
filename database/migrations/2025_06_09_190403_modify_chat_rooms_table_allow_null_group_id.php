@@ -12,11 +12,8 @@ return new class extends Migration
   public function up(): void
   {
     Schema::table('chat_rooms', function (Blueprint $table) {
-      // 既存のユニーク制約を削除
-      $table->dropUnique('unique_member_chat');
-
-      // group_idカラムをnullableに変更
-      $table->foreignId('group_id')->nullable()->change();
+      // group_idカラムは既にnullableなので、制約削除のみ実行
+      // unique_member_chat制約は最初から作成されていないため、削除処理はスキップ
     });
   }
 
@@ -26,11 +23,7 @@ return new class extends Migration
   public function down(): void
   {
     Schema::table('chat_rooms', function (Blueprint $table) {
-      // group_idカラムをnot nullに戻す
-      $table->foreignId('group_id')->nullable(false)->change();
-
-      // ユニーク制約を復元
-      $table->unique(['group_id', 'participant1_id', 'participant2_id'], 'unique_member_chat');
+      // 元々nullableで制約もないため、何もしない
     });
   }
 };

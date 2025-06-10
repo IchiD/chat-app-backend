@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use App\Http\Controllers\API\NotificationController;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
 
 class MessagesController extends Controller
 {
@@ -36,10 +37,8 @@ class MessagesController extends Controller
       if ($chatRoom->group_id) {
         $group = $chatRoom->group;
         if ($group) {
-          // ユーザーがグループメンバーかチェック
-          $userIsMember = $chatRoom->participants()->where('user_id', $user->id)->exists();
-
-          if (!$userIsMember) {
+          // ユーザーがグループメンバーかチェック - 新アーキテクチャでは、グループチャットの場合はhasParticipantで十分
+          if (!$chatRoom->hasParticipant($user->id)) {
             return response()->json([
               'message' => 'グループメンバーではないため、このチャットにアクセスできません。',
             ], 403);
@@ -65,11 +64,11 @@ class MessagesController extends Controller
           $groupChatRoom = $group->groupChatRoom;
           if ($groupChatRoom) {
             // 両方のユーザーがグループメンバーかチェック
-            $userIsMember = $groupChatRoom->participants()->where('user_id', $user->id)->exists();
+            $userIsMember = $groupChatRoom->hasParticipant($user->id);
             $otherUserId = $chatRoom->participant1_id === $user->id
               ? $chatRoom->participant2_id
               : $chatRoom->participant1_id;
-            $otherIsMember = $groupChatRoom->participants()->where('user_id', $otherUserId)->exists();
+            $otherIsMember = $groupChatRoom->hasParticipant($otherUserId);
 
             if (!$userIsMember || !$otherIsMember) {
               return response()->json([
@@ -115,13 +114,14 @@ class MessagesController extends Controller
       ->orderBy('sent_at', 'desc') // 最新のメッセージから表示
       ->paginate(20); // ページネーション
 
-    // メッセージを取得後、このチャットルームを既読にする
-    $participant = $chatRoom->participants()->where('user_id', $user->id)->first();
-    if ($participant && $messages->isNotEmpty()) {
-      $participant->update([
-        'last_read_at' => now(),
-      ]);
-    }
+    // メッセージを取得後、このチャットルームを既読にする（新アーキテクチャでは簡素化）
+    // 既読管理は新アーキテクチャでは別途実装する予定のため、一旦コメントアウト
+    // $participant = $chatRoom->participants()->where('user_id', $user->id)->first();
+    // if ($participant && $messages->isNotEmpty()) {
+    //   $participant->update([
+    //     'last_read_at' => now(),
+    //   ]);
+    // }
 
     return response()->json($messages);
   }
@@ -164,10 +164,8 @@ class MessagesController extends Controller
         if ($chatRoom->group_id) {
           $group = $chatRoom->group;
           if ($group) {
-            // ユーザーがグループメンバーかチェック
-            $userIsMember = $chatRoom->participants()->where('user_id', $user->id)->exists();
-
-            if (!$userIsMember) {
+            // ユーザーがグループメンバーかチェック - 新アーキテクチャでは、グループチャットの場合はhasParticipantで十分
+            if (!$chatRoom->hasParticipant($user->id)) {
               Log::warning('グループメンバーではないためメッセージ送信拒否', [
                 'user_id' => $user->id,
                 'group_id' => $group->id
@@ -199,11 +197,11 @@ class MessagesController extends Controller
             $groupChatRoom = $group->groupChatRoom;
             if ($groupChatRoom) {
               // 両方のユーザーがグループメンバーかチェック
-              $userIsMember = $groupChatRoom->participants()->where('user_id', $user->id)->exists();
+              $userIsMember = $groupChatRoom->hasParticipant($user->id);
               $otherUserId = $chatRoom->participant1_id === $user->id
                 ? $chatRoom->participant2_id
                 : $chatRoom->participant1_id;
-              $otherIsMember = $groupChatRoom->participants()->where('user_id', $otherUserId)->exists();
+              $otherIsMember = $groupChatRoom->hasParticipant($otherUserId);
 
               if (!$userIsMember || !$otherIsMember) {
                 return response()->json([
@@ -267,13 +265,9 @@ class MessagesController extends Controller
 
       // プッシュ通知の送信
       // 同じチャットルームの参加者全員（自分以外）に通知を送信する
-      $participants = $chatRoom->participants()
-        ->where('user_id', '!=', $user->id)
-        ->whereHas('user', function ($query) {
-          $query->whereNull('deleted_at'); // 削除されていないユーザーのみ
-        })
-        ->with('user')
-        ->get();
+      $participants = $chatRoom->getParticipants()->reject(function ($user_id) use ($user) {
+        return $user_id === $user->id;
+      });
 
       Log::info('参加者取得完了', ['participants_count' => $participants->count()]);
 
@@ -288,12 +282,13 @@ class MessagesController extends Controller
 
         $notificationController = new NotificationController();
 
-        foreach ($participants as $participant) {
+        foreach ($participants as $participantUserId) {
           // 各参加者にプッシュ通知を送信
-          if ($participant->user) {
+          $participantUser = User::find($participantUserId);
+          if ($participantUser && !$participantUser->isDeleted()) {
             try {
               $notificationController->sendNewMessageNotification(
-                $participant->user,
+                $participantUser,
                 $user->name,
                 $messagePreview,
                 $chatRoom->id,
@@ -301,7 +296,7 @@ class MessagesController extends Controller
               );
             } catch (\Exception $e) {
               Log::warning('新しいメッセージ通知の送信に失敗しました', [
-                'recipient_user_id' => $participant->user->id,
+                'recipient_user_id' => $participantUser->id,
                 'sender_user_id' => $user->id,
                 'chat_room_id' => $chatRoom->id,
                 'error' => $e->getMessage()

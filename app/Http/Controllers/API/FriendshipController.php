@@ -554,21 +554,21 @@ class FriendshipController extends Controller
   private function createFriendChatIfNotExists(int $userId1, int $userId2): void
   {
     try {
-      // 既存のfriend_chatをチェック
-      $existingFriendChat = \App\Models\ChatRoom::where('type', 'friend_chat')
-        ->where(function ($query) use ($userId1, $userId2) {
-          $query->where(function ($q) use ($userId1, $userId2) {
-            $q->where('participant1_id', $userId1)
-              ->where('participant2_id', $userId2);
-          })->orWhere(function ($q) use ($userId1, $userId2) {
-            $q->where('participant1_id', $userId2)
-              ->where('participant2_id', $userId1);
-          });
-        })
-        ->first();
+      // 論理削除されたものも含めて既存のfriend_chatをチェック
+      $existingFriendChat = \App\Models\ChatRoom::getFriendChat($userId1, $userId2);
 
-      if (!$existingFriendChat) {
-        // friend_chatを作成
+      if ($existingFriendChat) {
+        // 論理削除されている場合は復活させる
+        if ($existingFriendChat->trashed()) {
+          $existingFriendChat->restoreByFriendshipRestore();
+          Log::info('友達関係復活により、friend_chatを復活', [
+            'chat_room_id' => $existingFriendChat->id,
+            'user_id1' => $userId1,
+            'user_id2' => $userId2
+          ]);
+        }
+      } else {
+        // friend_chatを新規作成
         \Illuminate\Support\Facades\DB::transaction(function () use ($userId1, $userId2) {
           $newChatRoom = \App\Models\ChatRoom::create([
             'type' => 'friend_chat',
@@ -577,27 +577,17 @@ class FriendshipController extends Controller
             'participant2_id' => $userId2,
           ]);
 
-          // 参加者をParticipantテーブルにも追加
-          \App\Models\Participant::create([
-            'chat_room_id' => $newChatRoom->id,
-            'user_id' => $userId1,
-            'joined_at' => now(),
-          ]);
-
-          \App\Models\Participant::create([
-            'chat_room_id' => $newChatRoom->id,
-            'user_id' => $userId2,
-            'joined_at' => now(),
-          ]);
+          // 新アーキテクチャでは、participant1_idとparticipant2_idで参加者を管理するため
+          // 別途Participantテーブルへの登録は不要
         });
 
-        Log::info('友達関係のfriend_chatを自動作成', [
+        Log::info('友達関係のfriend_chatを新規作成', [
           'user_id1' => $userId1,
           'user_id2' => $userId2
         ]);
       }
     } catch (\Exception $e) {
-      Log::error('friend_chat自動作成でエラー', [
+      Log::error('friend_chat作成/復活でエラー', [
         'user_id1' => $userId1,
         'user_id2' => $userId2,
         'error' => $e->getMessage()

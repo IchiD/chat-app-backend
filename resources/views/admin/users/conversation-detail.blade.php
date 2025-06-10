@@ -88,8 +88,8 @@
                 <strong>{{ $chatRoom->group->name }}</strong>
                 <div class="mt-1">
                   <small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
-                  @if($chatRoom->participants)
-                  <br><small class="text-muted">{{ $chatRoom->participants->count() }}人参加</small>
+                  @if($chatRoom->group && $chatRoom->group->members)
+                  <br><small class="text-muted">{{ $chatRoom->group->members->count() }}人参加</small>
                   @endif
                 </div>
                 @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')

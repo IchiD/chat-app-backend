@@ -14,11 +14,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 use Illuminate\Support\Facades\Log;
 use App\Models\Friendship;
-use App\Models\Conversation;
-use App\Models\Participant;
 use App\Models\Message;
 use App\Models\Admin;
 use App\Models\ChatRoom;
+use App\Models\Group;
 use App\Models\Subscription;
 
 class User extends Authenticatable
@@ -314,13 +313,21 @@ class User extends Authenticatable
 
     $friendship->status = Friendship::STATUS_ACCEPTED;
     $saved = $friendship->save();
+
     if ($saved) {
       \App\Services\OperationLogService::log(
         'frontend',
         'friend_accept',
         'user:' . $this->id . ' friend:' . $userId
       );
+
+      // 友達関係復活時に、以前削除された友達チャットがあれば復活させる
+      $friendChat = ChatRoom::getFriendChat($this->id, $userId);
+      if ($friendChat && $friendChat->trashed()) {
+        $friendChat->restoreByFriendshipRestore();
+      }
     }
+
     return $saved;
   }
 
@@ -359,32 +366,42 @@ class User extends Authenticatable
       return false;
     }
 
-    // 論理削除を実行（一般ユーザーによる削除の場合はadmin_idをnullにする）
-    return $friendship->deleteByAdmin(null, 'ユーザーによる友達解除');
+    // 友達関係の論理削除を実行
+    $friendshipDeleted = $friendship->deleteByAdmin(null, 'ユーザーによる友達解除');
+
+    // 対応する友達チャットも論理削除
+    if ($friendshipDeleted) {
+      $friendChat = ChatRoom::getFriendChat($this->id, $friendId);
+      if ($friendChat && !$friendChat->trashed()) {
+        $friendChat->deleteByFriendshipRemoval($this->id, '友達関係の解除に伴う削除');
+      }
+    }
+
+    return $friendshipDeleted;
   }
 
   /**
-   * ユーザーが参加している会話を取得 (Participantsテーブル経由)
+   * ユーザーが参加しているチャットルームを取得（新アーキテクチャ）
    */
-  public function conversations(): HasManyThrough
+  public function getChatRooms()
   {
-    return $this->hasManyThrough(Conversation::class, Participant::class, 'user_id', 'id', 'id', 'conversation_id');
+    return ChatRoom::where(function ($query) {
+      $query->where('participant1_id', $this->id)
+        ->orWhere('participant2_id', $this->id);
+    })->orWhereHas('group.members', function ($query) {
+      $query->where('user_id', $this->id);
+    })->get();
   }
 
   /**
-   * ユーザーが直接参加しているParticipantレコードを取得
+   * ユーザーが参加しているチャットルーム（リレーション）
    */
-  public function participations(): HasMany
+  public function chatRooms()
   {
-    return $this->hasMany(Participant::class);
-  }
-
-  /**
-   * ユーザーが直接参加しているParticipantレコードを取得（alias）
-   */
-  public function participants(): HasMany
-  {
-    return $this->participations();
+    return ChatRoom::where(function ($query) {
+      $query->where('participant1_id', $this->id)
+        ->orWhere('participant2_id', $this->id);
+    }); // ->get() を付けずにクエリビルダーを返す
   }
 
   /**
@@ -395,13 +412,7 @@ class User extends Authenticatable
     return $this->hasMany(Message::class, 'sender_id');
   }
 
-  /**
-   * ユーザーが参加しているチャットルーム（新構造）
-   */
-  public function chatRooms(): HasManyThrough
-  {
-    return $this->hasManyThrough(ChatRoom::class, Participant::class, 'user_id', 'id', 'id', 'chat_room_id');
-  }
+
 
   /**
    * 削除を実行した管理者を取得
@@ -440,9 +451,9 @@ class User extends Authenticatable
     ]);
 
     if ($result) {
-      // ユーザーが参加している会話も自動削除
-      $this->conversations()->whereNull('deleted_at')->each(function ($conversation) use ($adminId, $reason) {
-        $conversation->deleteByAdmin($adminId, "参加者（{$this->name}）の削除に伴う自動削除: " . ($reason ?? '管理者による削除'));
+      // ユーザーが参加しているチャットルームも自動削除
+      $this->getChatRooms()->whereNull('deleted_at')->each(function ($chatRoom) use ($adminId, $reason) {
+        $chatRoom->deleteByAdmin($adminId, "参加者（{$this->name}）の削除に伴う自動削除: " . ($reason ?? '管理者による削除'));
       });
 
       // ユーザーの友達関係も論理削除
@@ -465,12 +476,11 @@ class User extends Authenticatable
     ]);
 
     if ($result) {
-      // このユーザーの削除が原因で削除された会話を復元
-      $this->conversations()
-        ->whereNotNull('deleted_at')
+      // このユーザーの削除が原因で削除されたチャットルームを復元
+      ChatRoom::onlyTrashed()
         ->where('deleted_reason', 'LIKE', "%参加者（{$this->name}）の削除に伴う自動削除%")
-        ->each(function ($conversation) {
-          $conversation->restoreByAdmin();
+        ->each(function ($chatRoom) {
+          $chatRoom->restoreByAdmin();
         });
 
       // ユーザーの削除が原因で削除された友達関係を復元
@@ -527,11 +537,11 @@ class User extends Authenticatable
 
 
   /**
-   * ユーザーが所有するグループ会話（新方式）
+   * ユーザーが所有するグループ（新アーキテクチャ）
    */
-  public function ownedGroupConversations(): HasMany
+  public function ownedGroups(): HasMany
   {
-    return $this->hasMany(Conversation::class, 'owner_user_id')->where('type', 'group');
+    return $this->hasMany(Group::class, 'owner_id');
   }
 
 

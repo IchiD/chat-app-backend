@@ -13,8 +13,8 @@ return new class extends Migration
   {
     Schema::create('messages', function (Blueprint $table) {
       $table->id();
-      $table->foreignId('conversation_id')->constrained()->onDelete('cascade');
-      $table->foreignId('sender_id')->constrained('users')->onDelete('cascade');
+      $table->foreignId('chat_room_id')->constrained()->onDelete('cascade');
+      $table->foreignId('sender_id')->nullable()->constrained('users')->onDelete('set null');
       $table->enum('content_type', ['text'])->default('text'); // MVPはtextのみ
       $table->text('text_content');
       $table->timestamp('sent_at')->useCurrent();

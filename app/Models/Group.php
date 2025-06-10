@@ -73,48 +73,33 @@ class Group extends Model
   }
 
   /**
-   * グループのメンバー（グループチャットの参加者）
+   * グループのメンバー（グループチャットの参加者）- 新アーキテクチャ
    */
   public function members()
   {
-    $groupChatRoom = $this->groupChatRoom()->first();
-    if (!$groupChatRoom) {
-      return User::whereRaw('1 = 0'); // 空のクエリを返す
-    }
-
-    return User::whereHas('participations', function ($query) use ($groupChatRoom) {
-      $query->where('chat_room_id', $groupChatRoom->id);
-    });
+    // 新アーキテクチャでは、グループメンバーはgroup_membersテーブルで管理
+    // 仮実装：ここではGroupMemberモデルが必要だが、まずは空のクエリを返す
+    return User::whereRaw('1 = 0'); // 空のクエリを返す（GroupMemberモデル実装まで）
   }
 
   /**
-   * ユーザーがグループのメンバーかどうかをチェック
+   * ユーザーがグループのメンバーかどうかをチェック - 新アーキテクチャ
    */
   public function hasMember(int $userId): bool
   {
-    $groupChatRoom = $this->groupChatRoom()->first();
-    if (!$groupChatRoom) {
-      return false;
-    }
-
-    return $groupChatRoom->participants()
-      ->where('user_id', $userId)
-      ->exists();
+    // 新アーキテクチャでは、group_membersテーブルで管理
+    // 仮実装：GroupMemberモデル実装まではfalseを返す
+    return false;
   }
 
   /**
-   * グループの全参加者
+   * 現在のメンバー数を取得 - 新アーキテクチャ
    */
-  public function participants()
+  public function getMembersCount(): int
   {
-    return $this->hasManyThrough(
-      Participant::class,
-      ChatRoom::class,
-      'group_id', // chat_roomsのgroup_id
-      'chat_room_id', // participantsのchat_room_id
-      'id', // groupsのid
-      'id' // chat_roomsのid
-    );
+    // 新アーキテクチャでは、group_membersテーブルで管理
+    // 仮実装：GroupMemberモデル実装まで0を返す
+    return 0;
   }
 
   /**
@@ -147,19 +132,6 @@ class Group extends Model
    */
   public function canAddMember(): bool
   {
-    return $this->getMemberCount() < $this->max_members;
-  }
-
-  /**
-   * 現在のメンバー数を取得
-   */
-  public function getMemberCount(): int
-  {
-    $groupChatRoom = $this->groupChatRoom()->first();
-    if (!$groupChatRoom) {
-      return 0;
-    }
-
-    return $groupChatRoom->participants()->count();
+    return $this->getMembersCount() < $this->max_members;
   }
 }
