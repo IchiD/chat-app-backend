@@ -178,7 +178,7 @@ class ChatRoom extends Model
   /**
    * 管理者によるチャットルーム削除
    */
-  public function deleteByAdmin(?int $adminId, string $reason = null): bool
+  public function deleteByAdmin(?int $adminId, ?string $reason = null): bool
   {
     return $this->update([
       'deleted_at' => now(),

@@ -1048,14 +1048,14 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
 
-    // サポート会話を取得
-    $query = Conversation::where('type', 'support')
-      ->with(['conversationParticipants.user', 'latestMessage.sender'])
+    // サポート会話を取得（新しいChatRoomモデルを使用）
+    $query = ChatRoom::where('type', 'support_chat')
+      ->with(['participants.user', 'latestMessage.sender'])
       ->orderBy('updated_at', 'desc');
 
     // 検索機能
     if ($search = $request->get('search')) {
-      $query->whereHas('conversationParticipants.user', function ($q) use ($search) {
+      $query->whereHas('participants.user', function ($q) use ($search) {
         $q->where('name', 'LIKE', '%' . $search . '%')
           ->orWhere('email', 'LIKE', '%' . $search . '%');
       });
@@ -1082,8 +1082,8 @@ class AdminDashboardController extends Controller
   public function supportConversationDetail($conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::with(['conversationParticipants.user', 'messages.sender'])
-      ->where('type', 'support')
+    $conversation = ChatRoom::with(['participants.user', 'messages.sender'])
+      ->where('type', 'support_chat')
       ->findOrFail($conversationId);
 
     $messages = $conversation->messages()
@@ -1103,7 +1103,7 @@ class AdminDashboardController extends Controller
   public function replyToSupport(Request $request, $conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::where('type', 'support')->findOrFail($conversationId);
+    $conversation = ChatRoom::where('type', 'support_chat')->findOrFail($conversationId);
 
     $request->validate([
       'message' => 'required|string|max:1000',
@@ -1111,7 +1111,7 @@ class AdminDashboardController extends Controller
 
     // 管理者メッセージとして作成
     $message = Message::create([
-      'conversation_id' => $conversation->id,
+      'chat_room_id' => $conversation->id,
       'sender_id' => null,  // ユーザーではないのでnull
       'admin_sender_id' => $admin->id,  // 管理者IDを設定
       'text_content' => $request->message,
@@ -1146,7 +1146,7 @@ class AdminDashboardController extends Controller
   public function markSupportAsRead($conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::where('type', 'support')->findOrFail($conversationId);
+    $conversation = ChatRoom::where('type', 'support_chat')->findOrFail($conversationId);
 
     \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 

@@ -28,7 +28,7 @@
         <form method="GET" action="{{ route('admin.conversations') }}" class="row g-3">
           <div class="col-md-8">
             <label for="search" class="form-label">検索</label>
-            <input type="text" class="form-control" id="search" name="search" value="{{ request('search') }}" placeholder="会話ID、会話内容、ユーザー名">
+            <input type="text" class="form-control" id="search" name="search" value="{{ request('search') }}" placeholder="ルームトークン、会話内容、ユーザー名">
           </div>
           <div class="col-md-4 d-flex align-items-end">
             <button type="submit" class="btn btn-primary me-2">
@@ -73,38 +73,38 @@
                 <td>#{{ $chatRoom->id }}</td>
                 <td>
                   @switch($chatRoom->type)
-                    @case('friend_chat')
-                      <span class="badge bg-primary">友達チャット</span>
-                      @break
-                    @case('group_chat')
-                      <span class="badge bg-success">グループチャット</span>
-                      @break
-                    @case('member_chat')
-                      <span class="badge bg-info">メンバーチャット</span>
-                      @break
-                    @case('support_chat')
-                      <span class="badge bg-warning">サポートチャット</span>
-                      @break
-                    @default
-                      <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
+                  @case('friend_chat')
+                  <span class="badge bg-primary">友達チャット</span>
+                  @break
+                  @case('group_chat')
+                  <span class="badge bg-success">グループチャット</span>
+                  @break
+                  @case('member_chat')
+                  <span class="badge bg-info">メンバーチャット</span>
+                  @break
+                  @case('support_chat')
+                  <span class="badge bg-warning">サポートチャット</span>
+                  @break
+                  @default
+                  <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
                   @endswitch
                 </td>
                 <td><code>{{ $chatRoom->room_token }}</code></td>
                 <td>
                   @if($chatRoom->type === 'group_chat' && $chatRoom->group)
-                    <strong>{{ $chatRoom->group->name }}</strong>
-                    <br><small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
+                  <strong>{{ $chatRoom->group->name }}</strong>
+                  <br><small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
                   @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
-                    @if($chatRoom->participant1 && $chatRoom->participant2)
-                      <div class="d-flex flex-wrap gap-1">
-                        <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
-                        <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
-                      </div>
-                    @else
-                      <span class="text-muted">参加者情報不明</span>
-                    @endif
+                  @if($chatRoom->participant1 && $chatRoom->participant2)
+                  <div class="d-flex flex-wrap gap-1">
+                    <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
+                    <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
+                  </div>
                   @else
-                    <span class="text-muted">サポート</span>
+                  <span class="text-muted">参加者情報不明</span>
+                  @endif
+                  @else
+                  <span class="text-muted">サポート</span>
                   @endif
                 </td>
                 <td>

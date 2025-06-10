@@ -24,9 +24,9 @@
           <div class="row">
             <div class="col-md-6">
               <strong>ユーザー:</strong>
-              @if($conversation->conversationParticipants->first() && $conversation->conversationParticipants->first()->user)
-              {{ $conversation->conversationParticipants->first()->user->name }}
-              ({{ $conversation->conversationParticipants->first()->user->email }})
+              @if($conversation->participants->first() && $conversation->participants->first()->user)
+              {{ $conversation->participants->first()->user->name }}
+              ({{ $conversation->participants->first()->user->email }})
               @else
               ユーザー不明
               @endif
@@ -62,7 +62,7 @@
                   <div class="message-header mb-2">
                     <strong>
                       @if($isUserMessage)
-                      {{ $conversation->conversationParticipants->first()->user->name ?? 'ユーザー' }}
+                      {{ $conversation->participants->first()->user->name ?? 'ユーザー' }}
                       @else
                       {{ $admin->name }}（管理者）
                       @endif
