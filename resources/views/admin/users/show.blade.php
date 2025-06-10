@@ -303,10 +303,19 @@
                   </div>
                 </td>
                 <td>
+                  @if($message->chat_room_id)
+                  <a href="{{ route('admin.users.conversations.detail', [$user->id, $message->chat_room_id]) }}"
+                    class="text-decoration-none">
+                    #{{ $message->chat_room_id }}
+                  </a>
+                  @elseif($message->conversation_id)
                   <a href="{{ route('admin.users.conversations.detail', [$user->id, $message->conversation_id]) }}"
                     class="text-decoration-none">
-                    #{{ $message->conversation_id }}
+                    #{{ $message->conversation_id }} (旧)
                   </a>
+                  @else
+                  <span class="text-muted">-</span>
+                  @endif
                 </td>
                 <td>
                   <small class="text-muted">

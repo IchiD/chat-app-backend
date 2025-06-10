@@ -133,7 +133,7 @@ class AdminDashboardController extends Controller
   public function showUser($id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::with(['deletedByAdmin', 'messages'])
+    $user = User::with(['deletedByAdmin'])
       ->findOrFail($id);
 
     // ユーザーの統計情報（新構造に対応）
@@ -156,6 +156,11 @@ class AdminDashboardController extends Controller
       ->orderBy('updated_at', 'desc')
       ->take(5)
       ->get();
+
+    // メッセージを別途ロード（新旧構造混在に対応）
+    $user->load(['messages' => function ($query) {
+      $query->orderBy('sent_at', 'desc')->take(10);
+    }]);
 
     return view('admin.users.show', compact('admin', 'user', 'stats', 'chatRooms'));
   }
