@@ -63,6 +63,73 @@
     .btn-circle {
       border-radius: 50% !important;
     }
+
+    /* ページネーションのスタイル調整 */
+    .pagination {
+      margin-bottom: 0;
+    }
+
+    .pagination .page-link {
+      padding: 0.375rem 0.75rem;
+      margin: 0 0.125rem;
+      border-radius: 0.25rem;
+      border: 1px solid #dee2e6;
+      color: #495057;
+      text-decoration: none;
+    }
+
+    .pagination .page-link:hover {
+      background-color: #e9ecef;
+      border-color: #dee2e6;
+      color: #495057;
+    }
+
+    .pagination .page-item.active .page-link {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-color: #667eea;
+      color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+      color: #6c757d;
+      background-color: #fff;
+      border-color: #dee2e6;
+    }
+
+    /* ページネーション表示修正のための強制スタイル */
+    .pagination {
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      flex-wrap: wrap !important;
+      margin: 0 !important;
+    }
+
+    .pagination .page-item {
+      display: inline-block !important;
+      margin: 2px !important;
+    }
+
+    .pagination .page-link {
+      display: inline-block !important;
+      padding: 8px 12px !important;
+      text-decoration: none !important;
+      border: 1px solid #dee2e6 !important;
+      border-radius: 4px !important;
+      color: #495057 !important;
+      background-color: #fff !important;
+      min-width: 40px !important;
+      text-align: center !important;
+    }
+
+    /* レスポンシブ対応の修正 */
+    @media (max-width: 768px) {
+      .pagination .page-link {
+        padding: 6px 10px !important;
+        font-size: 14px !important;
+        min-width: 35px !important;
+      }
+    }
   </style>
 </head>
 

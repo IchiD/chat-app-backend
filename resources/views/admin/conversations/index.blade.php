@@ -137,9 +137,26 @@
           </table>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center mt-3">
-          <div class="text-muted">{{ $chatRooms->firstItem() }}〜{{ $chatRooms->lastItem() }}件目 / 全{{ $chatRooms->total() }}件</div>
-          <div>{{ $chatRooms->links() }}</div>
+        <!-- ページネーション -->
+        <div class="row mt-4">
+          <div class="col-12 col-md-6 mb-2 mb-md-0">
+            <div class="text-muted small">
+              @if($chatRooms->total() > 0)
+              {{ $chatRooms->firstItem() }}〜{{ $chatRooms->lastItem() }}件目 / 全{{ $chatRooms->total() }}件を表示中
+              @else
+              0件
+              @endif
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            @if($chatRooms->hasPages())
+            <div class="d-flex justify-content-center justify-content-md-end">
+              <nav aria-label="ページネーション">
+                {{ $chatRooms->links('pagination::bootstrap-4') }}
+              </nav>
+            </div>
+            @endif
+          </div>
         </div>
         @else
         <div class="text-center py-5">
