@@ -570,7 +570,7 @@ class ConversationsController extends Controller
         $query->select('id', 'name', 'friend_id', 'deleted_at');
       },
       'group' => function ($query) {
-        $query->select('id', 'name');
+        $query->select('id', 'name', 'owner_user_id');
       }
     ]);
 
@@ -599,6 +599,59 @@ class ConversationsController extends Controller
         'name' => $chatRoom->group->name,
       ] : null,
     ];
+
+    // チャットタイプに応じて追加情報を設定
+    if ($chatRoom->type === 'group_chat' && $chatRoom->group) {
+      // グループチャットの場合は参加者数を追加
+      $participantCount = Participant::where('chat_room_id', $chatRoom->id)->count();
+
+      $responseData['name'] = $chatRoom->group->name;
+      $responseData['group_name'] = $chatRoom->group->name;
+      $responseData['participant_count'] = $participantCount;
+      $responseData['participants'] = [
+        [
+          'id' => $chatRoom->group->id,
+          'name' => $chatRoom->group->name,
+          'friend_id' => null,
+        ]
+      ];
+    } elseif ($chatRoom->type === 'member_chat' && $chatRoom->group) {
+      // メンバーチャットの場合はグループ情報とオーナー情報を追加
+      $groupOwner = User::find($chatRoom->group->owner_user_id);
+
+      $responseData['name'] = $chatRoom->group->name;
+      $responseData['group_name'] = $chatRoom->group->name;
+      $responseData['group_owner'] = $groupOwner ? [
+        'id' => $groupOwner->id,
+        'name' => $groupOwner->name,
+        'friend_id' => $groupOwner->friend_id,
+      ] : null;
+      $responseData['participants'] = $otherParticipant ? [
+        [
+          'id' => $otherParticipant->id,
+          'name' => $otherParticipant->name,
+          'friend_id' => $otherParticipant->friend_id,
+        ]
+      ] : [];
+    } elseif ($chatRoom->type === 'support_chat') {
+      $responseData['name'] = 'サポート';
+      $responseData['participants'] = [
+        [
+          'id' => 0,
+          'name' => 'サポート',
+          'friend_id' => null,
+        ]
+      ];
+    } else {
+      // friend_chatの場合
+      $responseData['participants'] = $otherParticipant ? [
+        [
+          'id' => $otherParticipant->id,
+          'name' => $otherParticipant->name,
+          'friend_id' => $otherParticipant->friend_id,
+        ]
+      ] : [];
+    }
 
     return response()->json($responseData);
   }
