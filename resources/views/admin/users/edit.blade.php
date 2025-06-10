@@ -140,6 +140,36 @@
             </div>
           </div>
 
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="plan" class="form-label">プラン <span class="text-danger">*</span></label>
+                <select class="form-select @error('plan') is-invalid @enderror"
+                  id="plan"
+                  name="plan"
+                  required
+                  {{ $user->isDeleted() ? 'disabled' : '' }}>
+                  <option value="free" {{ old('plan', $user->plan) == 'free' ? 'selected' : '' }}>
+                    <i class="fas fa-gift me-1"></i>Free（無料プラン）
+                  </option>
+                  <option value="standard" {{ old('plan', $user->plan) == 'standard' ? 'selected' : '' }}>
+                    <i class="fas fa-star me-1"></i>Standard（スタンダードプラン）
+                  </option>
+                  <option value="premium" {{ old('plan', $user->plan) == 'premium' ? 'selected' : '' }}>
+                    <i class="fas fa-crown me-1"></i>Premium（プレミアムプラン）
+                  </option>
+                </select>
+                @error('plan')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <div class="form-text">ユーザーのプランを変更できます。</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <!-- 将来的に他のフィールドを追加する場合の予備スペース -->
+            </div>
+          </div>
+
           @if(!$user->isDeleted())
           <div class="d-flex justify-content-between">
             <button type="submit" class="btn btn-primary">
@@ -192,6 +222,30 @@
           <div>{{ $user->email_verified_at->format('Y年m月d日 H:i') }}</div>
         </div>
         @endif
+        <div class="mb-3">
+          <label class="form-label text-muted">現在のプラン</label>
+          <div>
+            @switch($user->plan)
+            @case('free')
+            <span class="badge bg-success">
+              <i class="fas fa-gift me-1"></i>Free
+            </span>
+            @break
+            @case('standard')
+            <span class="badge bg-primary">
+              <i class="fas fa-star me-1"></i>Standard
+            </span>
+            @break
+            @case('premium')
+            <span class="badge bg-warning text-dark">
+              <i class="fas fa-crown me-1"></i>Premium
+            </span>
+            @break
+            @default
+            <span class="badge bg-secondary">{{ $user->plan ?? '不明' }}</span>
+            @endswitch
+          </div>
+        </div>
         <div class="mb-3">
           <label class="form-label text-muted">最終更新</label>
           <div>{{ $user->updated_at->format('Y年m月d日 H:i') }}</div>

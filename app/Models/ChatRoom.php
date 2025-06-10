@@ -74,8 +74,8 @@ class ChatRoom extends Model
   public function getParticipants()
   {
     if ($this->isGroupChat() && $this->group) {
-      // グループメンバー機能未実装のため、空のコレクションを返す
-      return collect();
+      // グループチャットの場合は、group_membersから取得
+      return $this->group->activeMembers()->pluck('user_id');
     }
 
     // friend_chatやmember_chatの場合
@@ -131,8 +131,11 @@ class ChatRoom extends Model
   public function hasParticipant(int $userId): bool
   {
     if ($this->isGroupChat()) {
-      // グループメンバー機能未実装のため、一時的にfalseを返す
-      return false;
+      // グループチャットの場合は、group_membersテーブルをチェック
+      if (!$this->group) {
+        return false;
+      }
+      return $this->group->hasMember($userId);
     }
 
     return $this->participant1_id === $userId || $this->participant2_id === $userId;

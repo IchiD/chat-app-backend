@@ -73,33 +73,46 @@ class Group extends Model
   }
 
   /**
-   * グループのメンバー（グループチャットの参加者）- 新アーキテクチャ
+   * グループのメンバー（GroupMemberテーブル経由）
+   */
+  public function groupMembers(): HasMany
+  {
+    return $this->hasMany(GroupMember::class);
+  }
+
+  /**
+   * アクティブなグループメンバー
+   */
+  public function activeMembers(): HasMany
+  {
+    return $this->hasMany(GroupMember::class)->active();
+  }
+
+  /**
+   * グループのメンバーユーザー（Userモデル直接取得）
    */
   public function members()
   {
-    // 新アーキテクチャでは、グループメンバーはgroup_membersテーブルで管理
-    // 仮実装：ここではGroupMemberモデルが必要だが、まずは空のクエリを返す
-    return User::whereRaw('1 = 0'); // 空のクエリを返す（GroupMemberモデル実装まで）
+    return $this->belongsToMany(User::class, 'group_members')
+      ->withPivot(['joined_at', 'left_at', 'role'])
+      ->withTimestamps()
+      ->wherePivotNull('left_at'); // アクティブなメンバーのみ
   }
 
   /**
-   * ユーザーがグループのメンバーかどうかをチェック - 新アーキテクチャ
+   * ユーザーがグループのメンバーかどうかをチェック
    */
   public function hasMember(int $userId): bool
   {
-    // 新アーキテクチャでは、group_membersテーブルで管理
-    // 仮実装：GroupMemberモデル実装まではfalseを返す
-    return false;
+    return $this->activeMembers()->where('user_id', $userId)->exists();
   }
 
   /**
-   * 現在のメンバー数を取得 - 新アーキテクチャ
+   * 現在のメンバー数を取得
    */
   public function getMembersCount(): int
   {
-    // 新アーキテクチャでは、group_membersテーブルで管理
-    // 仮実装：GroupMemberモデル実装まで0を返す
-    return 0;
+    return $this->activeMembers()->count();
   }
 
   /**

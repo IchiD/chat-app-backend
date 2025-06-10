@@ -32,18 +32,59 @@
 <!-- チャットルーム情報カード -->
 <div class="row mb-4">
   <div class="col-12">
-    <div class="card">
-      <div class="card-header">
+    <div class="card {{ $chatRoom->trashed() ? 'border-danger' : '' }}">
+      <div class="card-header {{ $chatRoom->trashed() ? 'bg-danger text-white' : '' }}">
         <h5 class="card-title mb-0">
           <i class="fas fa-info-circle me-2"></i>チャットルーム情報
+          @if($chatRoom->trashed())
+          <span class="badge bg-light text-danger ms-2">
+            <i class="fas fa-trash me-1"></i>削除済み
+          </span>
+          @endif
         </h5>
         <div class="mt-2">
+          @if($chatRoom->trashed())
+          <form method="POST" action="{{ route('admin.users.conversations.restore', [$user->id, $chatRoom->id]) }}" class="d-inline">
+            @csrf
+            <button type="submit"
+              class="btn btn-sm btn-outline-light"
+              onclick="return confirm('このチャットルームの削除を取り消しますか？')">
+              <i class="fas fa-undo me-1"></i>削除を取り消し
+            </button>
+          </form>
+          @else
           <button type="button" class="btn btn-sm btn-outline-danger" onclick="showDeleteConversationModal()">
             <i class="fas fa-trash me-1"></i>チャットルームを削除
           </button>
+          @endif
         </div>
       </div>
       <div class="card-body">
+        @if($chatRoom->trashed())
+        <div class="alert alert-danger mb-3">
+          <h6 class="alert-heading">
+            <i class="fas fa-exclamation-triangle me-2"></i>このチャットルームは削除されています
+          </h6>
+          <hr>
+          <div class="row">
+            <div class="col-md-6">
+              <strong>削除日時:</strong> {{ $chatRoom->deleted_at->format('Y年m月d日 H:i') }}
+            </div>
+            @if($chatRoom->deletedByAdmin)
+            <div class="col-md-6">
+              <strong>削除実行者:</strong> {{ $chatRoom->deletedByAdmin->name }} (管理者)
+            </div>
+            @endif
+          </div>
+          @if($chatRoom->deleted_reason)
+          <div class="mt-2">
+            <strong>削除理由:</strong><br>
+            <div class="bg-light p-2 rounded mt-1">{{ $chatRoom->deleted_reason }}</div>
+          </div>
+          @endif
+        </div>
+        @endif
+
         <div class="row">
           <div class="col-md-6">
             <div class="mb-3">

@@ -129,6 +129,30 @@
             </div>
             @endif
             <div class="mb-3">
+              <label class="form-label text-muted">プラン</label>
+              <div>
+                @switch($user->plan)
+                @case('free')
+                <span class="badge bg-success">
+                  <i class="fas fa-gift me-1"></i>Free
+                </span>
+                @break
+                @case('standard')
+                <span class="badge bg-primary">
+                  <i class="fas fa-star me-1"></i>Standard
+                </span>
+                @break
+                @case('premium')
+                <span class="badge bg-warning text-dark">
+                  <i class="fas fa-crown me-1"></i>Premium
+                </span>
+                @break
+                @default
+                <span class="badge bg-secondary">{{ $user->plan ?? '不明' }}</span>
+                @endswitch
+              </div>
+            </div>
+            <div class="mb-3">
               <label class="form-label text-muted">アカウント状態</label>
               <div>
                 @if($user->isBanned())

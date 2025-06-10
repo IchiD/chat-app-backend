@@ -83,9 +83,14 @@
             </thead>
             <tbody>
               @foreach($chatRooms as $chatRoom)
-              <tr>
+              <tr class="{{ $chatRoom->trashed() ? 'table-danger' : '' }}">
                 <td>
                   <span class="fw-bold text-primary">#{{ $chatRoom->id }}</span>
+                  @if($chatRoom->trashed())
+                  <span class="badge bg-danger ms-1">
+                    <i class="fas fa-trash me-1"></i>削除済み
+                  </span>
+                  @endif
                   <br><small class="text-muted">{{ $chatRoom->room_token }}</small>
                 </td>
                 <td>
@@ -151,6 +156,11 @@
                 <td>
                   <div>{{ $chatRoom->updated_at->format('Y/m/d') }}</div>
                   <small class="text-muted">{{ $chatRoom->updated_at->format('H:i') }}</small>
+                  @if($chatRoom->trashed())
+                  <br><small class="text-danger">
+                    <i class="fas fa-trash me-1"></i>削除: {{ $chatRoom->deleted_at->format('Y/m/d H:i') }}
+                  </small>
+                  @endif
                 </td>
                 <td>
                   <span class="badge badge-count">{{ $chatRoom->messages->count() }}</span>
@@ -161,12 +171,24 @@
                       class="btn btn-sm btn-outline-primary" title="詳細を見る">
                       <i class="fas fa-eye"></i>
                     </a>
+                    @if($chatRoom->trashed())
+                    <form method="POST" action="{{ route('admin.users.conversations.restore', [$user->id, $chatRoom->id]) }}" class="d-inline">
+                      @csrf
+                      <button type="submit"
+                        class="btn btn-sm btn-outline-success"
+                        title="削除を取り消し"
+                        onclick="return confirm('このチャットルームの削除を取り消しますか？')">
+                        <i class="fas fa-undo"></i>
+                      </button>
+                    </form>
+                    @else
                     <button type="button"
                       class="btn btn-sm btn-outline-danger"
                       title="チャットルームを削除"
                       onclick="showDeleteConversationModal({{ $chatRoom->id }}, '{{ $user->id }}')">
                       <i class="fas fa-trash"></i>
                     </button>
+                    @endif
                   </div>
                 </td>
               </tr>

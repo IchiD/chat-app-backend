@@ -190,6 +190,7 @@ class AdminDashboardController extends Controller
       'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
       'is_verified' => 'boolean',
       'friend_id' => 'required|string|size:6|unique:users,friend_id,' . $user->id,
+      'plan' => 'required|in:free,standard,premium',
     ]);
 
     $user->update([
@@ -197,6 +198,7 @@ class AdminDashboardController extends Controller
       'email' => $request->email,
       'is_verified' => $request->boolean('is_verified'),
       'friend_id' => strtoupper($request->friend_id),
+      'plan' => $request->plan,
     ]);
     \App\Services\OperationLogService::log('backend', 'update_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
@@ -1158,26 +1160,28 @@ class AdminDashboardController extends Controller
 
     // サポート会話を取得（新しいChatRoomモデルを使用）
     $query = ChatRoom::where('type', 'support_chat')
-      ->with(['participants.user', 'latestMessage.sender'])
+      ->with(['participant1', 'participant2', 'latestMessage.sender'])
       ->orderBy('updated_at', 'desc');
 
     // 検索機能
     if ($search = $request->get('search')) {
-      $query->whereHas('participants.user', function ($q) use ($search) {
-        $q->where('name', 'LIKE', '%' . $search . '%')
-          ->orWhere('email', 'LIKE', '%' . $search . '%');
+      $query->where(function ($subQuery) use ($search) {
+        $subQuery->whereHas('participant1', function ($q) use ($search) {
+          $q->where('name', 'LIKE', '%' . $search . '%')
+            ->orWhere('email', 'LIKE', '%' . $search . '%');
+        })->orWhereHas('participant2', function ($q) use ($search) {
+          $q->where('name', 'LIKE', '%' . $search . '%')
+            ->orWhere('email', 'LIKE', '%' . $search . '%');
+        });
       });
     }
 
     $conversations = $query->paginate(20);
     $conversations->appends($request->query());
 
-    // 各会話の未読メッセージ数を取得
+    // 各会話の未読メッセージ数を取得（AdminConversationReadモデル削除のため一時的に0を設定）
     $conversationsWithUnread = $conversations->through(function ($conversation) use ($admin) {
-      $conversation->unread_count = \App\Models\AdminConversationRead::getConversationUnreadCount(
-        $admin->id,
-        $conversation->id
-      );
+      $conversation->unread_count = 0; // TODO: 新しい未読管理システムに置き換え
       return $conversation;
     });
 
@@ -1190,7 +1194,7 @@ class AdminDashboardController extends Controller
   public function supportConversationDetail($conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = ChatRoom::with(['participants.user', 'messages.sender'])
+    $conversation = ChatRoom::with(['participant1', 'participant2', 'messages.sender'])
       ->where('type', 'support_chat')
       ->findOrFail($conversationId);
 
@@ -1199,8 +1203,8 @@ class AdminDashboardController extends Controller
       ->orderBy('sent_at', 'asc')
       ->get();
 
-    // 会話詳細を表示する際に自動的に既読にする
-    \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // 会話詳細を表示する際に自動的に既読にする（AdminConversationReadモデル削除のため無効化）
+    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
     return view('admin.support.detail', compact('admin', 'conversation', 'messages'));
   }
@@ -1227,8 +1231,8 @@ class AdminDashboardController extends Controller
     ]);
     \App\Services\OperationLogService::log('backend', 'reply_support', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
-    // 管理者が返信したので、この会話を既読にする
-    \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // 管理者が返信したので、この会話を既読にする（AdminConversationReadモデル削除のため無効化）
+    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
     // 会話の更新日時を更新
     $conversation->touch();
@@ -1243,7 +1247,8 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
 
-    $unreadCount = \App\Models\AdminConversationRead::getUnreadCount($admin->id);
+    // AdminConversationReadモデル削除のため一時的に0を返す
+    $unreadCount = 0; // TODO: 新しい未読管理システムに置き換え
 
     return response()->json(['unread_count' => $unreadCount]);
   }
@@ -1256,7 +1261,8 @@ class AdminDashboardController extends Controller
     $admin = Auth::guard('admin')->user();
     $conversation = ChatRoom::where('type', 'support_chat')->findOrFail($conversationId);
 
-    \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // AdminConversationReadモデル削除のため無効化
+    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
     return response()->json(['success' => true]);
   }

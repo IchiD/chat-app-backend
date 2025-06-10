@@ -5,7 +5,6 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\ChatRoom;
 use App\Models\Message;
-use App\Models\Participant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -61,24 +60,15 @@ class MessagesController extends Controller
       if ($chatRoom->group_id) {
         $group = $chatRoom->group;
         if ($group) {
-          $groupChatRoom = $group->groupChatRoom;
-          if ($groupChatRoom) {
-            // 両方のユーザーがグループメンバーかチェック
-            $userIsMember = $groupChatRoom->hasParticipant($user->id);
-            $otherUserId = $chatRoom->participant1_id === $user->id
-              ? $chatRoom->participant2_id
-              : $chatRoom->participant1_id;
-            $otherIsMember = $groupChatRoom->hasParticipant($otherUserId);
+          // 両方のユーザーがグループメンバーかチェック
+          $otherUserId = $chatRoom->participant1_id === $user->id
+            ? $chatRoom->participant2_id
+            : $chatRoom->participant1_id;
 
-            if (!$userIsMember || !$otherIsMember) {
-              return response()->json([
-                'message' => 'グループメンバーではないため、このチャットにアクセスできません。',
-              ], 403);
-            }
-          } else {
+          if (!$group->hasMember($user->id) || !$group->hasMember($otherUserId)) {
             return response()->json([
-              'message' => 'グループチャットルームが見つかりません。',
-            ], 404);
+              'message' => 'グループメンバーではないため、このチャットにアクセスできません。',
+            ], 403);
           }
         } else {
           return response()->json([
@@ -194,24 +184,15 @@ class MessagesController extends Controller
         if ($chatRoom->group_id) {
           $group = $chatRoom->group;
           if ($group) {
-            $groupChatRoom = $group->groupChatRoom;
-            if ($groupChatRoom) {
-              // 両方のユーザーがグループメンバーかチェック
-              $userIsMember = $groupChatRoom->hasParticipant($user->id);
-              $otherUserId = $chatRoom->participant1_id === $user->id
-                ? $chatRoom->participant2_id
-                : $chatRoom->participant1_id;
-              $otherIsMember = $groupChatRoom->hasParticipant($otherUserId);
+            // 両方のユーザーがグループメンバーかチェック
+            $otherUserId = $chatRoom->participant1_id === $user->id
+              ? $chatRoom->participant2_id
+              : $chatRoom->participant1_id;
 
-              if (!$userIsMember || !$otherIsMember) {
-                return response()->json([
-                  'message' => 'グループメンバーではないため、このチャットにメッセージを送信できません。',
-                ], 403);
-              }
-            } else {
+            if (!$group->hasMember($user->id) || !$group->hasMember($otherUserId)) {
               return response()->json([
-                'message' => 'グループチャットルームが見つかりません。',
-              ], 404);
+                'message' => 'グループメンバーではないため、このチャットにメッセージを送信できません。',
+              ], 403);
             }
           } else {
             return response()->json([
