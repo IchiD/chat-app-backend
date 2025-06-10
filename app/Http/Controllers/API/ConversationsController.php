@@ -50,7 +50,7 @@ class ConversationsController extends Controller
           $query->select('id', 'name', 'friend_id', 'deleted_at');
         },
         'group' => function ($query) {
-          $query->select('id', 'name');
+          $query->select('id', 'name', 'owner_user_id');
         },
         'latestMessage' => function ($query) {
           $query->with(['sender' => function ($senderQuery) {
@@ -62,15 +62,34 @@ class ConversationsController extends Controller
       ])
       ->get();
 
-    $filteredChatRooms = $chatRooms; // 一時的にフィルタリングを無効化
-    // $filteredChatRooms = $chatRooms->filter(function ($chatRoom) use ($user, $friendIds) {
-    //     // 自分以外の参加者が友達であるかチェック
-    //     $otherUserId = $chatRoom->participant1_id === $user->id
-    //       ? $chatRoom->participant2_id
-    //       : $chatRoom->participant1_id;
+    // 自分が所有するグループのIDリストを取得
+    $ownedGroupIds = Group::where('owner_user_id', $user->id)->pluck('id')->toArray();
 
-    //     return in_array($otherUserId, $friendIds);
-    //   });
+    $filteredChatRooms = $chatRooms->filter(function ($chatRoom) use ($user, $friendIds, $ownedGroupIds) {
+      // 自分がオーナーであるグループに関係するチャットをフィルタリング
+      if ($chatRoom->type === 'group_chat' && $chatRoom->group_id && in_array($chatRoom->group_id, $ownedGroupIds)) {
+        // 自分がオーナーのグループチャットは表示しない
+        return false;
+      }
+
+      if ($chatRoom->type === 'member_chat' && $chatRoom->group_id && in_array($chatRoom->group_id, $ownedGroupIds)) {
+        // 自分がオーナーのグループのメンバー間チャットは友達関係があっても表示しない
+        return false;
+      }
+
+      // friend_chatは表示する（相手がグループメンバーでもフレンド関係があるため）
+      if ($chatRoom->type === 'friend_chat') {
+        return true;
+      }
+
+      // support_chatは表示する
+      if ($chatRoom->type === 'support_chat') {
+        return true;
+      }
+
+      // その他のケース（他人がオーナーのグループチャットやメンバー間チャット）は表示する
+      return true;
+    });
 
     $processedChatRooms = $filteredChatRooms->map(function ($chatRoom) use ($user) {
       // 未読メッセージ数を計算
@@ -103,7 +122,12 @@ class ConversationsController extends Controller
 
       // グループチャットの場合はグループ情報を追加
       if ($chatRoom->type === 'group_chat' && $chatRoom->group) {
+        // グループの参加者数を取得
+        $participantCount = Participant::where('chat_room_id', $chatRoom->id)->count();
+
         $result['name'] = $chatRoom->group->name;
+        $result['group_name'] = $chatRoom->group->name;
+        $result['participant_count'] = $participantCount;
         $result['participants'] = [
           [
             'id' => $chatRoom->group->id,
@@ -111,6 +135,28 @@ class ConversationsController extends Controller
             'friend_id' => null,
           ]
         ];
+      } elseif ($chatRoom->type === 'member_chat' && $chatRoom->group) {
+        // メンバーチャットの場合はグループ情報とオーナー情報を追加
+        $groupOwner = User::find($chatRoom->group->owner_user_id);
+        $otherParticipant = $chatRoom->participant1_id === $user->id
+          ? $chatRoom->participant2
+          : $chatRoom->participant1;
+
+        $result['name'] = $chatRoom->group->name;
+        $result['group_name'] = $chatRoom->group->name;
+        $result['group_owner'] = $groupOwner ? [
+          'id' => $groupOwner->id,
+          'name' => $groupOwner->name,
+          'friend_id' => $groupOwner->friend_id,
+        ] : null;
+        $result['other_participant'] = $otherParticipant;
+        $result['participants'] = $otherParticipant ? [
+          [
+            'id' => $otherParticipant->id,
+            'name' => $otherParticipant->name,
+            'friend_id' => $otherParticipant->friend_id,
+          ]
+        ] : [];
       } elseif ($chatRoom->type === 'support_chat') {
         // サポートチャットの場合
         $result['name'] = 'サポート';
@@ -122,7 +168,7 @@ class ConversationsController extends Controller
           ]
         ];
       } else {
-        // 1対1チャットの場合は相手の情報を追加
+        // friend_chatの場合は相手の情報を追加
         $otherParticipant = $chatRoom->participant1_id === $user->id
           ? $chatRoom->participant2
           : $chatRoom->participant1;
@@ -195,8 +241,8 @@ class ConversationsController extends Controller
       return response()->json(['message' => '友達関係にないユーザーとは会話を開始できません。'], 403);
     }
 
-    // 既存のチャットルームを検索（friend_chatまたはmember_chat）
-    $existingChatRoom = ChatRoom::whereIn('type', ['friend_chat', 'member_chat'])
+    // 既存のチャットルームを検索（friend_chatのみ）
+    $existingChatRoom = ChatRoom::where('type', 'friend_chat')
       ->where(function ($query) use ($currentUser, $recipientId) {
         $query->where(function ($q) use ($currentUser, $recipientId) {
           $q->where('participant1_id', $currentUser->id)
@@ -224,7 +270,7 @@ class ConversationsController extends Controller
       ->first();
 
     if ($existingChatRoom) {
-      // 既存のチャットルームがあればそれを返す（friend_chatまたはmember_chat）
+      // 既存のチャットルームがあればそれを返す（friend_chatのみ）
       $otherParticipant = $existingChatRoom->participant1_id === $currentUser->id
         ? $existingChatRoom->participant2
         : $existingChatRoom->participant1;
@@ -789,7 +835,10 @@ class ConversationsController extends Controller
       return response()->json(['message' => __('errors.forbidden')], 403);
     }
 
-    $group->load(['chatRooms', 'participants.user']);
+    $group->load([
+      'chatRooms',
+      'participants.user:id,name,friend_id,email'
+    ]);
 
     // グループ全体チャットのroom_tokenを追加
     $groupChatRoom = $group->groupChatRoom()->first();
@@ -836,41 +885,54 @@ class ConversationsController extends Controller
   }
 
   /**
-   * グループにメンバーを追加
+   * グループにメンバーを追加（新アーキテクチャ対応）
    */
-  public function addGroupMember(Conversation $conversation, Request $request)
+  public function addGroupMember(Group $group, Request $request)
   {
     $request->validate([
-      'user_id' => 'required|exists:users,id',
+      'friend_id' => 'required|string|exists:users,friend_id',
     ]);
 
     $user = Auth::user();
 
-    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+    // オーナーかチェック
+    if ($group->owner_user_id !== $user->id) {
       return response()->json(['message' => __('errors.forbidden')], 403);
     }
 
+    // friend_idからユーザーを取得
+    $targetUser = User::where('friend_id', $request->friend_id)->first();
+    if (!$targetUser) {
+      return response()->json(['message' => 'ユーザーが見つかりません'], 404);
+    }
+
+    // グループチャットルームを取得
+    $groupChatRoom = $group->groupChatRoom;
+    if (!$groupChatRoom) {
+      return response()->json(['message' => 'グループチャットルームが見つかりません'], 404);
+    }
+
     // メンバー数制限チェック
-    if (!$conversation->canAddMember()) {
+    if (!$group->canAddMember()) {
       return response()->json(['message' => 'メンバー数が上限に達しています'], 422);
     }
 
     // 既に参加しているかチェック
-    if ($conversation->conversationParticipants()->where('user_id', $request->user_id)->exists()) {
+    if ($groupChatRoom->participants()->where('user_id', $targetUser->id)->exists()) {
       return response()->json(['message' => '既に参加しています'], 422);
     }
 
-    $result = DB::transaction(function () use ($conversation, $request, $user) {
-      // グループに参加者を追加
+    $result = DB::transaction(function () use ($group, $groupChatRoom, $targetUser, $user) {
+      // グループチャットルームに参加者を追加
       $participant = Participant::create([
-        'conversation_id' => $conversation->id,
-        'user_id' => $request->user_id,
+        'chat_room_id' => $groupChatRoom->id,
+        'user_id' => $targetUser->id,
         'joined_at' => now(),
       ]);
 
       // group_memberスタイルが選択されている場合、作成者との個別チャットを作成
-      if ($conversation->chat_styles && in_array('group_member', $conversation->chat_styles)) {
-        $this->createOwnerMemberChat($conversation, $request->user_id);
+      if ($group->hasMemberChat()) {
+        $this->createOwnerMemberChatForGroup($group, $targetUser->id);
       }
 
       return $participant;
@@ -923,17 +985,25 @@ class ConversationsController extends Controller
   }
 
   /**
-   * グループからメンバーを削除
+   * グループからメンバーを削除（新アーキテクチャ対応）
    */
-  public function removeGroupMember(Conversation $conversation, Participant $participant)
+  public function removeGroupMember(Group $group, Participant $participant)
   {
     $user = Auth::user();
 
-    if (!$conversation->isGroup() || $conversation->owner_user_id !== $user->id) {
+    // オーナーかチェック
+    if ($group->owner_user_id !== $user->id) {
       return response()->json(['message' => __('errors.forbidden')], 403);
     }
 
-    if ($participant->conversation_id !== $conversation->id) {
+    // グループチャットルームを取得
+    $groupChatRoom = $group->groupChatRoom;
+    if (!$groupChatRoom) {
+      return response()->json(['message' => 'グループチャットルームが見つかりません'], 404);
+    }
+
+    // 参加者がグループチャットルームに属しているかチェック
+    if ($participant->chat_room_id !== $groupChatRoom->id) {
       return response()->json(['message' => '無効なメンバーです'], 422);
     }
 
