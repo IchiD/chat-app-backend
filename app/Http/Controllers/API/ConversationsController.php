@@ -102,13 +102,20 @@ class ConversationsController extends Controller
         return true;
       }
 
-      // group_chatは参加しているものは表示する
+      // group_chatは参加しているものは表示するが、グループオーナーであれば除外
       if ($chatRoom->type === 'group_chat') {
+        // 自分がグループオーナーの場合は一覧に表示しない
+        if ($chatRoom->group && $chatRoom->group->owner_user_id === $user->id) {
+          return false;
+        }
         return true;
       }
 
-      // member_chatは参加しているものは表示する
+      // member_chat はグループオーナー自身には不要
       if ($chatRoom->type === 'member_chat') {
+        if ($chatRoom->group && $chatRoom->group->owner_user_id === $user->id) {
+          return false;
+        }
         return true;
       }
 
