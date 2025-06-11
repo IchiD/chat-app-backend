@@ -880,6 +880,9 @@ class ConversationsController extends Controller
     $groupData = $group->toArray();
     $groupData['room_token'] = $groupChatRoom ? $groupChatRoom->room_token : null;
 
+    // チャットスタイル情報を追加
+    $groupData['chat_styles'] = $group->chat_styles;
+
     return response()->json($groupData);
   }
 
