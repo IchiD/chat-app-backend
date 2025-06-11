@@ -883,6 +883,9 @@ class ConversationsController extends Controller
     // チャットスタイル情報を追加
     $groupData['chat_styles'] = $group->chat_styles;
 
+    // メンバー数を追加（activeMembers の件数）
+    $groupData['member_count'] = $group->activeMembers()->count();
+
     return response()->json($groupData);
   }
 
