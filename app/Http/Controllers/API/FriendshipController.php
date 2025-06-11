@@ -223,7 +223,13 @@ class FriendshipController extends Controller
 
       $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer|exists:users,id',
-        'message' => 'nullable|string|max:255'
+        'message' => 'nullable|string|max:30'
+      ], [
+        'user_id.required' => 'ユーザーIDが必要です',
+        'user_id.integer' => 'ユーザーIDは数値である必要があります',
+        'user_id.exists' => '指定されたユーザーが見つかりません',
+        'message.string' => 'メッセージは文字列である必要があります',
+        'message.max' => 'メッセージは30文字以内で入力してください'
       ]);
 
       if ($validator->fails()) {
