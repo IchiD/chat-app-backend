@@ -117,6 +117,17 @@ class Friendship extends Model
   }
 
   /**
+   * 友達関係を論理削除（ユーザー自己削除による）
+   */
+  public function deleteBySelfRemoval(string $reason = null): bool
+  {
+    $this->deleted_at = now();
+    $this->deleted_reason = $reason;
+    $this->deleted_by = null; // 自己削除の場合はnull
+    return $this->save();
+  }
+
+  /**
    * 友達関係を復活
    */
   public function restoreByAdmin(): bool

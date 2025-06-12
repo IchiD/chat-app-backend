@@ -137,8 +137,15 @@
                 </td>
                 <td>
                   @if($user->isDeleted())
-                  <div class="text-danger">
-                    <i class="fas fa-trash me-1"></i><strong>管理側で削除</strong>
+                  <div class="{{ $user->isDeletedBySelf() ? 'text-warning' : 'text-danger' }}">
+                    <i class="fas fa-trash me-1"></i>
+                    <strong>
+                      @if($user->isDeletedBySelf())
+                      ユーザー自身で削除
+                      @else
+                      管理側で削除
+                      @endif
+                    </strong>
                   </div>
                   <small class="text-muted">
                     {{ $user->deleted_at->format('Y/m/d H:i') }}

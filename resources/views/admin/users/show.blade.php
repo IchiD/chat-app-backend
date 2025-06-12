@@ -43,9 +43,15 @@
 @if($user->isDeleted())
 <div class="row mb-4">
   <div class="col-12">
-    <div class="alert alert-warning">
+    <div class="alert {{ $user->isDeletedBySelf() ? 'alert-warning' : 'alert-danger' }}">
       <i class="fas fa-exclamation-triangle me-2"></i>
-      <strong>このユーザーは削除されています</strong>
+      <strong>
+        @if($user->isDeletedBySelf())
+        このユーザーは自身でアカウントを削除しています
+        @else
+        このユーザーは管理者によって削除されています
+        @endif
+      </strong>
       <div class="mt-2">
         <strong>削除日時:</strong> {{ $user->deleted_at->format('Y年m月d日 H:i') }}<br>
         @if($user->deletedByAdmin)
@@ -53,6 +59,9 @@
         @endif
         @if($user->deleted_reason)
         <strong>削除理由:</strong> {{ $user->deleted_reason }}
+        @endif
+        @if($user->isDeletedBySelf())
+        <br><small class="text-muted">※ 自己削除されたユーザーの再登録可否は管理者が設定できます</small>
         @endif
       </div>
     </div>
@@ -166,6 +175,20 @@
                 @endif
               </div>
             </div>
+            <div class="mb-3">
+              <label class="form-label text-muted">再登録設定</label>
+              <div>
+                @if($user->allow_re_registration)
+                <span class="badge bg-success">
+                  <i class="fas fa-check me-1"></i>再登録許可
+                </span>
+                @else
+                <span class="badge bg-danger">
+                  <i class="fas fa-times me-1"></i>再登録禁止
+                </span>
+                @endif
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -197,6 +220,36 @@
             <div class="text-muted">最終ログイン</div>
           </div>
         </div>
+      </div>
+    </div>
+    <!-- 再登録設定カード -->
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">
+          <i class="fas fa-user-cog me-2"></i>再登録設定
+        </h5>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="allowReRegistration"
+              {{ $user->allow_re_registration ? 'checked' : '' }}
+              onchange="document.getElementById('toggleForm').submit();">
+            <label class="form-check-label" for="allowReRegistration">
+              同じメールアドレスでの再登録を許可する
+            </label>
+          </div>
+          <small class="text-muted">
+            許可する場合、ユーザー削除時にメールアドレスが変更され、同じメールアドレスでの新規登録が可能になります。<br>
+            禁止する場合、メールアドレスは保持され、同じメールアドレスでの新規登録はできません。
+          </small>
+        </div>
+        <form method="POST" action="{{ route('admin.users.toggle-re-registration', $user->id) }}" id="toggleForm" style="display: none;">
+          @csrf
+        </form>
+        <small class="text-muted">
+          スイッチをクリックすると即座に設定が変更されます。
+        </small>
       </div>
     </div>
   </div>

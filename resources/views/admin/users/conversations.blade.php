@@ -143,7 +143,7 @@
                 <td>
                   @if($chatRoom->latestMessage && $chatRoom->latestMessage->sent_at)
                   <div class="text-truncate" style="max-width: 200px;">
-                    <strong>{{ $chatRoom->latestMessage->sender->name ?? 'ユーザー' }}:</strong>
+                    <strong>{{ $chatRoom->latestMessage->getSenderDisplayName() }}:</strong>
                     {{ $chatRoom->latestMessage->text_content }}
                   </div>
                   <small class="text-muted">

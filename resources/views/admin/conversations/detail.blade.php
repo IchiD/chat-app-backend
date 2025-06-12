@@ -125,7 +125,7 @@
               <div class="flex-grow-1">
                 <div class="d-flex align-items-center mb-2">
                   <div>
-                    <div class="fw-bold">{{ $message->sender->name ?? 'ユーザー' }}</div>
+                    <div class="fw-bold">{{ $message->getSenderDisplayName() }}</div>
                     <small class="text-muted">{{ $message->sent_at->format('Y/m/d H:i:s') }}</small>
                   </div>
                 </div>

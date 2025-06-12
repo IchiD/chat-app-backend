@@ -207,6 +207,18 @@ class ChatRoom extends Model
   }
 
   /**
+   * ユーザー自己削除によるチャットルーム削除
+   */
+  public function deleteBySelfRemoval(string $reason = null): bool
+  {
+    return $this->update([
+      'deleted_at' => now(),
+      'deleted_reason' => $reason,
+      'deleted_by' => null, // 自己削除の場合はnull
+    ]);
+  }
+
+  /**
    * チャットルームの削除を取り消し
    */
   public function restoreByAdmin(): bool

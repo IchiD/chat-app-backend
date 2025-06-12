@@ -28,25 +28,77 @@ class AuthService extends BaseService
     // トランザクション開始
     DB::beginTransaction();
     try {
-      $user = User::where('email', $data['email'])->first();
+      // 削除されたユーザーも含めて検索
+      $user = User::withTrashed()->where('email', $data['email'])->first();
 
       if ($user) {
-        if ($user->is_verified) {
-          DB::rollBack();
-          return $this->errorResponse('already_registered', 'このメールアドレスは既に登録されています。');
-        }
+        // 削除されたユーザーの場合
+        if ($user->isDeleted()) {
+          // 再登録可能かチェック
+          if (!$user->canReRegister()) {
+            DB::rollBack();
+            return $this->errorResponse('re_registration_not_allowed', 'このメールアドレスでの再登録は許可されていません。管理者にお問い合わせください。');
+          }
 
-        // バンされたメールアドレスでの再登録を制限
-        if ($user->isBanned()) {
-          DB::rollBack();
-          return $this->errorResponse('email_banned', 'このメールアドレスは利用停止されており、新規登録できません。');
-        }
+          // 自己削除の場合は復元
+          if ($user->isDeletedBySelf()) {
+            $user->restoreBySelf();
+            Log::info('自己削除されたアカウントを復元しました', [
+              'user_id' => $user->id,
+              'email' => $user->email
+            ]);
+          } else {
+            // 管理者削除で再登録許可されている場合は復元
+            $user->restoreByAdmin();
+            Log::info('管理者削除されたアカウントを復元しました', [
+              'user_id' => $user->id,
+              'email' => $user->email
+            ]);
+          }
 
-        // 仮登録状態の場合は入力内容で上書き更新する
-        $user->updateProvisionalRegistration([
-          'password' => Hash::make($data['password']),
-          'name'     => $data['name'],
-        ]);
+          // 復元後、仮登録状態に戻す
+          // 注意: 新しい名前に更新し、previous_nameは保持する（名前変更提案のため）
+          $updateData = [
+            'password' => Hash::make($data['password']),
+            'name' => $data['name'], // 常に新しい名前に更新
+          ];
+
+          Log::info('復元時: 名前変更と提案準備', [
+            'user_id' => $user->id,
+            'previous_name' => $user->previous_name,
+            'old_current_name' => $user->name,
+            'new_name' => $data['name'],
+            'will_suggest' => !empty($user->previous_name) && $user->previous_name !== $data['name']
+          ]);
+
+          $user->updateProvisionalRegistration($updateData);
+
+          Log::info('復元後の仮登録処理が完了', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'is_verified' => $user->is_verified,
+            'email_verification_token' => $user->email_verification_token ? 'あり' : 'なし',
+            'token_expires_at' => $user->token_expires_at
+          ]);
+        } else {
+          // 通常の既存ユーザーの処理
+          if ($user->is_verified) {
+            DB::rollBack();
+            return $this->errorResponse('already_registered', 'このメールアドレスは既に登録されています。');
+          }
+
+          // バンされたメールアドレスでの再登録を制限
+          if ($user->isBanned()) {
+            DB::rollBack();
+            return $this->errorResponse('email_banned', 'このメールアドレスは利用停止されており、新規登録できません。');
+          }
+
+          // 仮登録状態の場合は入力内容で上書き更新する
+          $user->updateProvisionalRegistration([
+            'password' => Hash::make($data['password']),
+            'name'     => $data['name'],
+          ]);
+        }
       } else {
         // ユーザーが存在しない場合は新規作成する
         $user = User::create([
@@ -95,11 +147,31 @@ class AuthService extends BaseService
     // ユーザーをトークンから検索
     $user = User::where('email_verification_token', $token)->first();
     if (!$user) {
+      Log::warning('認証トークンが見つかりません', [
+        'token' => $token,
+        'ip' => $ip
+      ]);
       return $this->errorResponse('token_invalid', '無効な認証リンクです。（該当するユーザーが見つかりません）');
     }
 
+    Log::info('認証トークンの検証を開始', [
+      'user_id' => $user->id,
+      'email' => $user->email,
+      'token_expires_at' => $user->token_expires_at,
+      'current_time' => Carbon::now(),
+      'is_verified' => $user->is_verified,
+      'ip' => $ip
+    ]);
+
     // トークンの有効期限チェック
     if (Carbon::now()->greaterThan($user->token_expires_at)) {
+      Log::warning('認証トークンの有効期限切れ', [
+        'user_id' => $user->id,
+        'email' => $user->email,
+        'token_expires_at' => $user->token_expires_at,
+        'current_time' => Carbon::now(),
+        'ip' => $ip
+      ]);
       return [
         'status'     => 'error',
         'error_type' => 'token_expired',

@@ -104,6 +104,28 @@ class MessagesController extends Controller
       ->orderBy('sent_at', 'desc') // 最新のメッセージから表示
       ->paginate(20); // ページネーション
 
+    // グループチャットの場合、各メッセージ送信者の退室状態を付加
+    if ($chatRoom->isGroupChat() && $chatRoom->group) {
+      $group = $chatRoom->group;
+      foreach ($messages as $message) {
+        if ($message->sender_id) {
+          // 送信者がグループメンバーかつ退室済みかどうかをチェック
+          $memberInfo = $group->groupMembers()
+            ->where('user_id', $message->sender_id)
+            ->first();
+
+          if ($memberInfo && $memberInfo->left_at) {
+            // カスタムプロパティとして退室状態を追加
+            $message->sender_has_left = true;
+            $message->sender_left_at = $memberInfo->left_at;
+          } else {
+            $message->sender_has_left = false;
+            $message->sender_left_at = null;
+          }
+        }
+      }
+    }
+
     // メッセージを取得後、このチャットルームを既読にする（新アーキテクチャでは簡素化）
     // 既読管理は新アーキテクチャでは別途実装する予定のため、一旦コメントアウト
     // $participant = $chatRoom->participants()->where('user_id', $user->id)->first();
@@ -241,6 +263,24 @@ class MessagesController extends Controller
       }, 'adminSender' => function ($query) {
         $query->select('id', 'name');
       }]);
+
+      // グループチャットの場合、送信者の退室状態を付加
+      if ($chatRoom->isGroupChat() && $chatRoom->group) {
+        $group = $chatRoom->group;
+        if ($message->sender_id) {
+          $memberInfo = $group->groupMembers()
+            ->where('user_id', $message->sender_id)
+            ->first();
+
+          if ($memberInfo && $memberInfo->left_at) {
+            $message->sender_has_left = true;
+            $message->sender_left_at = $memberInfo->left_at;
+          } else {
+            $message->sender_has_left = false;
+            $message->sender_left_at = null;
+          }
+        }
+      }
 
       Log::info('メッセージリレーション読み込み完了');
 

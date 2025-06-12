@@ -181,7 +181,7 @@
                 <div class="d-flex align-items-center mb-2">
                   <div>
                     <div class="fw-bold">
-                      {{ $message->sender->name ?? 'ユーザー' }}
+                      {{ $message->getSenderDisplayName() }}
                       @if($message->sender && $message->sender->id == $user->id)
                       <span class="badge bg-primary ms-1">対象ユーザー</span>
                       @endif

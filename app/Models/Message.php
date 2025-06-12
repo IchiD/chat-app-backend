@@ -115,4 +115,33 @@ class Message extends Model
   {
     return $this->belongsTo(ChatRoom::class);
   }
+
+  /**
+   * 送信者の表示名を取得（退室状態を考慮）
+   */
+  public function getSenderDisplayName(): string
+  {
+    // 管理者メッセージの場合
+    if ($this->isFromAdmin()) {
+      return $this->adminSender ? $this->adminSender->name : '管理者';
+    }
+
+    // ユーザーメッセージの場合
+    if ($this->sender) {
+      // グループチャットの場合は退室状態をチェック
+      if ($this->chatRoom && $this->chatRoom->isGroupChat() && $this->chatRoom->group) {
+        $memberInfo = $this->chatRoom->group->groupMembers()
+          ->where('user_id', $this->sender_id)
+          ->first();
+
+        if ($memberInfo && $memberInfo->left_at) {
+          return $this->sender->name . '（退室済み）';
+        }
+      }
+
+      return $this->sender->name;
+    }
+
+    return 'ユーザー';
+  }
 }

@@ -55,11 +55,15 @@
                 @foreach($conversations as $conversation)
                 <tr>
                   <td>
-                    @if($conversation->participants->first() && $conversation->participants->first()->user)
+                    @php
+                    // サポートチャットでは participant1 がユーザー、participant2 が管理者（通常はnull）
+                    $user = $conversation->participant1;
+                    @endphp
+                    @if($user)
                     <div>
-                      <strong>{{ $conversation->participants->first()->user->name }}</strong>
+                      <strong>{{ $user->name }}</strong>
                       <br>
-                      <small class="text-muted">{{ $conversation->participants->first()->user->email }}</small>
+                      <small class="text-muted">{{ $user->email }}</small>
                     </div>
                     @else
                     <span class="text-muted">ユーザー不明</span>
@@ -73,11 +77,7 @@
                           {{ $conversation->latestMessage->text_content }}
                         </div>
                         <div class="text-muted small">
-                          @if($conversation->latestMessage->admin_sender_id)
-                          管理者：{{ $conversation->latestMessage->adminSender->name ?? '管理者' }}
-                          @else
-                          {{ $conversation->latestMessage->sender->name ?? 'ユーザー' }}
-                          @endif
+                          {{ $conversation->latestMessage->getSenderDisplayName() }}
                           •
                           {{ $conversation->latestMessage->sent_at->format('m/d H:i') }}
                         </div>

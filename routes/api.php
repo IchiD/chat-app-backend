@@ -45,8 +45,14 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
   // ユーザー名を更新
   Route::put('/user/update-name', [AuthController::class, 'updateName']);
 
+  // 名前変更提案に対する応答
+  Route::post('/user/handle-name-suggestion', [AuthController::class, 'handleNameChangeSuggestion']);
+
   // パスワードを更新
   Route::put('/user/update-password', [AuthController::class, 'updatePassword']);
+
+  // アカウント削除
+  Route::delete('/user/delete-account', [AuthController::class, 'deleteAccount']);
 
   // 友達関係のAPI
   Route::prefix('friends')->group(function () {

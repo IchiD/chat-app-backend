@@ -53,7 +53,9 @@
   <div class="col-md-6">
     <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>メンバー ({{ $group->getMembersCount() }}名)</span>
+        <div>
+          <span>メンバー ({{ $group->getMembersCount() }}名)</span>
+        </div>
         <button type="button" class="btn btn-sm btn-outline-success" onclick="showAddMemberModal()">
           <i class="fas fa-plus me-1"></i>メンバー追加
         </button>
@@ -70,6 +72,7 @@
             </tr>
           </thead>
           <tbody>
+            @if($group->activeMembers->count() > 0)
             @foreach($group->activeMembers as $member)
             <tr>
               <td>#{{ $member->user_id }}</td>
@@ -87,10 +90,10 @@
               <td>
                 @if($member->role !== 'owner')
                 <div class="btn-group" role="group">
-                  <button type="button" class="btn btn-sm btn-outline-warning" onclick="showRoleModal({{ $member->user_id }}, '{{ $member->role }}', '{{ $member->user->name ?? 'ユーザー' }}')">
+                  <button type="button" class="btn btn-sm btn-outline-warning" onclick="showRoleModal({{ $member->user_id }}, '{{ $member->role }}', '{{ addslashes($member->user->name ?? 'ユーザー') }}')">
                     <i class="fas fa-user-cog"></i>
                   </button>
-                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="showRemoveMemberModal({{ $member->user_id }}, '{{ $member->user->name ?? 'ユーザー' }}')">
+                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="showRemoveMemberModal({{ $member->user_id }}, '{{ addslashes($member->user->name ?? 'ユーザー') }}')">
                     <i class="fas fa-user-minus"></i>
                   </button>
                 </div>
@@ -100,6 +103,13 @@
               </td>
             </tr>
             @endforeach
+            @else
+            <tr>
+              <td colspan="5" class="text-center text-muted">
+                アクティブなメンバーがいません
+              </td>
+            </tr>
+            @endif
           </tbody>
         </table>
       </div>
@@ -211,7 +221,13 @@
     const form = document.getElementById('removeMemberForm');
     const message = document.getElementById('removeMemberMessage');
 
-    form.action = `{{ route('admin.groups.members.remove', ['groupId' => $group->id, 'memberId' => '__USER_ID__']) }}`.replace('__USER_ID__', userId);
+    if (!modal || !form || !message) {
+      return;
+    }
+
+    const actionUrl = `{{ route('admin.groups.members.remove', ['groupId' => $group->id, 'memberId' => '__USER_ID__']) }}`.replace('__USER_ID__', userId);
+
+    form.action = actionUrl;
     message.textContent = `「${userName}」をグループから削除しますか？`;
 
     new bootstrap.Modal(modal).show();

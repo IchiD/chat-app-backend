@@ -24,9 +24,13 @@
           <div class="row">
             <div class="col-md-6">
               <strong>ユーザー:</strong>
-              @if($conversation->participants->first() && $conversation->participants->first()->user)
-              {{ $conversation->participants->first()->user->name }}
-              ({{ $conversation->participants->first()->user->email }})
+              @php
+              // サポートチャットでは participant1 がユーザー、participant2 が管理者（通常はnull）
+              $user = $conversation->participant1;
+              @endphp
+              @if($user)
+              {{ $user->name }}
+              ({{ $user->email }})
               @else
               ユーザー不明
               @endif
@@ -62,7 +66,7 @@
                   <div class="message-header mb-2">
                     <strong>
                       @if($isUserMessage)
-                      {{ $conversation->participants->first()->user->name ?? 'ユーザー' }}
+                      {{ $message->getSenderDisplayName() }}
                       @else
                       {{ $admin->name }}（管理者）
                       @endif

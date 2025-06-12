@@ -38,6 +38,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::put('users/{id}', [AdminDashboardController::class, 'updateUser'])->name('users.update');
     Route::delete('users/{id}', [AdminDashboardController::class, 'deleteUser'])->name('users.delete');
     Route::post('users/{id}/restore', [AdminDashboardController::class, 'restoreUser'])->name('users.restore');
+    Route::post('users/{id}/toggle-re-registration', [AdminDashboardController::class, 'toggleReRegistration'])->name('users.toggle-re-registration');
 
     // User Conversations Management
     Route::get('users/{id}/conversations', [AdminDashboardController::class, 'userConversations'])->name('users.conversations');
