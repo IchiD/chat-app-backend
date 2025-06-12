@@ -26,9 +26,19 @@
     <div class="card">
       <div class="card-body">
         <form method="GET" action="{{ route('admin.conversations') }}" class="row g-3">
-          <div class="col-md-8">
-            <label for="search" class="form-label">検索</label>
-            <input type="text" class="form-control" id="search" name="search" value="{{ request('search') }}" placeholder="ルームトークン、会話内容、ユーザー名">
+          <div class="col-md-3">
+            <label for="search_type" class="form-label">検索タイプ</label>
+            <select class="form-select" id="search_type" name="search_type">
+              <option value="all" {{ request('search_type', 'all') === 'all' ? 'selected' : '' }}>すべて</option>
+              <option value="room_token" {{ request('search_type') === 'room_token' ? 'selected' : '' }}>ルームトークンのみ</option>
+              <option value="id" {{ request('search_type') === 'id' ? 'selected' : '' }}>IDのみ</option>
+              <option value="messages" {{ request('search_type') === 'messages' ? 'selected' : '' }}>メッセージ内容のみ</option>
+              <option value="participants" {{ request('search_type') === 'participants' ? 'selected' : '' }}>参加者のみ</option>
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label for="search" class="form-label">検索キーワード</label>
+            <input type="text" class="form-control" id="search" name="search" value="{{ request('search') }}" placeholder="検索キーワードを入力">
           </div>
           <div class="col-md-4 d-flex align-items-end">
             <button type="submit" class="btn btn-primary me-2">

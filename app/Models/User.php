@@ -387,9 +387,10 @@ class User extends Authenticatable
   {
     return ChatRoom::where(function ($query) {
       $query->where('participant1_id', $this->id)
-        ->orWhere('participant2_id', $this->id);
-    })->orWhereHas('group.members', function ($query) {
-      $query->where('user_id', $this->id);
+        ->orWhere('participant2_id', $this->id)
+        ->orWhereHas('group.activeMembers', function ($q) {
+          $q->where('user_id', $this->id);
+        });
     })->get();
   }
 
@@ -400,7 +401,10 @@ class User extends Authenticatable
   {
     return ChatRoom::where(function ($query) {
       $query->where('participant1_id', $this->id)
-        ->orWhere('participant2_id', $this->id);
+        ->orWhere('participant2_id', $this->id)
+        ->orWhereHas('group.activeMembers', function ($q) {
+          $q->where('user_id', $this->id);
+        });
     }); // ->get() を付けずにクエリビルダーを返す
   }
 

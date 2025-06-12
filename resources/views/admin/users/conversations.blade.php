@@ -118,8 +118,8 @@
                   </div>
                   <small class="text-muted">
                     グループID: {{ $chatRoom->group->id }}
-                    @if($chatRoom->group && $chatRoom->group->members)
-                    | {{ $chatRoom->group->members->count() }}人参加
+                    @if($chatRoom->group && $chatRoom->group->activeMembers)
+                    | {{ $chatRoom->group->activeMembers->count() }}人参加
                     @endif
                   </small>
                   @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')

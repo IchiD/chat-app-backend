@@ -266,19 +266,35 @@ class AdminDashboardController extends Controller
     $user = User::findOrFail($id);
 
     // ユーザーが参加しているチャットルーム（サポートチャット以外、論理削除されたものも含む）
-    $chatRooms = $user->chatRooms()
-      ->withTrashed()
+    $chatRooms = ChatRoom::withTrashed()
       ->where('type', '!=', 'support_chat')
+      ->where(function ($query) use ($user) {
+        // 直接参加者として登録されているチャットルーム
+        $query->where('participant1_id', $user->id)
+          ->orWhere('participant2_id', $user->id)
+          // グループメンバーとして参加しているチャットルーム
+          ->orWhereHas('group.activeMembers', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+          });
+      })
       ->with([
         'latestMessage.sender',
-        'group',
+        'group.activeMembers.user',
+        'group.owner',
         'participant1',
         'participant2',
-
         'messages',
         'deletedByAdmin' // 削除を実行した管理者情報も取得
       ])
+      ->orderBy('updated_at', 'desc')
       ->paginate(10);
+
+    // デバッグ用：チャットルームの種類を確認
+    \Log::info('User chat rooms for user ID: ' . $user->id, [
+      'total_rooms' => $chatRooms->total(),
+      'room_types' => $chatRooms->pluck('type', 'id')->toArray(),
+      'group_rooms' => $chatRooms->where('type', 'group_chat')->pluck('group.name', 'id')->toArray(),
+    ]);
 
     return view('admin.users.conversations', compact('admin', 'user', 'chatRooms'));
   }
@@ -291,7 +307,8 @@ class AdminDashboardController extends Controller
     $admin = Auth::guard('admin')->user();
     $user = User::findOrFail($userId);
     $chatRoom = ChatRoom::withTrashed()->with([
-      'group',
+      'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
+      'group.owner', // グループオーナー情報も読み込み
       'participant1',
       'participant2',
       'messages.sender',
@@ -359,7 +376,8 @@ class AdminDashboardController extends Controller
       ->where('type', '!=', 'support_chat')
       ->withCount('messages')
       ->with([
-        'group',
+        'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
+        'group.owner', // グループオーナー情報も読み込み
         'participant1',
         'participant2',
         'latestMessage.sender',
@@ -367,23 +385,64 @@ class AdminDashboardController extends Controller
       ]);
 
     if ($search) {
-      $query->where(function ($subQuery) use ($search) {
-        $subQuery->where('id', $search)
-          ->orWhere('room_token', 'LIKE', '%' . $search . '%')
-          ->orWhereHas('messages', function ($messageQuery) use ($search) {
-            $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
-              ->whereNull('deleted_at')
-              ->whereNull('admin_deleted_at');
-          })
-          ->orWhereHas('participant1', function ($userQuery) use ($search) {
-            $userQuery->where('name', 'LIKE', '%' . $search . '%');
-          })
-          ->orWhereHas('participant2', function ($userQuery) use ($search) {
-            $userQuery->where('name', 'LIKE', '%' . $search . '%');
-          })
-          ->orWhereHas('group', function ($groupQuery) use ($search) {
-            $groupQuery->where('name', 'LIKE', '%' . $search . '%');
-          });
+      $searchType = $request->get('search_type', 'all');
+
+      $query->where(function ($subQuery) use ($search, $searchType) {
+        switch ($searchType) {
+          case 'room_token':
+            $subQuery->where('room_token', 'LIKE', '%' . $search . '%');
+            break;
+          case 'id':
+            // 数値のみの場合のみIDで検索
+            if (is_numeric($search)) {
+              $subQuery->where('id', (int)$search);
+            } else {
+              // 数値でない場合は結果なしにする
+              $subQuery->whereRaw('1 = 0');
+            }
+            break;
+          case 'messages':
+            $subQuery->whereHas('messages', function ($messageQuery) use ($search) {
+              $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
+                ->whereNull('deleted_at')
+                ->whereNull('admin_deleted_at');
+            });
+            break;
+          case 'participants':
+            $subQuery->whereHas('participant1', function ($userQuery) use ($search) {
+              $userQuery->where('name', 'LIKE', '%' . $search . '%');
+            })->orWhereHas('participant2', function ($userQuery) use ($search) {
+              $userQuery->where('name', 'LIKE', '%' . $search . '%');
+            })->orWhereHas('group', function ($groupQuery) use ($search) {
+              $groupQuery->where('name', 'LIKE', '%' . $search . '%');
+            });
+            break;
+          case 'all':
+          default:
+            // IDは数値の場合のみ検索対象とする
+            if (is_numeric($search)) {
+              $subQuery->where('id', (int)$search);
+            } else {
+              $subQuery->whereRaw('1 = 0'); // 数値でない場合はID検索をスキップ
+            }
+            $subQuery
+              ->orWhere('room_token', 'LIKE', '%' . $search . '%')
+              ->orWhereHas('messages', function ($messageQuery) use ($search) {
+                $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
+                  ->whereNull('deleted_at')
+                  ->whereNull('admin_deleted_at');
+              })
+              ->orWhereHas('participant1', function ($userQuery) use ($search) {
+                $userQuery->where('name', 'LIKE', '%' . $search . '%');
+              })
+              ->orWhereHas('participant2', function ($userQuery) use ($search) {
+                $userQuery->where('name', 'LIKE', '%' . $search . '%');
+              })
+              ->orWhereHas('group', function ($groupQuery) use ($search) {
+                $groupQuery->where('name', 'LIKE', '%' . $search . '%');
+              });
+            break;
+        }
       });
     }
 
@@ -400,7 +459,8 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
     $chatRoom = ChatRoom::withTrashed()->with([
-      'group',
+      'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
+      'group.owner', // グループオーナー情報も読み込み
       'participant1',
       'participant2',
       'messages.sender',
@@ -1149,6 +1209,265 @@ class AdminDashboardController extends Controller
     return redirect()
       ->route('admin.friendships.show', $friendship->id)
       ->with('success', '友達関係を復活しました。');
+  }
+
+  /**
+   * グループ一覧表示
+   */
+  public function groups(Request $request)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    $query = Group::with(['owner' => function ($q) {
+      $q->select('id', 'name', 'email');
+    }])->withCount('activeMembers as members_count');
+
+    if ($search = $request->get('search')) {
+      $query->where('name', 'LIKE', "%{$search}%")
+        ->orWhereHas('owner', function ($q) use ($search) {
+          $q->where('name', 'LIKE', "%{$search}%")
+            ->orWhere('email', 'LIKE', "%{$search}%");
+        });
+    }
+
+    $groups = $query->orderBy('created_at', 'desc')->paginate(20);
+    $groups->appends($request->query());
+
+    \App\Services\OperationLogService::log('backend', 'view_groups', 'admin:' . $admin->id);
+
+    return view('admin.groups.index', compact('admin', 'groups'));
+  }
+
+  /**
+   * グループ詳細表示
+   */
+  public function showGroup($id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::with(['owner', 'activeMembers.user'])->findOrFail($id);
+
+      \App\Services\OperationLogService::log('backend', 'view_group_detail', 'admin:' . $admin->id . ' group:' . $id);
+
+      return view('admin.groups.show', compact('admin', 'group'));
+    } catch (\Exception $e) {
+      return redirect()->route('admin.groups')
+        ->with('error', 'グループが見つかりません。');
+    }
+  }
+
+  /**
+   * グループ編集画面
+   */
+  public function editGroup($id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::with(['owner', 'activeMembers.user'])->findOrFail($id);
+
+      return view('admin.groups.edit', compact('admin', 'group'));
+    } catch (\Exception $e) {
+      return redirect()->route('admin.groups')
+        ->with('error', 'グループが見つかりません。');
+    }
+  }
+
+  /**
+   * グループ情報更新
+   */
+  public function updateGroup(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($id);
+
+      $currentMemberCount = $group->getMembersCount();
+
+      $request->validate([
+        'name' => 'required|string|max:255',
+        'description' => 'nullable|string|max:1000',
+        'max_members' => "required|integer|min:{$currentMemberCount}|max:100",
+        'chat_styles' => 'required|array',
+        'chat_styles.*' => 'in:group,group_member',
+      ]);
+
+      $group->update([
+        'name' => $request->name,
+        'description' => $request->description,
+        'max_members' => $request->max_members,
+        'chat_styles' => $request->chat_styles,
+      ]);
+
+      \App\Services\OperationLogService::log('backend', 'update_group', 'admin:' . $admin->id . ' group:' . $group->id);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'グループ情報を更新しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'グループの更新に失敗しました。')
+        ->withInput();
+    }
+  }
+
+  /**
+   * グループメンバー削除
+   */
+  public function removeMember(Request $request, $groupId, $memberId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      $member = $group->groupMembers()->where('user_id', $memberId)->firstOrFail();
+
+      $request->validate([
+        'reason' => 'nullable|string|max:500',
+      ]);
+
+      // オーナーの削除は禁止
+      if ($member->role === 'owner') {
+        return redirect()->back()
+          ->with('error', 'グループオーナーは削除できません。');
+      }
+
+      // メンバーを退会処理
+      $member->update([
+        'left_at' => now(),
+        'role' => 'left',
+      ]);
+
+      $reason = $request->reason ?? '管理者による削除';
+      \App\Services\OperationLogService::log('backend', 'remove_group_member', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId . ' reason:' . $reason);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーを削除しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'メンバーの削除に失敗しました。');
+    }
+  }
+
+  /**
+   * グループメンバー追加
+   */
+  public function addMember(Request $request, $groupId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+
+      $request->validate([
+        'user_id' => 'required|exists:users,id',
+        'role' => 'required|in:member,admin',
+      ]);
+
+      $userId = $request->user_id;
+
+      // 既にメンバーかチェック
+      if ($group->hasMember($userId)) {
+        return redirect()->back()
+          ->with('error', 'このユーザーは既にグループのメンバーです。');
+      }
+
+      // メンバー数制限チェック
+      if (!$group->canAddMember()) {
+        return redirect()->back()
+          ->with('error', 'グループのメンバー数が上限に達しています。');
+      }
+
+      // ユーザーが削除・バンされていないかチェック
+      $user = User::where('id', $userId)
+        ->where('is_banned', false)
+        ->whereNull('deleted_at')
+        ->first();
+
+      if (!$user) {
+        return redirect()->back()
+          ->with('error', '指定されたユーザーは存在しないか、削除・バンされています。');
+      }
+
+      // メンバーを追加
+      $group->groupMembers()->create([
+        'user_id' => $userId,
+        'role' => $request->role,
+        'joined_at' => now(),
+      ]);
+
+      \App\Services\OperationLogService::log('backend', 'add_group_member', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $userId . ' role:' . $request->role);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーを追加しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'メンバーの追加に失敗しました。')
+        ->withInput();
+    }
+  }
+
+  /**
+   * グループメンバーの役割変更
+   */
+  public function updateMemberRole(Request $request, $groupId, $memberId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      $member = $group->groupMembers()->where('user_id', $memberId)->firstOrFail();
+
+      $request->validate([
+        'role' => 'required|in:member,admin',
+      ]);
+
+      // オーナーの役割変更は禁止
+      if ($member->role === 'owner') {
+        return redirect()->back()
+          ->with('error', 'グループオーナーの役割は変更できません。');
+      }
+
+      $oldRole = $member->role;
+      $member->update(['role' => $request->role]);
+
+      \App\Services\OperationLogService::log('backend', 'update_member_role', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId . ' old_role:' . $oldRole . ' new_role:' . $request->role);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーの役割を更新しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', '役割の更新に失敗しました。');
+    }
   }
 
   /**

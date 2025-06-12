@@ -353,6 +353,9 @@
             <a href="{{ route('admin.conversations') }}" class="nav-link {{ request()->routeIs('admin.conversations*') ? 'active' : '' }}">
               <i class="fas fa-comments me-2"></i> チャットルーム
             </a>
+            <a href="{{ route('admin.groups') }}" class="nav-link {{ request()->routeIs('admin.groups*') ? 'active' : '' }}">
+              <i class="fas fa-users-gear me-2"></i> グループ
+            </a>
             <a href="{{ route('admin.support') }}" class="nav-link {{ request()->routeIs('admin.support*') ? 'active' : '' }}">
               <i class="fas fa-comments me-2"></i> お問い合わせ
               <span id="unread-support-badge" class="badge bg-danger rounded-circle ms-2" style="display: none;">0</span>

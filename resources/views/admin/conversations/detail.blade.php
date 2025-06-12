@@ -93,8 +93,8 @@
                 <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
                 @endif
                 @elseif($chatRoom->type === 'group_chat' && $chatRoom->group)
-                @foreach($chatRoom->group->members as $member)
-                <span class="badge bg-light text-dark border">{{ $member->user->name }}</span>
+                @foreach($chatRoom->group->activeMembers as $member)
+                <span class="badge bg-light text-dark border">{{ $member->user->name ?? '削除されたユーザー' }}</span>
                 @endforeach
                 @endif
               </div>
