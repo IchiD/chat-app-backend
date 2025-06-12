@@ -20,6 +20,8 @@ Route::get('/check-ip', function (Illuminate\Http\Request $request) {
   ]);
 });
 
+
+
 // Admin Routes
 Route::prefix('admin')->name('admin.')->group(function () {
   // Admin Authentication Routes

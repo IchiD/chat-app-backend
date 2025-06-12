@@ -222,36 +222,7 @@
         </div>
       </div>
     </div>
-    <!-- 再登録設定カード -->
-    <div class="card">
-      <div class="card-header">
-        <h5 class="card-title mb-0">
-          <i class="fas fa-user-cog me-2"></i>再登録設定
-        </h5>
-      </div>
-      <div class="card-body">
-        <div class="mb-3">
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="allowReRegistration"
-              {{ $user->allow_re_registration ? 'checked' : '' }}
-              onchange="document.getElementById('toggleForm').submit();">
-            <label class="form-check-label" for="allowReRegistration">
-              同じメールアドレスでの再登録を許可する
-            </label>
-          </div>
-          <small class="text-muted">
-            許可する場合、ユーザー削除時にメールアドレスが変更され、同じメールアドレスでの新規登録が可能になります。<br>
-            禁止する場合、メールアドレスは保持され、同じメールアドレスでの新規登録はできません。
-          </small>
-        </div>
-        <form method="POST" action="{{ route('admin.users.toggle-re-registration', $user->id) }}" id="toggleForm" style="display: none;">
-          @csrf
-        </form>
-        <small class="text-muted">
-          スイッチをクリックすると即座に設定が変更されます。
-        </small>
-      </div>
-    </div>
+
   </div>
 </div>
 

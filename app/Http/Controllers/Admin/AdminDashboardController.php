@@ -201,6 +201,7 @@ class AdminDashboardController extends Controller
       'is_verified' => 'boolean',
       'friend_id' => 'required|string|size:6|unique:users,friend_id,' . $user->id,
       'plan' => 'required|in:free,standard,premium',
+      'allow_re_registration' => 'boolean',
     ]);
 
     $user->update([
@@ -209,6 +210,7 @@ class AdminDashboardController extends Controller
       'is_verified' => $request->boolean('is_verified'),
       'friend_id' => strtoupper($request->friend_id),
       'plan' => $request->plan,
+      'allow_re_registration' => $request->boolean('allow_re_registration'),
     ]);
     \App\Services\OperationLogService::log('backend', 'update_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
@@ -268,19 +270,46 @@ class AdminDashboardController extends Controller
    */
   public function toggleReRegistration(Request $request, $id)
   {
-    $admin = Auth::guard('admin')->user();
-    $user = User::withTrashed()->findOrFail($id);
+    try {
+      $admin = Auth::guard('admin')->user();
 
-    $newValue = !$user->allow_re_registration;
-    $user->update(['allow_re_registration' => $newValue]);
+      if (!$admin) {
+        if ($request->ajax() || $request->wantsJson()) {
+          return response()->json(['success' => false, 'message' => '認証が必要です'], 401);
+        }
+        return redirect()->route('admin.login');
+      }
 
-    \App\Services\OperationLogService::log('backend', 'toggle_re_registration', 'admin:' . $admin->id . ' user:' . $user->id . ' value:' . ($newValue ? 'true' : 'false'));
+      $user = User::withTrashed()->findOrFail($id);
 
-    $message = $newValue
-      ? "ユーザー（ID: {$user->id}、{$user->name}）の再登録を許可しました。"
-      : "ユーザー（ID: {$user->id}、{$user->name}）の再登録を禁止しました。";
+      $newValue = !$user->allow_re_registration;
+      $user->update(['allow_re_registration' => $newValue]);
 
-    return redirect()->back()->with('success', $message);
+      \App\Services\OperationLogService::log('backend', 'toggle_re_registration', 'admin:' . $admin->id . ' user:' . $user->id . ' value:' . ($newValue ? 'true' : 'false'));
+
+      $message = $newValue
+        ? "ユーザー（ID: {$user->id}、{$user->name}）の再登録を許可しました。"
+        : "ユーザー（ID: {$user->id}、{$user->name}）の再登録を禁止しました。";
+
+      // Ajaxリクエストの場合はJSONレスポンスを返す
+      if ($request->ajax() || $request->wantsJson()) {
+        return response()->json([
+          'success' => true,
+          'message' => $message,
+          'allow_re_registration' => $newValue
+        ]);
+      }
+
+      return redirect()->back()->with('success', $message);
+    } catch (\Exception $e) {
+      \Log::error('再登録設定の切り替えでエラーが発生:', ['error' => $e->getMessage(), 'user_id' => $id]);
+
+      if ($request->ajax() || $request->wantsJson()) {
+        return response()->json(['success' => false, 'message' => '処理中にエラーが発生しました'], 500);
+      }
+
+      return redirect()->back()->with('error', '処理中にエラーが発生しました');
+    }
   }
 
   /**

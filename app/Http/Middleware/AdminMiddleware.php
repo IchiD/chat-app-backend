@@ -24,6 +24,13 @@ class AdminMiddleware
     // }
 
     if (!Auth::guard('admin')->check()) {
+      // Ajaxリクエストの場合はJSONレスポンスを返す
+      if ($request->ajax() || $request->wantsJson()) {
+        return response()->json([
+          'success' => false,
+          'message' => '認証が必要です。管理者としてログインしてください。'
+        ], 401);
+      }
       return redirect()->route('admin.login');
     }
 

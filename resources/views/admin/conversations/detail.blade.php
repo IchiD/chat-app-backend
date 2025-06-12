@@ -43,7 +43,7 @@
             </button>
           </form>
           @else
-          <button type="button" class="btn btn-sm btn-outline-light" onclick="showDeleteConversationModal()">
+          <button type="button" class="btn btn-sm btn-danger" onclick="showDeleteConversationModal()">
             <i class="fas fa-trash me-1"></i>会話を削除
           </button>
           @endif
@@ -77,24 +77,74 @@
               <div><code class="bg-light p-2 rounded">{{ $chatRoom->room_token }}</code></div>
             </div>
             <div class="mb-3">
+              <label class="form-label text-muted">チャットルーム種別</label>
+              <div>
+                @switch($chatRoom->type)
+                @case('friend_chat')
+                <span class="badge badge-friend-chat">友達チャット</span>
+                @break
+                @case('group_chat')
+                <span class="badge badge-group-chat">グループチャット</span>
+                @break
+                @case('member_chat')
+                <span class="badge badge-member-chat">メンバーチャット</span>
+                @break
+                @case('support_chat')
+                <span class="badge badge-support-chat">サポートチャット</span>
+                @break
+                @default
+                <span class="badge bg-secondary">{{ $chatRoom->type }}</span>
+                @endswitch
+              </div>
+            </div>
+            <div class="mb-3">
               <label class="form-label text-muted">作成日時</label>
               <div>{{ $chatRoom->created_at->format('Y/m/d H:i') }}</div>
             </div>
           </div>
           <div class="col-md-6">
             <div class="mb-3">
+              <label class="form-label text-muted">ルームオーナー</label>
+              <div>
+                @if($chatRoom->type === 'group_chat' && $chatRoom->group && $chatRoom->group->owner)
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-primary me-2">{{ $chatRoom->group->owner->name }}</span>
+                  <small class="text-muted">フレンドID: {{ $chatRoom->group->owner->friend_id }}</small>
+                </div>
+                @elseif($chatRoom->type === 'friend_chat' && $chatRoom->participant1)
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-info me-2">{{ $chatRoom->participant1->name }}</span>
+                  <small class="text-muted">フレンドID: {{ $chatRoom->participant1->friend_id }}</small>
+                </div>
+                @else
+                <span class="text-muted">オーナー情報なし</span>
+                @endif
+              </div>
+            </div>
+            <div class="mb-3">
               <label class="form-label text-muted">参加者</label>
               <div class="d-flex flex-wrap gap-1">
                 @if($chatRoom->type === 'friend_chat')
                 @if($chatRoom->participant1)
-                <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
+                <span class="badge bg-light text-dark border">
+                  {{ $chatRoom->participant1->name }}
+                  <small class="ms-1">({{ $chatRoom->participant1->friend_id }})</small>
+                </span>
                 @endif
                 @if($chatRoom->participant2)
-                <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
+                <span class="badge bg-light text-dark border">
+                  {{ $chatRoom->participant2->name }}
+                  <small class="ms-1">({{ $chatRoom->participant2->friend_id }})</small>
+                </span>
                 @endif
                 @elseif($chatRoom->type === 'group_chat' && $chatRoom->group)
                 @foreach($chatRoom->group->activeMembers as $member)
-                <span class="badge bg-light text-dark border">{{ $member->user->name ?? '削除されたユーザー' }}</span>
+                <span class="badge bg-light text-dark border">
+                  {{ $member->user->name ?? '削除されたユーザー' }}
+                  @if($member->user && $member->user->friend_id)
+                  <small class="ms-1">({{ $member->user->friend_id }})</small>
+                  @endif
+                </span>
                 @endforeach
                 @endif
               </div>

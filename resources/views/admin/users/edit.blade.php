@@ -166,7 +166,22 @@
               </div>
             </div>
             <div class="col-md-6">
-              <!-- 将来的に他のフィールドを追加する場合の予備スペース -->
+              <div class="mb-3">
+                <label class="form-label">再登録設定</label>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="allow_re_registration" name="allow_re_registration"
+                    value="1"
+                    {{ old('allow_re_registration', $user->allow_re_registration) ? 'checked' : '' }}
+                    {{ $user->isDeleted() ? 'disabled' : '' }}>
+                  <label class="form-check-label" for="allow_re_registration">
+                    同じメールアドレスでの再登録を許可する
+                  </label>
+                </div>
+                <div class="form-text">
+                  許可する場合、ユーザー削除時にメールアドレスが変更され、同じメールアドレスでの新規登録が可能になります。<br>
+                  禁止する場合、メールアドレスは保持され、同じメールアドレスでの新規登録はできません。
+                </div>
+              </div>
             </div>
           </div>
 
