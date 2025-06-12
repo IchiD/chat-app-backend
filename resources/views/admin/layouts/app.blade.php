@@ -242,45 +242,54 @@
     }
 
     /* ページネーション */
+    .pagination {
+      margin-bottom: 0;
+    }
+
     .pagination .page-link {
-      display: inline-block !important;
-      padding: 8px 12px !important;
-      text-decoration: none !important;
-      border: 1px solid #dee2e6 !important;
-      border-radius: 4px !important;
-      color: #495057 !important;
-      background-color: #fff !important;
-      min-width: 40px !important;
-      text-align: center !important;
-      transition: all 0.2s ease !important;
+      padding: 0.375rem 0.75rem;
+      color: #495057;
+      background-color: #fff;
+      border: 1px solid #dee2e6;
+      text-decoration: none;
+      transition: all 0.15s ease-in-out;
     }
 
     .pagination .page-item.active .page-link {
-      background-color: #3b5b7a !important;
-      border-color: #3b5b7a !important;
-      color: #fff !important;
-      font-weight: bold !important;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12) !important;
+      background-color: #3b5b7a;
+      border-color: #3b5b7a;
+      color: #fff;
+      z-index: 3;
     }
 
-    .pagination .page-link:hover:not(.active) {
-      background-color: #e9ecef !important;
-      border-color: #adb5bd !important;
-      color: #495057 !important;
+    .pagination .page-link:hover {
+      background-color: #e9ecef;
+      border-color: #adb5bd;
+      color: #495057;
+      text-decoration: none;
     }
 
     .pagination .page-item.active .page-link:hover {
-      background-color: #3b5b7a !important;
-      border-color: #3b5b7a !important;
-      color: #fff !important;
-      cursor: default !important;
+      background-color: #3b5b7a;
+      border-color: #3b5b7a;
+      color: #fff;
     }
 
     .pagination .page-item.disabled .page-link {
-      color: #adb5bd;
-      background-color: #f8f9fa;
+      color: #6c757d;
+      background-color: #fff;
       border-color: #dee2e6;
-      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .pagination .page-item:first-child .page-link {
+      border-top-left-radius: 0.375rem;
+      border-bottom-left-radius: 0.375rem;
+    }
+
+    .pagination .page-item:last-child .page-link {
+      border-top-right-radius: 0.375rem;
+      border-bottom-right-radius: 0.375rem;
     }
 
     /* レスポンシブテーブルの改善 */
