@@ -27,7 +27,7 @@ class Participant extends Model
   ];
 
   /**
-   * この参加情報が属する会話を取得
+   * この参加情報が属するチャットを取得
    */
   public function conversation(): BelongsTo
   {

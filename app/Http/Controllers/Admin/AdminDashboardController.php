@@ -313,7 +313,7 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * ユーザーの会話一覧を表示
+   * ユーザーのチャット一覧を表示
    */
   public function userConversations($id)
   {
@@ -349,7 +349,7 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * 会話詳細を表示
+   * チャット詳細を表示
    */
   public function userConversationDetail($userId, $conversationId)
   {
@@ -374,7 +374,7 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * 会話削除（論理削除）
+   * チャット削除（論理削除）
    */
   public function deleteConversation(Request $request, $userId, $conversationId)
   {
@@ -394,7 +394,7 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * 会話削除の取り消し
+   * チャット削除の取り消し
    */
   public function restoreConversation($userId, $conversationId)
   {
@@ -1304,7 +1304,7 @@ class AdminDashboardController extends Controller
     }
 
     try {
-      $group = Group::with(['owner', 'activeMembers.user'])->findOrFail($id);
+      $group = Group::with(['owner', 'activeMembers.user', 'groupMembers.user', 'groupMembers.removedByAdmin'])->findOrFail($id);
 
       \App\Services\OperationLogService::log('backend', 'view_group_detail', 'admin:' . $admin->id . ' group:' . $id);
 
@@ -1400,6 +1400,7 @@ class AdminDashboardController extends Controller
 
       $request->validate([
         'reason' => 'nullable|string|max:500',
+        'can_rejoin' => 'boolean',
       ]);
 
       // オーナーの削除は禁止
@@ -1408,9 +1409,14 @@ class AdminDashboardController extends Controller
           ->with('error', 'グループオーナーは削除できません。');
       }
 
+      $canRejoin = $request->get('can_rejoin', true); // デフォルトで再参加許可
+
       // メンバーを退会処理
       $member->update([
         'left_at' => now(),
+        'can_rejoin' => $canRejoin,
+        'removal_type' => 'kicked_by_admin',
+        'removed_by_admin_id' => $admin->id,
       ]);
 
       $reason = $request->reason ?? '管理者による削除';
@@ -1525,13 +1531,98 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * サポート会話一覧を表示
+   * グループメンバーの再参加可否を切り替え
+   */
+  public function toggleMemberRejoin(Request $request, $groupId, $memberId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      $member = $group->groupMembers()->where('user_id', $memberId)->first();
+
+      if (!$member) {
+        return redirect()->back()
+          ->with('error', 'メンバーが見つかりません。');
+      }
+
+      $request->validate([
+        'can_rejoin' => 'required|boolean',
+      ]);
+
+      $member->update(['can_rejoin' => $request->can_rejoin]);
+
+      \App\Services\OperationLogService::log('backend', 'toggle_member_rejoin', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId . ' can_rejoin:' . ($request->can_rejoin ? 'true' : 'false'));
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', '再参加設定を更新しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', '再参加設定の更新に失敗しました。');
+    }
+  }
+
+  /**
+   * 削除済みメンバーを復活
+   */
+  public function restoreMember(Request $request, $groupId, $memberId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      $member = $group->groupMembers()->where('user_id', $memberId)->first();
+
+      if (!$member) {
+        return redirect()->back()
+          ->with('error', 'メンバーが見つかりません。');
+      }
+
+      // 削除されていないメンバーかチェック
+      if ($member->left_at === null) {
+        return redirect()->back()
+          ->with('error', '削除されていないメンバーです。');
+      }
+
+      // メンバー数制限チェック
+      if (!$group->canAddMember()) {
+        return redirect()->back()
+          ->with('error', 'グループのメンバー数が上限に達しています。');
+      }
+
+      // メンバーを復活
+      $member->update([
+        'left_at' => null,
+        'joined_at' => now(),
+        'can_rejoin' => true,
+      ]);
+
+      \App\Services\OperationLogService::log('backend', 'restore_group_member', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーを復活しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'メンバー復活に失敗しました。');
+    }
+  }
+
+  /**
+   * サポートチャット一覧を表示
    */
   public function supportConversations(Request $request)
   {
     $admin = Auth::guard('admin')->user();
 
-    // サポート会話を取得（新しいChatRoomモデルを使用）
+    // サポートチャットを取得（新しいChatRoomモデルを使用）
     $query = ChatRoom::where('type', 'support_chat')
       ->with(['participant1', 'participant2', 'latestMessage.sender', 'latestMessage.chatRoom.group.groupMembers'])
       ->orderBy('updated_at', 'desc');
@@ -1552,7 +1643,7 @@ class AdminDashboardController extends Controller
     $conversations = $query->paginate(20);
     $conversations->appends($request->query());
 
-    // 各会話の未読メッセージ数を取得（AdminConversationReadモデル削除のため一時的に0を設定）
+    // 各チャットの未読メッセージ数を取得（AdminConversationReadモデル削除のため一時的に0を設定）
     $conversationsWithUnread = $conversations->through(function ($conversation) use ($admin) {
       $conversation->unread_count = 0; // TODO: 新しい未読管理システムに置き換え
       return $conversation;
@@ -1562,7 +1653,7 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * サポート会話詳細を表示
+   * サポートチャット詳細を表示
    */
   public function supportConversationDetail($conversationId)
   {
@@ -1576,14 +1667,14 @@ class AdminDashboardController extends Controller
       ->orderBy('sent_at', 'asc')
       ->get();
 
-    // 会話詳細を表示する際に自動的に既読にする（AdminConversationReadモデル削除のため無効化）
+    // チャット詳細を表示する際に自動的に既読にする（AdminConversationReadモデル削除のため無効化）
     // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
     return view('admin.support.detail', compact('admin', 'conversation', 'messages'));
   }
 
   /**
-   * サポート会話に返信
+   * サポートチャットに返信
    */
   public function replyToSupport(Request $request, $conversationId)
   {
@@ -1604,10 +1695,10 @@ class AdminDashboardController extends Controller
     ]);
     \App\Services\OperationLogService::log('backend', 'reply_support', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
-    // 管理者が返信したので、この会話を既読にする（AdminConversationReadモデル削除のため無効化）
+    // 管理者が返信したので、このチャットを既読にする（AdminConversationReadモデル削除のため無効化）
     // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
-    // 会話の更新日時を更新
+    // チャットの更新日時を更新
     $conversation->touch();
 
     return redirect()->back()->with('success', '返信を送信しました。');
@@ -1627,7 +1718,7 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * サポート会話を既読にする
+   * サポートチャットを既読にする
    */
   public function markSupportAsRead($conversationId)
   {

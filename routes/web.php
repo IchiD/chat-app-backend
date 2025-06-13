@@ -81,6 +81,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::post('groups/{groupId}/members', [AdminDashboardController::class, 'addMember'])->name('groups.members.add');
     Route::delete('groups/{groupId}/members/{memberId}', [AdminDashboardController::class, 'removeMember'])->name('groups.members.remove');
     Route::put('groups/{groupId}/members/{memberId}/role', [AdminDashboardController::class, 'updateMemberRole'])->name('groups.members.role');
+    Route::patch('groups/{groupId}/members/{memberId}/rejoin', [AdminDashboardController::class, 'toggleMemberRejoin'])->name('groups.members.rejoin');
+    Route::post('groups/{groupId}/members/{memberId}/restore', [AdminDashboardController::class, 'restoreMember'])->name('groups.members.restore');
 
     // Super Admin Only Routes
     Route::get('admins', [AdminDashboardController::class, 'admins'])->name('admins');

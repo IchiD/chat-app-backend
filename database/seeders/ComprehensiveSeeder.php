@@ -28,7 +28,7 @@ class ComprehensiveSeeder extends Seeder
     $this->command->info('3. 友達関係を作成中...');
     $this->call(FriendshipSeeder::class);
 
-    // 4. チャットルーム（会話）を作成
+    // 4. チャットルーム（チャット）を作成
     $this->command->info('4. チャットルームを作成中...');
     $this->call(ChatRoomSeeder::class);
 

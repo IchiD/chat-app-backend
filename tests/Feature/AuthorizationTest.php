@@ -113,7 +113,7 @@ class AuthorizationTest extends TestCase
     $userA->sendFriendRequest($userB->id);
     $userB->acceptFriendRequest($userA->id);
 
-    // 会話を作成
+    // チャットを作成
     $conversation = Conversation::create(['type' => 'direct']);
     $conversation->conversationParticipants()->createMany([
       ['user_id' => $userA->id],
@@ -142,7 +142,7 @@ class AuthorizationTest extends TestCase
     $userA->sendFriendRequest($userB->id);
     $userB->acceptFriendRequest($userA->id);
 
-    // 会話を作成
+    // チャットを作成
     $conversation = Conversation::create(['type' => 'direct']);
     $conversation->conversationParticipants()->createMany([
       ['user_id' => $userA->id],
@@ -237,7 +237,7 @@ class AuthorizationTest extends TestCase
 
     $response = $this->getJson('/api/conversations/token/' . $conversation->room_token);
     $response->assertStatus(403);
-    $response->assertJsonFragment(['message' => 'この会話は削除されています。']);
+    $response->assertJsonFragment(['message' => 'このチャットは削除されています。']);
   }
 
   public function test_user_cannot_send_message_to_deleted_conversation(): void
@@ -262,7 +262,7 @@ class AuthorizationTest extends TestCase
     ]);
 
     $response->assertStatus(403);
-    $response->assertJsonFragment(['message' => 'この会話は削除されています。']);
+    $response->assertJsonFragment(['message' => 'このチャットは削除されています。']);
   }
 
   public function test_token_revocation_for_deleted_user(): void

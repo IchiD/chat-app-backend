@@ -57,7 +57,7 @@ class Conversation extends Model
   }
 
   /**
-   * この会話に参加しているユーザーを取得 (Participantsテーブル経由)
+   * このチャットに参加しているユーザーを取得 (Participantsテーブル経由)
    */
   public function participants(): HasManyThrough
   {
@@ -65,7 +65,7 @@ class Conversation extends Model
   }
 
   /**
-   * この会話のParticipantレコードを取得
+   * このチャットのParticipantレコードを取得
    */
   public function conversationParticipants(): HasMany // より直接的なリレーション名
   {
@@ -73,7 +73,7 @@ class Conversation extends Model
   }
 
   /**
-   * この会話のメッセージを取得
+   * このチャットのメッセージを取得
    */
   public function messages(): HasMany
   {
@@ -81,7 +81,7 @@ class Conversation extends Model
   }
 
   /**
-   * この会話の最新メッセージを取得（削除されたメッセージは除外）
+   * このチャットの最新メッセージを取得（削除されたメッセージは除外）
    */
   public function latestMessage()
   {
@@ -100,7 +100,7 @@ class Conversation extends Model
   }
 
   /**
-   * 会話が論理削除されているかチェック
+   * チャットが論理削除されているかチェック
    */
   public function isDeleted(): bool
   {
@@ -108,7 +108,7 @@ class Conversation extends Model
   }
 
   /**
-   * 管理者による会話削除
+   * 管理者によるチャット削除
    */
   public function deleteByAdmin(?int $adminId, string $reason = null): bool
   {
@@ -120,7 +120,7 @@ class Conversation extends Model
   }
 
   /**
-   * 会話の削除を取り消し
+   * チャットの削除を取り消し
    */
   public function restoreByAdmin(): bool
   {
@@ -148,7 +148,7 @@ class Conversation extends Model
   }
 
   /**
-   * 親グループ会話を取得（group_memberタイプの場合）
+   * 親グループチャットを取得（group_memberタイプの場合）
    */
   public function parentGroupConversation()
   {

@@ -16,11 +16,16 @@ class GroupMember extends Model
     'joined_at',
     'left_at',
     'role',
+    'can_rejoin',
+    'removal_type',
+    'removed_by_user_id',
+    'removed_by_admin_id',
   ];
 
   protected $casts = [
     'joined_at' => 'datetime',
     'left_at' => 'datetime',
+    'can_rejoin' => 'boolean',
   ];
 
   /**
@@ -69,5 +74,71 @@ class GroupMember extends Model
   public function isAdmin(): bool
   {
     return $this->role === 'admin';
+  }
+
+  /**
+   * 削除実行者との関係
+   */
+  public function removedByUser()
+  {
+    return $this->belongsTo(User::class, 'removed_by_user_id');
+  }
+
+  /**
+   * 削除した管理者との関係
+   */
+  public function removedByAdmin()
+  {
+    return $this->belongsTo(Admin::class, 'removed_by_admin_id');
+  }
+
+  /**
+   * 削除済みメンバーのスコープ
+   */
+  public function scopeRemoved($query)
+  {
+    return $query->whereNotNull('left_at');
+  }
+
+  /**
+   * 再参加禁止メンバーのスコープ
+   */
+  public function scopeCannotRejoin($query)
+  {
+    return $query->where('can_rejoin', false);
+  }
+
+  /**
+   * 全メンバー（アクティブ+削除済み）のスコープ
+   */
+  public function scopeAllMembers($query)
+  {
+    return $query; // 制限なし
+  }
+
+  /**
+   * メンバーを削除（論理削除）
+   */
+  public function removeMember(string $removalType, int $removedByUserId, bool $canRejoin = true): void
+  {
+    $this->update([
+      'left_at' => now(),
+      'removal_type' => $removalType,
+      'removed_by_user_id' => $removedByUserId,
+      'can_rejoin' => $canRejoin,
+    ]);
+  }
+
+  /**
+   * メンバーを復活
+   */
+  public function restoreMember(): void
+  {
+    $this->update([
+      'left_at' => null,
+      'removal_type' => null,
+      'removed_by_user_id' => null,
+      'can_rejoin' => true,
+    ]);
   }
 }

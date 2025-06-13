@@ -289,7 +289,7 @@
         <div class="text-center py-5">
           <i class="fas fa-envelope fa-3x text-muted mb-3"></i>
           <h5 class="text-muted">メッセージがありません</h5>
-          <p class="text-muted">この会話にはまだメッセージが投稿されていません。</p>
+          <p class="text-muted">このチャットにはまだメッセージが投稿されていません。</p>
         </div>
         @endif
       </div>
@@ -297,12 +297,12 @@
   </div>
 </div>
 
-<!-- 会話削除確認モーダル -->
+<!-- チャット削除確認モーダル -->
 <div class="modal fade" id="deleteConversationModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">会話削除確認</h5>
+        <h5 class="modal-title">チャット削除確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST" action="{{ route('admin.users.conversations.delete', [$user->id, $chatRoom->id]) }}">
@@ -311,7 +311,7 @@
         <div class="modal-body">
           <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>警告:</strong> この操作により、会話が論理削除され、
+            <strong>警告:</strong> この操作により、チャットが論理削除され、
             参加者全員から見えなくなります。この操作は慎重に行ってください。
           </div>
           <div class="mb-3">

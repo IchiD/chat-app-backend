@@ -23,7 +23,7 @@
 -   `2025_06_03_100009_add_room_token_to_conversations_table.php` - ルームトークン機能追加
 -   `2025_06_03_100010_add_support_type_to_conversations_table.php` - サポートタイプ機能追加
 -   `2025_06_08_202615_add_group_fields_to_conversations_table.php` - グループフィールド追加
--   `2025_06_08_225924_add_group_conversation_id_to_conversations_table.php` - グループ会話 ID 追加
+-   `2025_06_08_225924_add_group_conversation_id_to_conversations_table.php` - グループチャット ID 追加
 -   `2025_06_08_233040_add_group_member_to_conversations_type_enum.php` - グループメンバータイプ追加
 -   `2025_06_09_160621_add_chat_styles_to_conversations_table.php` - チャットスタイル追加
 -   `2025_06_09_165724_remove_chat_style_column_from_conversations_table.php` - チャットスタイル削除
@@ -34,7 +34,7 @@
 
 ### 管理者機能関連
 
--   `2025_05_29_173305_create_admin_conversation_reads_table.php` - 管理者の会話読み取り機能
+-   `2025_05_29_173305_create_admin_conversation_reads_table.php` - 管理者のチャット読み取り機能
 
 ### その他
 

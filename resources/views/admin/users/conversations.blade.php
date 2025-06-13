@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 
-@section('title', 'ユーザー会話管理')
+@section('title', 'ユーザーチャット管理')
 
 @section('content')
 <div class="row mb-4">
@@ -8,14 +8,14 @@
     <div class="d-flex justify-content-between align-items-center">
       <div>
         <h1 class="h3 mb-0">
-          <i class="fas fa-comments me-2"></i>会話管理
+          <i class="fas fa-comments me-2"></i>チャット管理
         </h1>
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">ダッシュボード</a></li>
             <li class="breadcrumb-item"><a href="{{ route('admin.users') }}">ユーザー管理</a></li>
             <li class="breadcrumb-item"><a href="{{ route('admin.users.show', $user->id) }}">{{ $user->name }}</a></li>
-            <li class="breadcrumb-item active">会話管理</li>
+            <li class="breadcrumb-item active">チャット管理</li>
           </ol>
         </nav>
       </div>
@@ -46,7 +46,7 @@
                 </p>
               </div>
               <div class="text-end">
-                <div class="small text-muted">参加会話数</div>
+                <div class="small text-muted">参加チャット数</div>
                 <div class="h4 mb-0">{{ $chatRooms->total() }}</div>
               </div>
             </div>
@@ -57,7 +57,7 @@
   </div>
 </div>
 
-<!-- 会話一覧 -->
+<!-- チャット一覧 -->
 <div class="row">
   <div class="col-12">
     <div class="card">
@@ -222,12 +222,12 @@
   </div>
 </div>
 
-<!-- 会話削除確認モーダル -->
+<!-- チャット削除確認モーダル -->
 <div class="modal fade" id="deleteConversationModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">会話削除確認</h5>
+        <h5 class="modal-title">チャット削除確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form id="deleteConversationForm" method="POST">
@@ -236,7 +236,7 @@
         <div class="modal-body">
           <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>警告:</strong> この操作により、会話が論理削除され、
+            <strong>警告:</strong> この操作により、チャットが論理削除され、
             参加者全員から見えなくなります。この操作は慎重に行ってください。
           </div>
           <div class="mb-3">

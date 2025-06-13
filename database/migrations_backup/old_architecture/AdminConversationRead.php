@@ -30,7 +30,7 @@ class AdminConversationRead extends Model
   }
 
   /**
-   * この記録に関連する会話を取得（旧構造）
+   * この記録に関連するチャットを取得（旧構造）
    */
   public function conversation(): BelongsTo
   {
@@ -46,7 +46,7 @@ class AdminConversationRead extends Model
   }
 
   /**
-   * 指定した管理者と会話の最後読み取り時刻を更新
+   * 指定した管理者とチャットの最後読み取り時刻を更新
    * 新構造（ChatRoom）に対応したバージョン
    */
   public static function updateLastRead(int $adminId, int $chatRoomId): void
@@ -87,7 +87,7 @@ class AdminConversationRead extends Model
   }
 
   /**
-   * 指定した管理者と会話の未読メッセージ数を取得
+   * 指定した管理者とチャットの未読メッセージ数を取得
    * 新構造（ChatRoom）に対応したバージョン
    */
   public static function getConversationUnreadCount(int $adminId, int $chatRoomId): int

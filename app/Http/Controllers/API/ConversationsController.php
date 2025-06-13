@@ -19,7 +19,7 @@ use Illuminate\Validation\Rule;
 class ConversationsController extends Controller
 {
   /**
-   * ユーザーが参加している会話の一覧を取得する
+   * ユーザーが参加しているチャットの一覧を取得する
    */
   public function index(Request $request)
   {
@@ -228,7 +228,7 @@ class ConversationsController extends Controller
   }
 
   /**
-   * 新しい会話を開始する (1対1のダイレクトメッセージ)
+   * 新しいチャットを開始する (1対1のダイレクトメッセージ)
    */
   public function store(Request $request)
   {
@@ -258,7 +258,7 @@ class ConversationsController extends Controller
     // 友達関係をチェック (双方が承認済みであること)
     $friendship = Friendship::getFriendship($currentUser->id, $recipientId);
     if (!$friendship || $friendship->status !== Friendship::STATUS_ACCEPTED) {
-      return response()->json(['message' => '友達関係にないユーザーとは会話を開始できません。'], 403);
+      return response()->json(['message' => '友達関係にないユーザーとはチャットを開始できません。'], 403);
     }
 
     // 既存のチャットルームを検索（friend_chatのみ、論理削除されたものも含む）
@@ -377,12 +377,12 @@ class ConversationsController extends Controller
   }
 
   /**
-   * 特定の会話情報を取得 (オプション)
+   * 特定のチャット情報を取得 (オプション)
    */
   public function show(Conversation $conversation, Request $request)
   {
     $user = Auth::user();
-    // ユーザーがこの会話の参加者であることを確認
+    // ユーザーがこのチャットの参加者であることを確認
     if (!$conversation->participants()->where('user_id', $user->id)->exists()) {
       return response()->json(['message' => 'アクセス権がありません。'], 403);
     }
@@ -401,7 +401,7 @@ class ConversationsController extends Controller
   }
 
   /**
-   * 会話を既読にする
+   * チャットを既読にする
    */
   public function markAsRead(Conversation $conversation)
   {
@@ -412,13 +412,13 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'アカウントが削除されています。'], 403);
     }
 
-    // ユーザーがこの会話の参加者であることを確認
+    // ユーザーがこのチャットの参加者であることを確認
     $participant = $conversation->conversationParticipants()
       ->where('user_id', $user->id)
       ->first();
 
     if (!$participant) {
-      return response()->json(['message' => 'この会話の参加者ではありません。'], 403);
+      return response()->json(['message' => 'このチャットの参加者ではありません。'], 403);
     }
 
     // 最新メッセージを取得
@@ -651,7 +651,7 @@ class ConversationsController extends Controller
   }
 
   /**
-   * サポート会話を作成または取得する
+   * サポートチャットを作成または取得する
    */
   public function createSupportConversation(Request $request)
   {
@@ -736,11 +736,11 @@ class ConversationsController extends Controller
       ], 201);
     }
 
-    return response()->json(['message' => 'サポート会話の作成に失敗しました。'], 500);
+    return response()->json(['message' => 'サポートチャットの作成に失敗しました。'], 500);
   }
 
   /**
-   * ユーザーのサポート会話を取得する
+   * ユーザーのサポートチャットを取得する
    */
   public function getSupportConversation(Request $request)
   {
@@ -768,7 +768,7 @@ class ConversationsController extends Controller
       ->first();
 
     if (!$chatRoom) {
-      return response()->json(['message' => 'サポート会話が見つかりません。'], 404);
+      return response()->json(['message' => 'サポートチャットが見つかりません。'], 404);
     }
 
     return response()->json([
@@ -792,7 +792,7 @@ class ConversationsController extends Controller
   }
 
   /**
-   * 新しいグループ会話を作成
+   * 新しいグループチャットを作成
    */
   public function createGroup(Request $request)
   {
@@ -992,6 +992,17 @@ class ConversationsController extends Controller
       return response()->json(['message' => '既に参加しています'], 422);
     }
 
+    // 再参加禁止のチェック
+    $existingMember = GroupMember::where('group_id', $group->id)
+      ->where('user_id', $targetUser->id)
+      ->whereNotNull('left_at')
+      ->where('can_rejoin', false)
+      ->first();
+
+    if ($existingMember) {
+      return response()->json(['message' => 'このユーザーはグループへの再参加が禁止されています'], 422);
+    }
+
     $result = DB::transaction(function () use ($group, $groupChatRoom, $targetUser, $user) {
       // 論理削除されたメンバーレコードがあるかチェック
       $existingMember = GroupMember::where('group_id', $group->id)
@@ -1075,7 +1086,7 @@ class ConversationsController extends Controller
   /**
    * グループからメンバーを削除（新アーキテクチャ対応）
    */
-  public function removeGroupMember(Group $group, GroupMember $groupMember)
+  public function removeGroupMember(Group $group, GroupMember $groupMember, Request $request)
   {
     $user = Auth::user();
 
@@ -1094,10 +1105,24 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'オーナーは削除できません'], 422);
     }
 
-    // 退出時刻を設定（論理削除）
-    $groupMember->update(['left_at' => now()]);
+    // 既に削除されているメンバーかチェック
+    if ($groupMember->left_at !== null) {
+      return response()->json(['message' => '既に削除されているメンバーです'], 422);
+    }
 
-    return response()->json(['message' => 'メンバーが削除されました']);
+    $request->validate([
+      'can_rejoin' => 'boolean',
+    ]);
+
+    $canRejoin = $request->get('can_rejoin', true);
+
+    // メンバーを削除（論理削除）
+    $groupMember->removeMember('kicked_by_owner', $user->id, $canRejoin);
+
+    return response()->json([
+      'message' => 'メンバーが削除されました',
+      'can_rejoin' => $canRejoin
+    ]);
   }
 
   /**
@@ -1157,6 +1182,17 @@ class ConversationsController extends Controller
       return response()->json(['message' => '既に参加しています'], 422);
     }
 
+    // 再参加禁止のチェック
+    $existingMember = GroupMember::where('group_id', $group->id)
+      ->where('user_id', $user->id)
+      ->whereNotNull('left_at')
+      ->where('can_rejoin', false)
+      ->first();
+
+    if ($existingMember) {
+      return response()->json(['message' => 'このグループへの再参加が禁止されています'], 422);
+    }
+
     $result = DB::transaction(function () use ($group, $groupChatRoom, $user) {
       // 論理削除されたメンバーレコードがあるかチェック
       $existingMember = GroupMember::where('group_id', $group->id)
@@ -1193,7 +1229,7 @@ class ConversationsController extends Controller
   }
 
   /**
-   * グループメンバー一覧を取得
+   * グループメンバー一覧を取得（アクティブメンバーのみ）
    */
   public function getGroupMembers(Group $group)
   {
@@ -1220,6 +1256,107 @@ class ConversationsController extends Controller
       });
 
     return response()->json($members);
+  }
+
+  /**
+   * グループの全メンバー一覧を取得（削除済み含む）- オーナー専用
+   */
+  public function getAllGroupMembers(Group $group)
+  {
+    $user = Auth::user();
+
+    // オーナーかチェック
+    if ($group->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    $members = $group->groupMembers()
+      ->with(['user:id,name,friend_id', 'removedByUser:id,name'])
+      ->where('user_id', '!=', $user->id) // 自分以外のメンバー
+      ->get()
+      ->map(function ($groupMember) use ($group) {
+        return [
+          'id' => $groupMember->user->id,
+          'member_id' => $groupMember->id, // GroupMemberのID
+          'name' => $groupMember->user->name,
+          'friend_id' => $groupMember->user->friend_id,
+          'group_member_label' => $group->name . 'メンバー',
+          'role' => $groupMember->role,
+          'joined_at' => $groupMember->joined_at,
+          'left_at' => $groupMember->left_at,
+          'can_rejoin' => $groupMember->can_rejoin,
+          'removal_type' => $groupMember->removal_type,
+          'removed_by_user' => $groupMember->removedByUser ? [
+            'id' => $groupMember->removedByUser->id,
+            'name' => $groupMember->removedByUser->name,
+          ] : null,
+          'is_active' => $groupMember->left_at === null,
+        ];
+      });
+
+    return response()->json($members);
+  }
+
+  /**
+   * メンバーの再参加可否を切り替え（オーナー専用）
+   */
+  public function toggleMemberRejoin(Group $group, GroupMember $groupMember, Request $request)
+  {
+    $user = Auth::user();
+
+    // オーナーかチェック
+    if ($group->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    // メンバーがこのグループに属しているかチェック
+    if ($groupMember->group_id !== $group->id) {
+      return response()->json(['message' => '無効なメンバーです'], 422);
+    }
+
+    $request->validate([
+      'can_rejoin' => 'required|boolean',
+    ]);
+
+    $groupMember->update(['can_rejoin' => $request->can_rejoin]);
+
+    return response()->json([
+      'message' => '再参加設定を更新しました',
+      'can_rejoin' => $request->can_rejoin
+    ]);
+  }
+
+  /**
+   * 削除済みメンバーを復活（オーナー専用）
+   */
+  public function restoreGroupMember(Group $group, GroupMember $groupMember)
+  {
+    $user = Auth::user();
+
+    // オーナーかチェック
+    if ($group->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    // メンバーがこのグループに属しているかチェック
+    if ($groupMember->group_id !== $group->id) {
+      return response()->json(['message' => '無効なメンバーです'], 422);
+    }
+
+    // 削除されていないメンバーかチェック
+    if ($groupMember->left_at === null) {
+      return response()->json(['message' => '削除されていないメンバーです'], 422);
+    }
+
+    // メンバー数制限チェック
+    if (!$group->canAddMember()) {
+      return response()->json(['message' => 'グループのメンバー数が上限に達しています'], 422);
+    }
+
+    // メンバーを復活
+    $groupMember->restoreMember();
+
+    return response()->json(['message' => 'メンバーを復活しました']);
   }
 
   /**

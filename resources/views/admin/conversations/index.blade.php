@@ -201,7 +201,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">会話削除確認</h5>
+        <h5 class="modal-title">チャット削除確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form id="deleteConversationForm" method="POST">
@@ -210,7 +210,7 @@
         <div class="modal-body">
           <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>警告:</strong> この操作により、会話が論理削除されます。
+            <strong>警告:</strong> この操作により、チャットが論理削除されます。
           </div>
           <div class="mb-3">
             <label for="deleteConversationReason" class="form-label">削除理由</label>

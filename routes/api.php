@@ -82,11 +82,11 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::delete('/requests/cancel/{requestId}', [FriendshipController::class, 'cancelSentRequest']);
   });
 
-  // チャット機能のAPI (会話とメッセージ)
+  // チャット機能のAPI (チャットとメッセージ)
   Route::prefix('conversations')->controller(ConversationsController::class)->group(function () {
-    Route::get('/', 'index'); // ユーザーの会話一覧
-    Route::post('/', 'store'); // 新規会話開始
-    Route::get('/token/{room_token}', 'showByToken'); // トークンで特定の会話情報を取得
+    Route::get('/', 'index'); // ユーザーのチャット一覧
+    Route::post('/', 'store'); // 新規チャット開始
+    Route::get('/token/{room_token}', 'showByToken'); // トークンで特定のチャット情報を取得
     Route::post('/room/{chatRoom}/read', 'markAsReadByRoomId'); // チャットルームIDでの既読処理
 
     // グループ管理
@@ -97,14 +97,19 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
       Route::put('/{group}', 'updateGroup'); // グループ更新
       Route::delete('/{group}', 'destroyGroup'); // グループ削除
       Route::post('/{group}/members', 'addGroupMember'); // メンバー追加
-      Route::delete('/{group}/members/{participant}', 'removeGroupMember'); // メンバー削除
+      Route::delete('/{group}/members/{groupMember}', 'removeGroupMember'); // メンバー削除
       Route::get('/{group}/qr-code', 'getGroupQrCode'); // QRコード取得
       Route::post('/{group}/qr-code/regenerate', 'regenerateGroupQrCode'); // QRコード再生成
 
       // グループメンバー間チャット機能
       Route::get('/{group}/members', 'getGroupMembers'); // グループメンバー一覧
+      Route::get('/{group}/members/all', 'getAllGroupMembers'); // 全メンバー一覧（削除済み含む）- オーナー専用
       Route::post('/{group}/member-chat', 'getOrCreateMemberChat'); // メンバー間チャット取得/作成
       Route::post('/{group}/messages/bulk', 'sendBulkMessageToMembers'); // メンバーに一斉送信
+
+      // メンバー管理
+      Route::patch('/{group}/members/{groupMember}/rejoin', 'toggleMemberRejoin'); // 再参加可否切り替え
+      Route::post('/{group}/members/{groupMember}/restore', 'restoreGroupMember'); // メンバー復活
     });
 
     // 特定のチャットルームのメッセージ関連 (room_token を使用)
@@ -131,8 +136,8 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
 
   // お問い合わせ機能
   Route::prefix('support')->group(function () {
-    Route::post('/conversation', [ConversationsController::class, 'createSupportConversation']); // サポート会話の作成
-    Route::get('/conversation', [ConversationsController::class, 'getSupportConversation']); // サポート会話の取得
+    Route::post('/conversation', [ConversationsController::class, 'createSupportConversation']); // サポートチャットの作成
+    Route::get('/conversation', [ConversationsController::class, 'getSupportConversation']); // サポートチャットの取得
   });
 });
 

@@ -114,6 +114,59 @@
         </table>
       </div>
     </div>
+
+    <!-- 削除済みメンバーセクション -->
+    @php
+    $deletedMembers = $group->groupMembers->where('left_at', '!=', null);
+    @endphp
+    @if($deletedMembers->count() > 0)
+    <div class="card mb-3">
+      <div class="card-header">
+        <span>削除済みメンバー ({{ $deletedMembers->count() }}名)</span>
+      </div>
+      <div class="card-body p-0">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th style="width: 60px;">ID</th>
+              <th>名前</th>
+              <th>削除日</th>
+              <th>削除者</th>
+              <th>再参加可否</th>
+              <th style="width: 150px;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach($deletedMembers as $member)
+            <tr class="table-secondary">
+              <td>#{{ $member->user_id }}</td>
+              <td>{{ $member->user->name ?? '-' }}</td>
+              <td>{{ optional($member->left_at)->format('Y/m/d H:i') }}</td>
+              <td>{{ $member->removedByAdmin->name ?? '不明' }}</td>
+              <td>
+                @if($member->can_rejoin)
+                <span class="badge bg-success">許可</span>
+                @else
+                <span class="badge bg-danger">禁止</span>
+                @endif
+              </td>
+              <td>
+                <div class="btn-group" role="group">
+                  <button type="button" class="btn btn-sm btn-outline-primary" onclick="showToggleRejoinModal({{ $member->user_id }}, {{ $member->can_rejoin ? 'true' : 'false' }}, '{{ addslashes($member->user->name ?? 'ユーザー') }}')">
+                    <i class="fas fa-toggle-on"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-success" onclick="showRestoreMemberModal({{ $member->user_id }}, '{{ addslashes($member->user->name ?? 'ユーザー') }}')">
+                    <i class="fas fa-undo"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+    </div>
+    @endif
   </div>
 </div>
 
@@ -171,6 +224,21 @@
             <label for="removeReason" class="form-label">削除理由</label>
             <textarea class="form-control" id="removeReason" name="reason" rows="3" placeholder="削除理由を入力してください"></textarea>
           </div>
+          <div class="mb-3">
+            <label class="form-label">再参加可否</label>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="can_rejoin" id="canRejoinTrue" value="1" checked>
+              <label class="form-check-label" for="canRejoinTrue">
+                再参加を許可する
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="can_rejoin" id="canRejoinFalse" value="0">
+              <label class="form-check-label" for="canRejoinFalse">
+                再参加を禁止する
+              </label>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
@@ -211,6 +279,70 @@
   </div>
 </div>
 
+<!-- 再参加可否切り替えモーダル -->
+<div class="modal fade" id="toggleRejoinModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">再参加可否変更</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="toggleRejoinForm" method="POST">
+        @csrf
+        @method('PATCH')
+        <div class="modal-body">
+          <p id="toggleRejoinMessage"></p>
+          <div class="mb-3">
+            <label class="form-label">新しい設定</label>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="can_rejoin" id="newCanRejoinTrue" value="1">
+              <label class="form-check-label" for="newCanRejoinTrue">
+                再参加を許可する
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="can_rejoin" id="newCanRejoinFalse" value="0">
+              <label class="form-check-label" for="newCanRejoinFalse">
+                再参加を禁止する
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-primary">変更</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- メンバー復活モーダル -->
+<div class="modal fade" id="restoreMemberModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">メンバー復活確認</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="restoreMemberForm" method="POST">
+        @csrf
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>注意:</strong> この操作により、削除済みメンバーが復活します。
+          </div>
+          <p id="restoreMemberMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-success">復活する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
   function showAddMemberModal() {
     new bootstrap.Modal(document.getElementById('addMemberModal')).show();
@@ -242,6 +374,36 @@
     form.action = `{{ route('admin.groups.members.role', ['groupId' => $group->id, 'memberId' => '__USER_ID__']) }}`.replace('__USER_ID__', userId);
     message.textContent = `「${userName}」の役割を変更します。現在の役割: ${currentRole}`;
     roleSelect.value = currentRole;
+
+    new bootstrap.Modal(modal).show();
+  }
+
+  function showToggleRejoinModal(userId, currentCanRejoin, userName) {
+    const modal = document.getElementById('toggleRejoinModal');
+    const form = document.getElementById('toggleRejoinForm');
+    const message = document.getElementById('toggleRejoinMessage');
+    const rejoinTrue = document.getElementById('newCanRejoinTrue');
+    const rejoinFalse = document.getElementById('newCanRejoinFalse');
+
+    form.action = `{{ route('admin.groups.members.rejoin', ['groupId' => $group->id, 'memberId' => '__USER_ID__']) }}`.replace('__USER_ID__', userId);
+    message.textContent = `「${userName}」の再参加可否を変更します。現在の設定: ${currentCanRejoin ? '許可' : '禁止'}`;
+
+    if (currentCanRejoin) {
+      rejoinFalse.checked = true;
+    } else {
+      rejoinTrue.checked = true;
+    }
+
+    new bootstrap.Modal(modal).show();
+  }
+
+  function showRestoreMemberModal(userId, userName) {
+    const modal = document.getElementById('restoreMemberModal');
+    const form = document.getElementById('restoreMemberForm');
+    const message = document.getElementById('restoreMemberMessage');
+
+    form.action = `{{ route('admin.groups.members.restore', ['groupId' => $group->id, 'memberId' => '__USER_ID__']) }}`.replace('__USER_ID__', userId);
+    message.textContent = `「${userName}」を復活させますか？`;
 
     new bootstrap.Modal(modal).show();
   }

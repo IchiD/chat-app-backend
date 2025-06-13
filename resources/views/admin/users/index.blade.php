@@ -178,7 +178,7 @@
                       </li>
                       <li>
                         <a class="dropdown-item" href="{{ route('admin.users.conversations', $user->id) }}">
-                          <i class="fas fa-comments me-2"></i>会話管理
+                          <i class="fas fa-comments me-2"></i>チャット管理
                         </a>
                       </li>
                       <li>

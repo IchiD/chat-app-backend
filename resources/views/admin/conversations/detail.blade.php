@@ -33,18 +33,18 @@
       <div class="card-header {{ $chatRoom->isDeleted() ? 'bg-danger text-white' : '' }}">
         <div class="d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">
-            <i class="fas fa-info-circle me-2"></i>会話情報
+            <i class="fas fa-info-circle me-2"></i>チャット情報
           </h5>
           @if($chatRoom->isDeleted())
           <form method="POST" action="{{ route('admin.conversations.restore', $chatRoom->id) }}" class="d-inline">
             @csrf
-            <button type="submit" class="btn btn-sm btn-outline-light" onclick="return confirm('この会話の削除を取り消しますか？')">
+            <button type="submit" class="btn btn-sm btn-outline-light" onclick="return confirm('このチャットの削除を取り消しますか？')">
               <i class="fas fa-undo me-1"></i>削除を取り消し
             </button>
           </form>
           @else
           <button type="button" class="btn btn-sm btn-danger" onclick="showDeleteConversationModal()">
-            <i class="fas fa-trash me-1"></i>会話を削除
+            <i class="fas fa-trash me-1"></i>チャットを削除
           </button>
           @endif
         </div>
@@ -53,7 +53,7 @@
         @if($chatRoom->isDeleted())
         <div class="alert alert-danger mb-3">
           <i class="fas fa-exclamation-triangle me-2"></i>
-          <strong>この会話は削除されています</strong>
+          <strong>このチャットは削除されています</strong>
           <div class="mt-2">
             <strong>削除日時:</strong> {{ $chatRoom->deleted_at->format('Y/m/d H:i') }}<br>
             @if($chatRoom->deletedByAdmin)
@@ -69,7 +69,7 @@
         <div class="row">
           <div class="col-md-6">
             <div class="mb-3">
-              <label class="form-label text-muted">会話ID</label>
+              <label class="form-label text-muted">チャットID</label>
               <div class="fw-bold">#{{ $chatRoom->id }}</div>
             </div>
             <div class="mb-3">
@@ -232,7 +232,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">会話削除確認</h5>
+        <h5 class="modal-title">チャット削除確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST" action="{{ route('admin.conversations.delete', $chatRoom->id) }}">
@@ -241,7 +241,7 @@
         <div class="modal-body">
           <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>警告:</strong> この操作により、会話が論理削除されます。
+            <strong>警告:</strong> この操作により、チャットが論理削除されます。
           </div>
           <div class="mb-3">
             <label for="deleteConversationReason" class="form-label">削除理由</label>

@@ -24,7 +24,7 @@
           <i class="fas fa-edit me-1"></i>編集
         </a>
         <a href="{{ route('admin.users.conversations', $user->id) }}" class="btn btn-outline-primary">
-          <i class="fas fa-comments me-1"></i>会話管理
+          <i class="fas fa-comments me-1"></i>チャット管理
         </a>
         @else
         <form method="POST" action="{{ route('admin.users.restore', $user->id) }}" class="d-inline">
@@ -348,7 +348,7 @@
               <tr>
                 <th>メッセージID</th>
                 <th>内容</th>
-                <th>会話</th>
+                <th>チャット</th>
                 <th>送信日時</th>
                 <th>状態</th>
               </tr>

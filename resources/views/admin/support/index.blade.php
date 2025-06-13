@@ -33,10 +33,10 @@
         </div>
       </div>
 
-      <!-- サポート会話リスト -->
+      <!-- サポートチャットリスト -->
       <div class="card">
         <div class="card-header">
-          <h5 class="card-title mb-0">サポート会話一覧 ({{ $conversations->total() }}件)</h5>
+          <h5 class="card-title mb-0">サポートチャット一覧 ({{ $conversations->total() }}件)</h5>
         </div>
         <div class="card-body">
           @if($conversations->count() > 0)

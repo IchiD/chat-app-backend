@@ -35,7 +35,7 @@ class IntegrationTest extends TestCase
     ]);
     $token1 = $login1->json('access_token');
 
-    // 会話を作成
+    // チャットを作成
     $conversation = $this->withHeader('Authorization', 'Bearer ' . $token1)
       ->postJson('/api/conversations', ['recipient_id' => $user2->id])
       ->assertCreated()
