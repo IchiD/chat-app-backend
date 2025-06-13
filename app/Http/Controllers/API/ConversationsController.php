@@ -940,7 +940,19 @@ class ConversationsController extends Controller
   public function addGroupMember(Group $group, Request $request)
   {
     $request->validate([
-      'friend_id' => 'required|string|exists:users,friend_id',
+      'friend_id' => [
+        'required',
+        'string',
+        'size:6',
+        Rule::exists('users', 'friend_id')->where(function ($query) {
+          $query->whereNull('deleted_at')->where('is_banned', false);
+        }),
+      ],
+    ], [
+      'friend_id.required' => 'フレンドIDは必須です',
+      'friend_id.string' => 'フレンドIDは文字列である必要があります',
+      'friend_id.size' => 'フレンドIDは6文字である必要があります',
+      'friend_id.exists' => '指定されたフレンドIDのユーザーが見つからないか、削除・バンされています',
     ]);
 
     $user = Auth::user();
@@ -950,10 +962,18 @@ class ConversationsController extends Controller
       return response()->json(['message' => __('errors.forbidden')], 403);
     }
 
-    // friend_idからユーザーを取得
-    $targetUser = User::where('friend_id', $request->friend_id)->first();
+    // friend_idからユーザーを取得（削除・バンされていないユーザーのみ）
+    $targetUser = User::where('friend_id', $request->friend_id)
+      ->whereNull('deleted_at')
+      ->where('is_banned', false)
+      ->first();
     if (!$targetUser) {
-      return response()->json(['message' => 'ユーザーが見つかりません'], 404);
+      return response()->json(['message' => '指定されたフレンドIDのユーザーが見つからないか、削除・バンされています'], 404);
+    }
+
+    // 自分自身を追加しようとしていないかチェック
+    if ($targetUser->id === $user->id) {
+      return response()->json(['message' => '自分自身をグループに追加することはできません'], 422);
     }
 
     // グループチャットルームを取得
@@ -967,19 +987,34 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'メンバー数が上限に達しています'], 422);
     }
 
-    // 既に参加しているかチェック
+    // 既に参加しているかチェック（アクティブなメンバーのみ）
     if ($group->hasMember($targetUser->id)) {
       return response()->json(['message' => '既に参加しています'], 422);
     }
 
     $result = DB::transaction(function () use ($group, $groupChatRoom, $targetUser, $user) {
-      // グループメンバーとして追加
-      $groupMember = GroupMember::create([
-        'group_id' => $group->id,
-        'user_id' => $targetUser->id,
-        'joined_at' => now(),
-        'role' => 'member',
-      ]);
+      // 論理削除されたメンバーレコードがあるかチェック
+      $existingMember = GroupMember::where('group_id', $group->id)
+        ->where('user_id', $targetUser->id)
+        ->first();
+
+      if ($existingMember) {
+        // 既存のメンバーレコードを復活
+        $existingMember->update([
+          'left_at' => null,
+          'joined_at' => now(),
+          'role' => 'member',
+        ]);
+        $groupMember = $existingMember;
+      } else {
+        // 新しいメンバーレコードを作成
+        $groupMember = GroupMember::create([
+          'group_id' => $group->id,
+          'user_id' => $targetUser->id,
+          'joined_at' => now(),
+          'role' => 'member',
+        ]);
+      }
 
       // group_memberスタイルが選択されている場合、作成者との個別チャットを作成
       if ($group->hasMemberChat()) {
@@ -1123,13 +1158,28 @@ class ConversationsController extends Controller
     }
 
     $result = DB::transaction(function () use ($group, $groupChatRoom, $user) {
-      // グループメンバーとして追加
-      $groupMember = GroupMember::create([
-        'group_id' => $group->id,
-        'user_id' => $user->id,
-        'joined_at' => now(),
-        'role' => 'member',
-      ]);
+      // 論理削除されたメンバーレコードがあるかチェック
+      $existingMember = GroupMember::where('group_id', $group->id)
+        ->where('user_id', $user->id)
+        ->first();
+
+      if ($existingMember) {
+        // 既存のメンバーレコードを復活
+        $existingMember->update([
+          'left_at' => null,
+          'joined_at' => now(),
+          'role' => 'member',
+        ]);
+        $groupMember = $existingMember;
+      } else {
+        // 新しいメンバーレコードを作成
+        $groupMember = GroupMember::create([
+          'group_id' => $group->id,
+          'user_id' => $user->id,
+          'joined_at' => now(),
+          'role' => 'member',
+        ]);
+      }
 
       // group_memberスタイルが選択されている場合、作成者との個別チャットを作成
       if ($group->hasMemberChat()) {
