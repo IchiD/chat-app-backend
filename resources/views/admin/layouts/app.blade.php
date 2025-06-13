@@ -230,6 +230,25 @@
       padding: 0.75rem 0.5rem;
     }
 
+    /* メッセージ内容の改行設定 */
+    .message-content,
+    .message-content div,
+    .text-truncate {
+      word-break: break-all;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
+    }
+
+    /* 一般的なメッセージ表示エリアにも適用 */
+    .message-item .message-content,
+    .message-bubble .message-content,
+    .alert .text-muted {
+      word-break: break-all;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
     /* IDバッジ */
     .id-badge {
       color: #c0392b;

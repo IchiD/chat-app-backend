@@ -293,7 +293,7 @@
                 </td>
                 <td>
                   @if($chatRoom->latestMessage)
-                  <small class="text-truncate d-inline-block" style="max-width: 200px;">
+                  <small class="text-truncate d-inline-block message-content" style="max-width: 200px;">
                     {{ $chatRoom->latestMessage->text_content }}
                   </small>
                   @else
@@ -360,7 +360,7 @@
                   <span class="text-primary">#{{ $message->id }}</span>
                 </td>
                 <td>
-                  <div class="text-truncate" style="max-width: 300px;">
+                  <div class="text-truncate message-content" style="max-width: 300px;">
                     {{ $message->text_content }}
                   </div>
                 </td>

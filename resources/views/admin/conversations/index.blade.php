@@ -126,7 +126,7 @@
                 </td>
                 <td>
                   @if($chatRoom->latestMessage)
-                  <div class="text-truncate" style="max-width: 200px;">
+                  <div class="text-truncate message-content" style="max-width: 200px;">
                     <strong>{{ $chatRoom->latestMessage->getSenderDisplayName() }}:</strong>
                     {{ $chatRoom->latestMessage->text_content }}
                   </div>

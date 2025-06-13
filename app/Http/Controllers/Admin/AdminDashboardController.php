@@ -141,7 +141,7 @@ class AdminDashboardController extends Controller
       'total_chat_rooms' => $user->getChatRooms()->count(),
       'total_messages' => $user->messages()->count(),
       'friends_count' => $user->friends()->count(),
-      'last_login' => null, // TODO: ログイン履歴があれば追加
+      'last_login' => $user->last_login_at ? $user->last_login_at->format('Y/m/d H:i') : null,
     ];
 
     // ユーザーが参加しているチャットルームを取得（最新5件、論理削除されたものも含む）

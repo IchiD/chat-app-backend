@@ -73,7 +73,7 @@
                     @if($conversation->latestMessage)
                     <div class="d-flex justify-content-between align-items-center">
                       <div>
-                        <div class="text-muted small">
+                        <div class="text-muted small message-content">
                           {{ $conversation->latestMessage->text_content }}
                         </div>
                         <div class="text-muted small">

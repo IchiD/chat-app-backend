@@ -43,6 +43,7 @@ class User extends Authenticatable
     'email_verification_token',
     'token_expires_at',
     'email_verified_at',
+    'last_login_at',
     'friend_id',
     'new_email',
     'email_change_token',
@@ -76,6 +77,7 @@ class User extends Authenticatable
   {
     return [
       'email_verified_at' => 'datetime',
+      'last_login_at' => 'datetime',
       'deleted_at' => 'datetime',
       'is_banned' => 'boolean',
       'allow_re_registration' => 'boolean',

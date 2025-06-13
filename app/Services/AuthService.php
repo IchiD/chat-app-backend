@@ -192,6 +192,7 @@ class AuthService extends BaseService
     $user->update([
       'is_verified'       => true,
       'email_verified_at' => Carbon::now(),
+      'last_login_at'     => Carbon::now(),
     ]);
 
     // Sanctum を利用してアクセストークンを発行
@@ -276,6 +277,11 @@ class AuthService extends BaseService
       $tokenResult = $user->createToken('authToken');
       $tokenResult->accessToken->update([
         'expires_at' => Carbon::now()->addDay(),
+      ]);
+
+      // 最終ログイン日時を更新
+      $user->update([
+        'last_login_at' => Carbon::now(),
       ]);
 
       Log::info('ログイン成功', ['user_id' => $user->id, 'email' => $email, 'ip' => $ip]);
