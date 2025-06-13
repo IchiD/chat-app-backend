@@ -261,7 +261,7 @@ class ConversationsController extends Controller
       return response()->json(['message' => '友達関係にないユーザーとは会話を開始できません。'], 403);
     }
 
-    // 既存のチャットルームを検索（friend_chatのみ）
+    // 既存のチャットルームを検索（friend_chatのみ、論理削除されたものも含む）
     $existingChatRoom = ChatRoom::where('type', 'friend_chat')
       ->where(function ($query) use ($currentUser, $recipientId) {
         $query->where(function ($q) use ($currentUser, $recipientId) {
@@ -272,6 +272,7 @@ class ConversationsController extends Controller
             ->where('participant2_id', $currentUser->id);
         });
       })
+      ->withTrashed() // 論理削除されたものも含める
       ->with([
         'participant1' => function ($query) {
           $query->select('id', 'name', 'friend_id', 'deleted_at');
@@ -291,6 +292,7 @@ class ConversationsController extends Controller
 
     if ($existingChatRoom) {
       // 既存のチャットルームがあればそれを返す（friend_chatのみ）
+      // 論理削除されている場合でも復活はせず、そのまま返す
       $otherParticipant = $existingChatRoom->participant1_id === $currentUser->id
         ? $existingChatRoom->participant2
         : $existingChatRoom->participant1;

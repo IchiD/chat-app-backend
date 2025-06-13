@@ -564,15 +564,13 @@ class FriendshipController extends Controller
       $existingFriendChat = \App\Models\ChatRoom::getFriendChat($userId1, $userId2);
 
       if ($existingFriendChat) {
-        // 論理削除されている場合は復活させる
-        if ($existingFriendChat->trashed()) {
-          $existingFriendChat->restoreByFriendshipRestore();
-          Log::info('友達関係復活により、friend_chatを復活', [
-            'chat_room_id' => $existingFriendChat->id,
-            'user_id1' => $userId1,
-            'user_id2' => $userId2
-          ]);
-        }
+        // 既存のfriend_chatがある場合は何もしない（復活はしない）
+        Log::info('既存のfriend_chatが見つかりました（復活はしません）', [
+          'chat_room_id' => $existingFriendChat->id,
+          'user_id1' => $userId1,
+          'user_id2' => $userId2,
+          'is_deleted' => $existingFriendChat->trashed()
+        ]);
       } else {
         // friend_chatを新規作成
         \Illuminate\Support\Facades\DB::transaction(function () use ($userId1, $userId2) {

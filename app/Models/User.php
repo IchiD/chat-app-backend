@@ -332,11 +332,8 @@ class User extends Authenticatable
         'user:' . $this->id . ' friend:' . $userId
       );
 
-      // 友達関係復活時に、以前削除された友達チャットがあれば復活させる
-      $friendChat = ChatRoom::getFriendChat($this->id, $userId);
-      if ($friendChat && $friendChat->trashed()) {
-        $friendChat->restoreByFriendshipRestore();
-      }
+      // 友達関係復活時でも、削除された友達チャットは復活させない
+      // 必要に応じて新しいチャットが作成される
     }
 
     return $saved;
