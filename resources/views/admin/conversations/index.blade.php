@@ -146,25 +146,43 @@
                 </td>
                 <td><span class="badge badge-count">{{ $chatRoom->messages_count ?? 0 }}</span></td>
                 <td>
-                  <div class="btn-group" role="group">
-                    <a href="{{ route('admin.conversations.detail', $chatRoom->id) }}" class="btn btn-sm btn-outline-primary" title="詳細を見る">
-                      <i class="fas fa-eye"></i>
-                    </a>
-                    @if($chatRoom->trashed())
-                    <form method="POST" action="{{ route('admin.conversations.restore', $chatRoom->id) }}" class="d-inline">
-                      @csrf
-                      <button type="submit"
-                        class="btn btn-sm btn-outline-success"
-                        title="削除を取り消し"
-                        onclick="return confirm('このチャットルームの削除を取り消しますか？')">
-                        <i class="fas fa-undo"></i>
-                      </button>
-                    </form>
-                    @else
-                    <button type="button" class="btn btn-sm btn-outline-danger" title="チャットルームを削除" onclick="showDeleteConversationModal({{ $chatRoom->id }})">
-                      <i class="fas fa-trash"></i>
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                      type="button"
+                      data-bs-toggle="dropdown">
+                      <i class="fas fa-ellipsis-v"></i>
                     </button>
-                    @endif
+                    <ul class="dropdown-menu">
+                      <li>
+                        <a class="dropdown-item" href="{{ route('admin.conversations.detail', $chatRoom->id) }}">
+                          <i class="fas fa-eye me-2"></i>詳細を見る
+                        </a>
+                      </li>
+                      @if($chatRoom->trashed())
+                      <li>
+                        <hr class="dropdown-divider">
+                      </li>
+                      <li>
+                        <form method="POST" action="{{ route('admin.conversations.restore', $chatRoom->id) }}" class="d-inline">
+                          @csrf
+                          <button type="submit" class="dropdown-item text-success"
+                            onclick="return confirm('このチャットルームの削除を取り消しますか？')">
+                            <i class="fas fa-undo me-2"></i>削除を取り消し
+                          </button>
+                        </form>
+                      </li>
+                      @else
+                      <li>
+                        <hr class="dropdown-divider">
+                      </li>
+                      <li>
+                        <a class="dropdown-item text-danger" href="#"
+                          onclick="showDeleteConversationModal({{ $chatRoom->id }})">
+                          <i class="fas fa-trash me-2"></i>削除
+                        </a>
+                      </li>
+                      @endif
+                    </ul>
                   </div>
                 </td>
               </tr>

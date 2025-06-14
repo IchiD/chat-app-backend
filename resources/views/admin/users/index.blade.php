@@ -192,6 +192,19 @@
                       </li>
                       @else
                       <li>
+                        <a class="dropdown-item" href="{{ route('admin.users.edit', $user->id) }}">
+                          <i class="fas fa-edit me-2"></i>編集
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" href="{{ route('admin.users.conversations', $user->id) }}">
+                          <i class="fas fa-comments me-2"></i>チャット管理
+                        </a>
+                      </li>
+                      <li>
+                        <hr class="dropdown-divider">
+                      </li>
+                      <li>
                         <form method="POST" action="{{ route('admin.users.restore', $user->id) }}" class="d-inline">
                           @csrf
                           <button type="submit" class="dropdown-item text-success"
@@ -243,10 +256,10 @@
         @csrf
         @method('DELETE')
         <div class="modal-body">
-          <div class="alert alert-warning">
-            <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>警告:</strong> この操作により、ユーザー「<span id="deleteUserName"></span>」が論理削除され、
-            同じメールアドレスでの再登録ができなくなります。
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>確認:</strong> ユーザー「<span id="deleteUserName"></span>」を削除します。<br>
+            <small class="text-muted">※ 論理削除のため、後から復元することができます。削除後は同じメールアドレスでの再登録ができなくなります。</small>
           </div>
           <div class="mb-3">
             <label for="deleteReason" class="form-label">削除理由</label>

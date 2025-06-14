@@ -68,9 +68,25 @@
                 <td>{{ $group->members_count }}</td>
                 <td>{{ $group->created_at->format('Y/m/d') }}</td>
                 <td>
-                  <a class="btn btn-sm btn-outline-primary" href="{{ route('admin.groups.show', $group->id) }}">
-                    <i class="fas fa-eye me-1"></i>詳細
-                  </a>
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                      type="button"
+                      data-bs-toggle="dropdown">
+                      <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                      <li>
+                        <a class="dropdown-item" href="{{ route('admin.groups.show', $group->id) }}">
+                          <i class="fas fa-eye me-2"></i>詳細を見る
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" href="{{ route('admin.groups.edit', $group->id) }}">
+                          <i class="fas fa-edit me-2"></i>編集
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
                 </td>
               </tr>
               @endforeach

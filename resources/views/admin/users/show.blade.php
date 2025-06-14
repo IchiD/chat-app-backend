@@ -27,6 +27,12 @@
           <i class="fas fa-comments me-1"></i>チャット管理
         </a>
         @else
+        <a href="{{ route('admin.users.edit', $user->id) }}" class="btn btn-primary me-2">
+          <i class="fas fa-edit me-1"></i>編集
+        </a>
+        <a href="{{ route('admin.users.conversations', $user->id) }}" class="btn btn-outline-primary me-2">
+          <i class="fas fa-comments me-1"></i>チャット管理
+        </a>
         <form method="POST" action="{{ route('admin.users.restore', $user->id) }}" class="d-inline">
           @csrf
           <button type="submit" class="btn btn-success"

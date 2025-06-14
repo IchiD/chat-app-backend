@@ -336,11 +336,11 @@
       </div>
     </div>
     @else
-    <!-- 危険な操作 -->
-    <div class="card mt-3 border-danger">
-      <div class="card-header bg-danger text-white">
+    <!-- ユーザー削除 -->
+    <div class="card mt-3 border-secondary">
+      <div class="card-header bg-secondary text-white">
         <h5 class="card-title mb-0">
-          <i class="fas fa-exclamation-triangle me-2"></i>危険な操作
+          <i class="fas fa-user-minus me-2"></i>ユーザー削除
         </h5>
       </div>
       <div class="card-body">
@@ -368,10 +368,10 @@
         @csrf
         @method('DELETE')
         <div class="modal-body">
-          <div class="alert alert-warning">
-            <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>警告:</strong> この操作により、ユーザー「<span id="deleteUserName"></span>」が論理削除され、
-            同じメールアドレスでの再登録ができなくなります。
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>確認:</strong> ユーザー「<span id="deleteUserName"></span>」を削除します。<br>
+            <small class="text-muted">※ 論理削除のため、後から復元することができます。削除後は同じメールアドレスでの再登録ができなくなります。</small>
           </div>
           <div class="mb-3">
             <label for="deleteReason" class="form-label">削除理由</label>
