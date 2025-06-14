@@ -349,28 +349,19 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * チャット詳細を表示
+   * ユーザー管理からチャットルーム詳細へのリダイレクト
    */
   public function userConversationDetail($userId, $conversationId)
   {
-    $admin = Auth::guard('admin')->user();
+    // ユーザーが存在するかチェック
     $user = User::withTrashed()->findOrFail($userId);
-    $chatRoom = ChatRoom::withTrashed()->with([
-      'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
-      'group.owner', // グループオーナー情報も読み込み
-      'participant1',
-      'participant2',
-      'messages.sender',
-      'messages.adminDeletedBy',
-      'deletedByAdmin' // 削除を実行した管理者情報も取得
-    ])->findOrFail($conversationId);
 
-    $messages = $chatRoom->messages()
-      ->with(['sender', 'adminDeletedBy', 'chatRoom.group.groupMembers'])
-      ->orderBy('sent_at', 'desc')
-      ->paginate(20);
-
-    return view('admin.users.conversation-detail', compact('admin', 'user', 'chatRoom', 'messages'));
+    // 統一URLにリダイレクト（来歴情報付き）
+    return redirect()->route('admin.conversations.detail', [
+      'id' => $conversationId,
+      'from' => 'user',
+      'user_id' => $userId
+    ]);
   }
 
   /**
@@ -503,9 +494,9 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * トークルーム詳細表示
+   * トークルーム詳細表示（統一版）
    */
-  public function conversationDetail($id)
+  public function conversationDetail($id, Request $request)
   {
     $admin = Auth::guard('admin')->user();
     $chatRoom = ChatRoom::withTrashed()->with([
@@ -523,7 +514,15 @@ class AdminDashboardController extends Controller
       ->orderBy('sent_at', 'desc')
       ->paginate(20);
 
-    return view('admin.conversations.detail', compact('admin', 'chatRoom', 'messages'));
+    // 来歴情報の処理
+    $from = $request->get('from');
+    $user = null;
+
+    if ($from === 'user' && $request->has('user_id')) {
+      $user = User::withTrashed()->find($request->get('user_id'));
+    }
+
+    return view('admin.conversations.detail', compact('admin', 'chatRoom', 'messages', 'from', 'user'));
   }
 
   /**

@@ -237,7 +237,6 @@
       word-break: break-all;
       word-wrap: break-word;
       overflow-wrap: break-word;
-      white-space: pre-wrap;
     }
 
     /* 一般的なメッセージ表示エリアにも適用 */
