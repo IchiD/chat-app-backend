@@ -27,19 +27,89 @@ class StripeService extends BaseService
   public function createCheckoutSession(User $user, string $plan): array
   {
     try {
+      // 1. 既存のアクティブなサブスクリプションをチェック
+      $activeSubscription = Subscription::where('user_id', $user->id)
+        ->whereIn('status', ['active', 'trialing', 'past_due'])
+        ->first();
+
+      if ($activeSubscription) {
+        // 既に同じプランの場合
+        if ($activeSubscription->plan === $plan) {
+          return $this->errorResponse(
+            'subscription_exists',
+            '既に同じプランのサブスクリプションがアクティブです'
+          );
+        }
+
+        // アップグレード（standard → premium）のみ許可
+        if ($activeSubscription->plan === 'standard' && $plan === 'premium') {
+          // アップグレード処理（将来の実装で詳細化）
+          Log::info("User {$user->id} attempting to upgrade from {$activeSubscription->plan} to {$plan}");
+        } else {
+          // ダウングレードや不正な変更は拒否
+          return $this->errorResponse(
+            'invalid_plan_change',
+            'プラン変更については、サポートまでお問い合わせください'
+          );
+        }
+      }
+
+      // 2. ユーザーの現在のプラン状態をチェック
+      if ($user->plan && $user->plan !== 'free') {
+        if ($user->plan === $plan) {
+          return $this->errorResponse(
+            'same_plan',
+            "既に{$plan}プランをご利用中です"
+          );
+        }
+
+        // ダウングレード防止
+        if ($user->plan === 'premium' && $plan === 'standard') {
+          return $this->errorResponse(
+            'downgrade_not_allowed',
+            'ダウングレードはサポート経由でのみ可能です'
+          );
+        }
+      }
+
+      // 3. プランの有効性チェック
       $priceId = config("services.stripe.prices.$plan");
+      if (empty($priceId)) {
+        return $this->errorResponse('invalid_plan', '指定されたプランは存在しません');
+      }
+
+      // 4. Stripe Checkoutセッション作成
       $session = $this->client->checkout->sessions->create([
         'customer_email' => $user->email,
         'mode' => 'subscription',
         'line_items' => [
           ['price' => $priceId, 'quantity' => 1],
         ],
-        'success_url' => config('app.frontend_url') . '/payment/success',
+        'metadata' => [
+          'user_id' => $user->id,
+          'plan' => $plan,
+          'upgrade_from' => $user->plan ?? 'free',
+        ],
+        'success_url' => config('app.frontend_url') . '/payment/success?session_id={CHECKOUT_SESSION_ID}',
         'cancel_url' => config('app.frontend_url') . '/payment/cancel',
+        'allow_promotion_codes' => true, // プロモーションコード対応
       ]);
+
+      // 5. ログ記録
+      Log::info("Stripe checkout session created", [
+        'user_id' => $user->id,
+        'plan' => $plan,
+        'session_id' => $session->id,
+        'previous_plan' => $user->plan ?? 'free',
+      ]);
+
       return $this->successResponse('session_created', ['url' => $session->url]);
     } catch (Exception $e) {
-      Log::error('Stripe create session error: ' . $e->getMessage());
+      Log::error('Stripe create session error: ' . $e->getMessage(), [
+        'user_id' => $user->id,
+        'plan' => $plan,
+        'error' => $e->getMessage(),
+      ]);
       return $this->errorResponse('stripe_error', '決済セッションの作成に失敗しました');
     }
   }
