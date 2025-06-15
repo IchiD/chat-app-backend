@@ -82,11 +82,6 @@
               <tr class="{{ $chatRoom->trashed() ? 'table-danger' : '' }}">
                 <td>
                   #{{ $chatRoom->id }}
-                  @if($chatRoom->trashed())
-                  <span class="badge bg-danger ms-1">
-                    <i class="fas fa-trash me-1"></i>削除済み
-                  </span>
-                  @endif
                 </td>
                 <td>
                   @switch($chatRoom->type)

@@ -162,11 +162,17 @@
                   @if($participant1)
                   <span class="badge {{ $participant1->trashed() ? 'bg-secondary' : 'bg-light' }} text-dark border">
                     {{ $participant1->name }}{{ $participant1->trashed() ? ' (削除済み)' : '' }}
+                    @if($participant1->friend_id)
+                    <small class="text-muted ms-1">({{ $participant1->friend_id }})</small>
+                    @endif
                   </span>
                   @endif
                   @if($participant2)
                   <span class="badge {{ $participant2->trashed() ? 'bg-secondary' : 'bg-light' }} text-dark border">
                     {{ $participant2->name }}{{ $participant2->trashed() ? ' (削除済み)' : '' }}
+                    @if($participant2->friend_id)
+                    <small class="text-muted ms-1">({{ $participant2->friend_id }})</small>
+                    @endif
                   </span>
                   @endif
                 </div>

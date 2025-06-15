@@ -515,10 +515,10 @@ class AdminDashboardController extends Controller
       'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
       'group.owner', // グループオーナー情報も読み込み
       'participant1' => function ($query) {
-        $query->withTrashed(); // 削除されたユーザーも含めて取得
+        $query->withTrashed()->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned'); // 削除されたユーザーも含めて取得
       },
       'participant2' => function ($query) {
-        $query->withTrashed(); // 削除されたユーザーも含めて取得
+        $query->withTrashed()->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned'); // 削除されたユーザーも含めて取得
       },
       'messages.sender',
       'messages.adminDeletedBy',
