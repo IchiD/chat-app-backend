@@ -68,6 +68,22 @@ class ChatRoom extends Model
   }
 
   /**
+   * 参加者1（削除されたユーザーも含む）
+   */
+  public function participant1WithTrashed(): BelongsTo
+  {
+    return $this->belongsTo(User::class, 'participant1_id')->withTrashed();
+  }
+
+  /**
+   * 参加者2（削除されたユーザーも含む）
+   */
+  public function participant2WithTrashed(): BelongsTo
+  {
+    return $this->belongsTo(User::class, 'participant2_id')->withTrashed();
+  }
+
+  /**
    * チャットルームの参加者を取得（新アーキテクチャ）
    * ユーザーIDの配列を返す
    */

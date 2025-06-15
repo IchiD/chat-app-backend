@@ -58,6 +58,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::put('users/{userId}/conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'updateMessage'])->name('users.messages.update');
     Route::delete('users/{userId}/conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'deleteMessage'])->name('users.messages.delete');
 
+    // Direct Message Management (for conversations page)
+    Route::put('conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'updateMessageDirect'])->name('conversations.messages.update');
+    Route::delete('conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'deleteMessageDirect'])->name('conversations.messages.delete');
+
     // Support Management Routes
     Route::get('support', [AdminDashboardController::class, 'supportConversations'])->name('support');
     Route::get('support/{conversationId}', [AdminDashboardController::class, 'supportConversationDetail'])->name('support.detail');

@@ -153,10 +153,22 @@
                   @endif
                 </div>
                 @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
-                @if($chatRoom->participant1 && $chatRoom->participant2)
+                @php
+                $participant1 = $chatRoom->participant1;
+                $participant2 = $chatRoom->participant2;
+                @endphp
+                @if($participant1 || $participant2)
                 <div class="d-flex flex-column gap-1">
-                  <span class="badge bg-light text-dark border">{{ $chatRoom->participant1->name }}</span>
-                  <span class="badge bg-light text-dark border">{{ $chatRoom->participant2->name }}</span>
+                  @if($participant1)
+                  <span class="badge {{ $participant1->trashed() ? 'bg-secondary' : 'bg-light' }} text-dark border">
+                    {{ $participant1->name }}{{ $participant1->trashed() ? ' (削除済み)' : '' }}
+                  </span>
+                  @endif
+                  @if($participant2)
+                  <span class="badge {{ $participant2->trashed() ? 'bg-secondary' : 'bg-light' }} text-dark border">
+                    {{ $participant2->name }}{{ $participant2->trashed() ? ' (削除済み)' : '' }}
+                  </span>
+                  @endif
                 </div>
                 @else
                 <span class="text-muted">参加者情報不明</span>
@@ -246,25 +258,27 @@
                 <div class="message-content" id="message-content-{{ $message->id }}">
                   {{ $message->text_content }}
                 </div>
-                @if($from === 'user' && $user)
                 <div class="message-edit-form d-none" id="message-edit-{{ $message->id }}">
+                  @if($from === 'user' && $user)
                   <form method="POST" action="{{ route('admin.users.messages.update', [$user->id, $chatRoom->id, $message->id]) }}">
-                    @csrf
-                    @method('PUT')
-                    <div class="mb-2">
-                      <textarea class="form-control message-content" name="text_content" rows="3" required>{{ $message->text_content }}</textarea>
-                    </div>
-                    <div class="d-flex gap-2">
-                      <button type="submit" class="btn btn-sm btn-primary">
-                        <i class="fas fa-save me-1"></i>保存
-                      </button>
-                      <button type="button" class="btn btn-sm btn-secondary" onclick="cancelEdit({{ $message->id }})">
-                        キャンセル
-                      </button>
-                    </div>
-                  </form>
+                    @else
+                    <form method="POST" action="{{ route('admin.conversations.messages.update', [$chatRoom->id, $message->id]) }}">
+                      @endif
+                      @csrf
+                      @method('PUT')
+                      <div class="mb-2">
+                        <textarea class="form-control message-content" name="text_content" rows="3" required>{{ $message->text_content }}</textarea>
+                      </div>
+                      <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary">
+                          <i class="fas fa-save me-1"></i>保存
+                        </button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="cancelEdit({{ $message->id }})">
+                          キャンセル
+                        </button>
+                      </div>
+                    </form>
                 </div>
-                @endif
                 @endif
               </div>
 
@@ -276,7 +290,7 @@
                   <i class="fas fa-ellipsis-v"></i>
                 </button>
                 <ul class="dropdown-menu">
-                  @if(!$message->deleted_at && $from === 'user' && $user)
+                  @if(!$message->deleted_at)
                   <li>
                     <button class="dropdown-item" onclick="startEdit({{ $message->id }})">
                       <i class="fas fa-edit me-2"></i>編集
@@ -402,15 +416,12 @@
     @if($from === 'user' && $user)
     const actionUrl = `{{ route('admin.users.messages.delete', [$user->id, $chatRoom->id, '__MESSAGE_ID__']) }}`.replace('__MESSAGE_ID__', messageId);
     @else
-    // チャットルーム管理からの場合は直接削除機能なし（必要に応じて実装）
-    const actionUrl = `#`;
+    const actionUrl = `{{ route('admin.conversations.messages.delete', [$chatRoom->id, '__MESSAGE_ID__']) }}`.replace('__MESSAGE_ID__', messageId);
     @endif
 
     form.action = actionUrl;
     new bootstrap.Modal(modal).show();
   }
-
-  @if($from === 'user' && $user)
 
   function startEdit(messageId) {
     document.getElementById('message-content-' + messageId).classList.add('d-none');
@@ -421,6 +432,5 @@
     document.getElementById('message-content-' + messageId).classList.remove('d-none');
     document.getElementById('message-edit-' + messageId).classList.add('d-none');
   }
-  @endif
 </script>
 @endsection

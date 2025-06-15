@@ -35,6 +35,8 @@ class User extends Authenticatable
     'name',
     'email',
     'original_email',
+    'original_is_verified',
+    'original_email_verified_at',
     'previous_name',
     'allow_re_registration',
     'deleted_by_self',
@@ -77,9 +79,11 @@ class User extends Authenticatable
   {
     return [
       'email_verified_at' => 'datetime',
+      'original_email_verified_at' => 'datetime',
       'last_login_at' => 'datetime',
       'deleted_at' => 'datetime',
       'is_banned' => 'boolean',
+      'original_is_verified' => 'boolean',
       'allow_re_registration' => 'boolean',
       'deleted_by_self' => 'boolean',
       'password' => 'hashed',
@@ -471,10 +475,12 @@ class User extends Authenticatable
     $result = $this->update($updateData);
 
     if ($result) {
-      // 元のメールアドレスと名前を別カラムに保存（復元時に使用）
+      // 元のメールアドレス、名前、認証状態を別カラムに保存（復元時に使用）
       $this->update([
         'original_email' => $originalEmail,
         'previous_name' => $originalName,
+        'original_is_verified' => $this->is_verified, // 元の認証状態を保存
+        'original_email_verified_at' => $this->email_verified_at, // 元の認証日時を保存
       ]);
 
       // ユーザーが参加しているチャットルームも自動削除
@@ -632,7 +638,11 @@ class User extends Authenticatable
       throw new \Exception("メールアドレス「{$originalEmail}」は既に使用されているため、復元できません。");
     }
 
-    $result = $this->update([
+    // 元の認証状態を取得（デフォルトは現在の状態）
+    $originalIsVerified = $this->original_is_verified ?? $this->is_verified;
+    $originalEmailVerifiedAt = $this->original_email_verified_at ?? $this->email_verified_at;
+
+    $updateData = [
       'email' => $originalEmail, // 元のメールアドレスに復元
       'original_email' => null, // 復元用カラムをクリア
       'deleted_at' => null,
@@ -640,12 +650,20 @@ class User extends Authenticatable
       'deleted_by' => null,
       'is_banned' => false,
       'deleted_by_self' => false,
-      'is_verified' => false, // 復元時は未認証状態にリセット
-      'email_verification_token' => null, // 古いトークンをクリア
-      'token_expires_at' => null, // 有効期限もクリア
-      'email_verified_at' => null, // 認証日時もクリア
+      'is_verified' => $originalIsVerified, // 元の認証状態を復元
+      'email_verified_at' => $originalEmailVerifiedAt, // 元の認証日時を復元
+      'original_is_verified' => null, // 復元用カラムをクリア
+      'original_email_verified_at' => null, // 復元用カラムをクリア
       // 注意: previous_nameは削除しない（名前変更提案機能で使用）
-    ]);
+    ];
+
+    // 元々未認証だった場合のみ、認証関連のトークンをクリア
+    if (!$originalIsVerified) {
+      $updateData['email_verification_token'] = null; // 古いトークンをクリア
+      $updateData['token_expires_at'] = null; // 有効期限もクリア
+    }
+
+    $result = $this->update($updateData);
 
     if ($result) {
       // このユーザーの削除が原因で削除されたチャットルームを復元

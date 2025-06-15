@@ -288,8 +288,11 @@
                   <strong>{{ $chatRoom->group->name }}</strong>
                   <br><small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
                   @elseif(in_array($chatRoom->type, ['friend_chat', 'member_chat']))
-                  @if($chatRoom->participant1 && $chatRoom->participant2)
-                  {{ $chatRoom->participant1->id === $user->id ? $chatRoom->participant2->name : $chatRoom->participant1->name }}
+                  @php
+                  $otherParticipant = $chatRoom->participant1_id === $user->id ? $chatRoom->participant2 : $chatRoom->participant1;
+                  @endphp
+                  @if($otherParticipant)
+                  {{ $otherParticipant->name }}{{ $otherParticipant->trashed() ? ' (削除済み)' : '' }}
                   @else
                   <span class="text-muted">参加者情報不明</span>
                   @endif

@@ -123,16 +123,24 @@
                     @endif
                   </small>
                   @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
-                  @if($chatRoom->participant1 && $chatRoom->participant2)
+                  @php
+                  $participant1 = $chatRoom->participant1;
+                  $participant2 = $chatRoom->participant2;
+                  @endphp
+                  @if($participant1 || $participant2)
                   <div class="d-flex flex-wrap gap-1">
-                    <span class="badge bg-light text-dark border">
-                      {{ $chatRoom->participant1->name }}
+                    @if($participant1)
+                    <span class="badge {{ $participant1->trashed() ? 'bg-secondary' : 'bg-light' }} text-dark border">
+                      {{ $participant1->name }}{{ $participant1->trashed() ? ' (削除済み)' : '' }}
                     </span>
-                    <span class="badge bg-light text-dark border">
-                      {{ $chatRoom->participant2->name }}
+                    @endif
+                    @if($participant2)
+                    <span class="badge {{ $participant2->trashed() ? 'bg-secondary' : 'bg-light' }} text-dark border">
+                      {{ $participant2->name }}{{ $participant2->trashed() ? ' (削除済み)' : '' }}
                     </span>
+                    @endif
                   </div>
-                  <small class="text-muted">2人参加</small>
+                  <small class="text-muted">{{ ($participant1 ? 1 : 0) + ($participant2 ? 1 : 0) }}人参加</small>
                   @else
                   <span class="text-muted">参加者情報不明</span>
                   @endif

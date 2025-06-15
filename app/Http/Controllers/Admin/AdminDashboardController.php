@@ -160,8 +160,12 @@ class AdminDashboardController extends Controller
         'latestMessage.sender',
         'latestMessage.chatRoom.group.groupMembers',
         'group',
-        'participant1',
-        'participant2',
+        'participant1' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'participant2' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
         'deletedByAdmin' // 削除を実行した管理者情報も取得
       ])
       ->orderBy('updated_at', 'desc')
@@ -337,8 +341,12 @@ class AdminDashboardController extends Controller
         'latestMessage.chatRoom.group.groupMembers',
         'group.activeMembers.user',
         'group.owner',
-        'participant1',
-        'participant2',
+        'participant1' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'participant2' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
         'messages',
         'deletedByAdmin' // 削除を実行した管理者情報も取得
       ])
@@ -418,8 +426,12 @@ class AdminDashboardController extends Controller
       ->with([
         'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
         'group.owner', // グループオーナー情報も読み込み
-        'participant1',
-        'participant2',
+        'participant1' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'participant2' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
         'latestMessage.sender',
         'latestMessage.chatRoom.group.groupMembers',
         'deletedByAdmin' // 削除を実行した管理者情報も取得
@@ -451,9 +463,9 @@ class AdminDashboardController extends Controller
             break;
           case 'participants':
             $subQuery->whereHas('participant1', function ($userQuery) use ($search) {
-              $userQuery->where('name', 'LIKE', '%' . $search . '%');
+              $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
             })->orWhereHas('participant2', function ($userQuery) use ($search) {
-              $userQuery->where('name', 'LIKE', '%' . $search . '%');
+              $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
             })->orWhereHas('group', function ($groupQuery) use ($search) {
               $groupQuery->where('name', 'LIKE', '%' . $search . '%');
             });
@@ -474,10 +486,10 @@ class AdminDashboardController extends Controller
                   ->whereNull('admin_deleted_at');
               })
               ->orWhereHas('participant1', function ($userQuery) use ($search) {
-                $userQuery->where('name', 'LIKE', '%' . $search . '%');
+                $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
               })
               ->orWhereHas('participant2', function ($userQuery) use ($search) {
-                $userQuery->where('name', 'LIKE', '%' . $search . '%');
+                $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
               })
               ->orWhereHas('group', function ($groupQuery) use ($search) {
                 $groupQuery->where('name', 'LIKE', '%' . $search . '%');
@@ -502,8 +514,12 @@ class AdminDashboardController extends Controller
     $chatRoom = ChatRoom::withTrashed()->with([
       'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
       'group.owner', // グループオーナー情報も読み込み
-      'participant1',
-      'participant2',
+      'participant1' => function ($query) {
+        $query->withTrashed(); // 削除されたユーザーも含めて取得
+      },
+      'participant2' => function ($query) {
+        $query->withTrashed(); // 削除されたユーザーも含めて取得
+      },
       'messages.sender',
       'messages.adminDeletedBy',
       'deletedByAdmin' // 削除を実行した管理者情報も取得
@@ -603,6 +619,51 @@ class AdminDashboardController extends Controller
 
     $message->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
     \App\Services\OperationLogService::log('backend', 'delete_message', 'admin:' . $admin->id . ' message:' . $message->id);
+
+    return redirect()->back()->with('success', 'メッセージを削除しました。');
+  }
+
+  /**
+   * メッセージ更新（直接アクセス用）
+   */
+  public function updateMessageDirect(Request $request, $conversationId, $messageId)
+  {
+    $admin = Auth::guard('admin')->user();
+    $message = Message::findOrFail($messageId);
+    $chatRoom = ChatRoom::findOrFail($conversationId);
+
+    $request->validate([
+      'text_content' => 'required|string|max:1000',
+    ]);
+
+    $message->update([
+      'text_content' => $request->text_content,
+      'edited_at' => now(),
+    ]);
+    \App\Services\OperationLogService::log('backend', 'update_message_direct', 'admin:' . $admin->id . ' message:' . $message->id);
+
+    return redirect()->back()->with('success', 'メッセージを更新しました。');
+  }
+
+  /**
+   * メッセージ削除（直接アクセス用）
+   */
+  public function deleteMessageDirect(Request $request, $conversationId, $messageId)
+  {
+    $admin = Auth::guard('admin')->user();
+    $message = Message::findOrFail($messageId);
+    $chatRoom = ChatRoom::findOrFail($conversationId);
+
+    if ($message->isAdminDeleted()) {
+      return redirect()->back()->with('error', 'このメッセージは既に削除されています。');
+    }
+
+    $request->validate([
+      'reason' => 'nullable|string|max:500',
+    ]);
+
+    $message->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_message_direct', 'admin:' . $admin->id . ' message:' . $message->id);
 
     return redirect()->back()->with('success', 'メッセージを削除しました。');
   }

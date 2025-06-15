@@ -73,10 +73,10 @@ class ConversationsController extends Controller
       ->whereNull('deleted_at') // 論理削除されていないもののみ
       ->with([
         'participant1' => function ($query) {
-          $query->select('id', 'name', 'friend_id', 'deleted_at');
+          $query->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned');
         },
         'participant2' => function ($query) {
-          $query->select('id', 'name', 'friend_id', 'deleted_at');
+          $query->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned');
         },
         'group' => function ($query) {
           $query->select('id', 'name', 'owner_user_id');
@@ -92,8 +92,17 @@ class ConversationsController extends Controller
       ->get();
 
     $filteredChatRooms = $chatRooms->filter(function ($chatRoom) use ($user, $friendIds) {
-      // friend_chatは表示する
+      // friend_chatは相手ユーザーが削除・バンされていない場合のみ表示する
       if ($chatRoom->type === 'friend_chat') {
+        $otherParticipant = $chatRoom->participant1_id === $user->id
+          ? $chatRoom->participant2
+          : $chatRoom->participant1;
+
+        // 相手ユーザーが存在しない、削除されている、バンされている場合は表示しない
+        if (!$otherParticipant || $otherParticipant->isDeleted() || $otherParticipant->is_banned) {
+          return false;
+        }
+
         return true;
       }
 
@@ -111,11 +120,21 @@ class ConversationsController extends Controller
         return true;
       }
 
-      // member_chat はグループオーナー自身には不要
+      // member_chat はグループオーナー自身には不要、また相手ユーザーが削除・バンされている場合も除外
       if ($chatRoom->type === 'member_chat') {
         if ($chatRoom->group && $chatRoom->group->owner_user_id === $user->id) {
           return false;
         }
+
+        // 相手ユーザーが削除・バンされている場合は表示しない
+        $otherParticipant = $chatRoom->participant1_id === $user->id
+          ? $chatRoom->participant2
+          : $chatRoom->participant1;
+
+        if (!$otherParticipant || $otherParticipant->isDeleted() || $otherParticipant->is_banned) {
+          return false;
+        }
+
         return true;
       }
 
@@ -502,6 +521,31 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'アクセス権がありません。'], 403);
     }
 
+    // friend_chatの場合、相手ユーザーが削除・バンされていないかを確認
+    if ($chatRoom->type === 'friend_chat') {
+      $otherUserId = $chatRoom->participant1_id === $user->id
+        ? $chatRoom->participant2_id
+        : $chatRoom->participant1_id;
+
+      $otherUser = User::find($otherUserId);
+
+      if (!$otherUser || $otherUser->isDeleted() || $otherUser->is_banned) {
+        return response()->json([
+          'message' => '相手のアカウントが削除またはバンされたため、このチャットにアクセスできません。',
+          'user_status' => 'deleted_or_banned'
+        ], 403);
+      }
+
+      // 友達関係を確認
+      $friendship = Friendship::getFriendship($user->id, $otherUserId);
+      if (!$friendship || $friendship->status !== Friendship::STATUS_ACCEPTED) {
+        return response()->json([
+          'message' => '友達関係が解除されたため、このチャットにアクセスできません。',
+          'friendship_status' => 'unfriended'
+        ], 403);
+      }
+    }
+
     // メンバーチャットの場合、グループメンバーシップまたは友達関係を確認
     if ($chatRoom->type === 'member_chat') {
       // 相手ユーザーを特定
@@ -511,10 +555,10 @@ class ConversationsController extends Controller
 
       $otherUser = User::find($otherUserId);
 
-      if (!$otherUser || $otherUser->isDeleted()) {
+      if (!$otherUser || $otherUser->isDeleted() || $otherUser->is_banned) {
         return response()->json([
-          'message' => '相手のアカウントが削除されたため、このチャットにアクセスできません。',
-          'user_status' => 'deleted'
+          'message' => '相手のアカウントが削除またはバンされたため、このチャットにアクセスできません。',
+          'user_status' => 'deleted_or_banned'
         ], 403);
       }
 
@@ -558,10 +602,10 @@ class ConversationsController extends Controller
     // チャットルーム情報をロード
     $chatRoom->load([
       'participant1' => function ($query) {
-        $query->select('id', 'name', 'friend_id', 'deleted_at');
+        $query->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned');
       },
       'participant2' => function ($query) {
-        $query->select('id', 'name', 'friend_id', 'deleted_at');
+        $query->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned');
       },
       'group' => function ($query) {
         $query->select('id', 'name', 'owner_user_id');
