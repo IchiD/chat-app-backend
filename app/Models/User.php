@@ -765,4 +765,52 @@ class User extends Authenticatable
   {
     return $this->hasMany(Subscription::class);
   }
+
+  /**
+   * ユーザーのサブスクリプション履歴
+   */
+  public function subscriptionHistories(): HasMany
+  {
+    return $this->hasMany(SubscriptionHistory::class)->orderBy('created_at', 'desc');
+  }
+
+  /**
+   * アクティブなサブスクリプションを取得
+   */
+  public function activeSubscription()
+  {
+    return $this->subscriptions()
+      ->whereIn('status', ['active', 'trialing', 'past_due'])
+      ->first();
+  }
+
+  /**
+   * プラン表示名を取得
+   */
+  public function getPlanDisplayAttribute(): string
+  {
+    return match ($this->plan) {
+      'free' => 'FREE',
+      'standard' => 'STANDARD',
+      'premium' => 'PREMIUM',
+      default => strtoupper($this->plan ?? 'free'),
+    };
+  }
+
+  /**
+   * サブスクリプション状態の表示名を取得
+   */
+  public function getSubscriptionStatusDisplayAttribute(): string
+  {
+    return match ($this->subscription_status) {
+      'active' => 'アクティブ',
+      'canceled' => 'キャンセル済み',
+      'past_due' => '支払い遅延',
+      'trialing' => 'トライアル中',
+      'incomplete' => '不完全',
+      'incomplete_expired' => '期限切れ',
+      'unpaid' => '未払い',
+      default => $this->subscription_status ?? '未設定',
+    };
+  }
 }

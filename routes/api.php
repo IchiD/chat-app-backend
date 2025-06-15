@@ -130,6 +130,9 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
 
   // Stripe 決済関連
   Route::post('/stripe/create-checkout-session', [StripeController::class, 'createCheckoutSession']);
+  Route::get('/stripe/subscription', [StripeController::class, 'getSubscriptionDetails']);
+  Route::post('/stripe/subscription/cancel', [StripeController::class, 'cancelSubscription']);
+  Route::get('/stripe/subscription/history', [StripeController::class, 'getSubscriptionHistory']);
 
   // メールアドレス変更関連
   Route::put('/user/update-email', [AuthController::class, 'requestEmailChange']);
