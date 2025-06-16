@@ -10,16 +10,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-// use App\Services\StripeService;
+use App\Services\StripeService;
 
 class BillingController extends Controller
 {
-  // protected StripeService $stripeService;
+  protected StripeService $stripeService;
 
-  public function __construct(/*StripeService $stripeService*/)
+  public function __construct(StripeService $stripeService)
   {
     $this->middleware('auth:admin');
-    // $this->stripeService = $stripeService;
+    $this->stripeService = $stripeService;
   }
 
   /**
@@ -55,6 +55,12 @@ class BillingController extends Controller
       ->groupBy('plan')
       ->get();
 
+    // Chart.js用のプランデータを準備
+    $planChartData = [
+      'labels' => $planStats->pluck('plan')->toArray(),
+      'data' => $planStats->pluck('count')->toArray(),
+    ];
+
     // 月別売上推移（過去12ヶ月）
     $monthlyRevenue = [];
     for ($i = 11; $i >= 0; $i--) {
@@ -71,6 +77,12 @@ class BillingController extends Controller
       ];
     }
 
+    // Chart.js用の売上データを準備
+    $revenueChartData = [
+      'labels' => array_column($monthlyRevenue, 'formatted_month'),
+      'data' => array_column($monthlyRevenue, 'revenue'),
+    ];
+
     // 最近のWebhookエラー
     $recentWebhookErrors = WebhookLog::failed()
       ->recent(7)
@@ -81,7 +93,9 @@ class BillingController extends Controller
     return view('admin.billing.dashboard', [
       'stats' => $stats,
       'planStats' => $planStats,
+      'planChartData' => $planChartData,
       'monthlyRevenue' => $monthlyRevenue,
+      'revenueChartData' => $revenueChartData,
       'recentWebhookErrors' => $recentWebhookErrors,
     ]);
   }
@@ -151,18 +165,14 @@ class BillingController extends Controller
       return redirect()->back()->with('error', 'このサブスクリプションは既にキャンセルされています。');
     }
 
-    // TODO: StripeService の実装待ち
-    // try {
-    //     $this->stripeService->cancelSubscription($subscription->stripe_subscription_id);
-    //     $subscription->update(['status' => 'canceled']);
-    //     return redirect()->back()->with('success', 'サブスクリプションをキャンセルしました。');
-    // } catch (\Exception $e) {
-    //     Log::error('Subscription cancellation failed', ['subscription_id' => $id, 'error' => $e->getMessage()]);
-    //     return redirect()->back()->with('error', 'キャンセル処理に失敗しました。');
-    // }
-
-    Log::warning('cancelSubscription is temporarily disabled.', ['subscription_id' => $id]);
-    return redirect()->back()->with('error', '現在、この操作は利用できません。');
+    try {
+      $this->stripeService->cancelSubscriptionAdmin($subscription->stripe_subscription_id);
+      $subscription->update(['status' => 'canceled']);
+      return redirect()->back()->with('success', 'サブスクリプションをキャンセルしました。');
+    } catch (\Exception $e) {
+      Log::error('Subscription cancellation failed', ['subscription_id' => $id, 'error' => $e->getMessage()]);
+      return redirect()->back()->with('error', 'キャンセル処理に失敗しました。');
+    }
   }
 
   /**
@@ -177,18 +187,14 @@ class BillingController extends Controller
       return redirect()->back()->with('error', 'このサブスクリプションは既にアクティブです。');
     }
 
-    // TODO: StripeService の実装待ち
-    // try {
-    //     $this->stripeService->resumeSubscription($subscription->stripe_subscription_id);
-    //     $subscription->update(['status' => 'active']);
-    //     return redirect()->back()->with('success', 'サブスクリプションを再開しました。');
-    // } catch (\Exception $e) {
-    //     Log::error('Subscription resumption failed', ['subscription_id' => $id, 'error' => $e->getMessage()]);
-    //     return redirect()->back()->with('error', '再開処理に失敗しました。');
-    // }
-
-    Log::warning('resumeSubscription is temporarily disabled.', ['subscription_id' => $id]);
-    return redirect()->back()->with('error', '現在、この操作は利用できません。');
+    try {
+      $this->stripeService->resumeSubscriptionAdmin($subscription->stripe_subscription_id);
+      $subscription->update(['status' => 'active']);
+      return redirect()->back()->with('success', 'サブスクリプションを再開しました。');
+    } catch (\Exception $e) {
+      Log::error('Subscription resumption failed', ['subscription_id' => $id, 'error' => $e->getMessage()]);
+      return redirect()->back()->with('error', '再開処理に失敗しました。');
+    }
   }
 
   /**
@@ -254,21 +260,17 @@ class BillingController extends Controller
       return redirect()->back()->with('error', '成功した決済のみ返金可能です。');
     }
 
-    // TODO: StripeService の実装待ち
-    // try {
-    //     $this->stripeService->refundPayment($payment->stripe_charge_id, $payment->amount);
-    //     $payment->update([
-    //         'status' => 'refunded',
-    //         'refund_amount' => $payment->amount
-    //     ]);
-    //     return redirect()->back()->with('success', '返金処理が完了しました。');
-    // } catch (\Exception $e) {
-    //     Log::error('Payment refund failed', ['payment_id' => $id, 'error' => $e->getMessage()]);
-    //     return redirect()->back()->with('error', '返金処理に失敗しました。');
-    // }
-
-    Log::warning('refundPayment is temporarily disabled.', ['payment_id' => $id]);
-    return redirect()->back()->with('error', '現在、この操作は利用できません。');
+    try {
+      $this->stripeService->refundPayment($payment->stripe_charge_id, (int)($payment->amount * 100)); // Stripe expects cents
+      $payment->update([
+        'status' => 'refunded',
+        'refund_amount' => $payment->amount
+      ]);
+      return redirect()->back()->with('success', '返金処理が完了しました。');
+    } catch (\Exception $e) {
+      Log::error('Payment refund failed', ['payment_id' => $id, 'error' => $e->getMessage()]);
+      return redirect()->back()->with('error', '返金処理に失敗しました。');
+    }
   }
 
   /**

@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Models\SubscriptionHistory;
+use App\Models\WebhookLog;
+use App\Models\PaymentTransaction;
 use Exception;
 
 class StripeService extends BaseService
@@ -134,69 +136,118 @@ class StripeService extends BaseService
     $event = $payload['type'] ?? null;
     $data = $payload['data']['object'] ?? [];
 
-    if ($event === 'checkout.session.completed') {
-      if (!empty($data['subscription']) && !empty($data['customer_email'])) {
-        $user = User::where('email', $data['customer_email'])->first();
-        if ($user) {
-          $plan = $data['metadata']['plan'] ?? 'standard';
-          $previousPlan = $data['metadata']['upgrade_from'] ?? 'free';
+    // Webhookログの作成
+    $webhookLog = WebhookLog::create([
+      'stripe_event_id' => $payload['id'] ?? 'unknown',
+      'event_type' => $event ?? 'unknown',
+      'payload' => $payload,
+      'status' => 'pending'
+    ]);
 
-          Subscription::updateOrCreate([
-            'stripe_subscription_id' => $data['subscription'],
-          ], [
-            'user_id' => $user->id,
-            'stripe_customer_id' => $data['customer'],
-            'plan' => $plan,
-            'status' => 'active',
-            'current_period_end' => now()->addMonth(),
-          ]);
+    try {
+      if ($event === 'checkout.session.completed') {
+        if (!empty($data['subscription']) && !empty($data['customer_email'])) {
+          $user = User::where('email', $data['customer_email'])->first();
+          if ($user) {
+            $plan = $data['metadata']['plan'] ?? 'standard';
+            $previousPlan = $data['metadata']['upgrade_from'] ?? 'free';
 
-          $user->update([
-            'plan' => $plan,
-            'subscription_status' => 'active',
+            // サブスクリプションの作成・更新
+            $subscription = Subscription::updateOrCreate([
+              'stripe_subscription_id' => $data['subscription'],
+            ], [
+              'user_id' => $user->id,
+              'stripe_customer_id' => $data['customer'],
+              'plan' => $plan,
+              'status' => 'active',
+              'current_period_end' => now()->addMonth(),
+            ]);
+
+            $user->update([
+              'plan' => $plan,
+              'subscription_status' => 'active',
+            ]);
+
+            // PaymentTransaction の記録
+            PaymentTransaction::create([
+              'user_id' => $user->id,
+              'subscription_id' => $subscription->id,
+              'stripe_payment_intent_id' => $data['payment_intent'] ?? 'unknown',
+              'stripe_charge_id' => $data['charges']['data'][0]['id'] ?? null,
+              'amount' => ($data['amount_total'] ?? 0) / 100, // Stripeはcents単位
+              'currency' => $data['currency'] ?? 'jpy',
+              'status' => 'succeeded',
+              'type' => 'subscription',
+              'paid_at' => now(),
+              'metadata' => [
+                'session_id' => $data['id'],
+                'customer_email' => $data['customer_email'],
+                'plan' => $plan
+              ]
+            ]);
+
+            // 履歴記録
+            $action = $previousPlan === 'free' ? SubscriptionHistory::ACTION_CREATED : SubscriptionHistory::ACTION_UPGRADED;
+            $this->recordSubscriptionHistory(
+              $user,
+              $action,
+              $previousPlan !== 'free' ? $previousPlan : null,
+              $plan,
+              $data['subscription'],
+              $data['customer'],
+              ($data['amount_total'] ?? 0) / 100,
+              'Stripe決済完了による' . ($action === SubscriptionHistory::ACTION_CREATED ? 'プラン開始' : 'アップグレード')
+            );
+          }
+        }
+      } elseif ($event === 'customer.subscription.updated') {
+        $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
+        if ($subscription) {
+          $subscription->update([
+            'status' => $data['status'],
+            'current_period_end' => now()->setTimestamp($data['current_period_end']),
           ]);
+          $subscription->user->update(['subscription_status' => $data['status']]);
+        }
+      } elseif ($event === 'customer.subscription.deleted') {
+        $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
+        if ($subscription) {
+          $subscription->update(['status' => 'canceled']);
+          $subscription->user->update(['subscription_status' => 'canceled', 'plan' => 'free']);
 
           // 履歴記録
-          $action = $previousPlan === 'free' ? SubscriptionHistory::ACTION_CREATED : SubscriptionHistory::ACTION_UPGRADED;
           $this->recordSubscriptionHistory(
-            $user,
-            $action,
-            $previousPlan !== 'free' ? $previousPlan : null,
-            $plan,
-            $data['subscription'],
-            $data['customer'],
-            null, // 金額は後でStripeから取得可能
-            'Stripe決済完了による' . ($action === SubscriptionHistory::ACTION_CREATED ? 'プラン開始' : 'アップグレード')
+            $subscription->user,
+            SubscriptionHistory::ACTION_CANCELED,
+            $subscription->plan,
+            'free',
+            $subscription->stripe_subscription_id,
+            $subscription->stripe_customer_id,
+            null,
+            'Stripeでのサブスクリプションキャンセル'
           );
         }
       }
-    } elseif ($event === 'customer.subscription.updated') {
-      $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
-      if ($subscription) {
-        $subscription->update([
-          'status' => $data['status'],
-          'current_period_end' => now()->setTimestamp($data['current_period_end']),
-        ]);
-        $subscription->user->update(['subscription_status' => $data['status']]);
-      }
-    } elseif ($event === 'customer.subscription.deleted') {
-      $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
-      if ($subscription) {
-        $subscription->update(['status' => 'canceled']);
-        $subscription->user->update(['subscription_status' => 'canceled', 'plan' => 'free']);
 
-        // 履歴記録
-        $this->recordSubscriptionHistory(
-          $subscription->user,
-          SubscriptionHistory::ACTION_CANCELED,
-          $subscription->plan,
-          'free',
-          $subscription->stripe_subscription_id,
-          $subscription->stripe_customer_id,
-          null,
-          'Stripeでのサブスクリプションキャンセル'
-        );
-      }
+      // 成功時のログ更新
+      $webhookLog->update([
+        'status' => 'processed',
+        'processed_at' => now()
+      ]);
+    } catch (Exception $e) {
+      // エラー時のログ更新
+      $webhookLog->update([
+        'status' => 'failed',
+        'error_message' => $e->getMessage()
+      ]);
+
+      Log::error('Webhook processing failed', [
+        'event_type' => $event,
+        'error' => $e->getMessage(),
+        'payload' => $payload
+      ]);
+
+      throw $e;
     }
   }
 
