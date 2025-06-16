@@ -31,9 +31,7 @@ class StripeService extends BaseService
   {
     try {
       // 1. 既存のアクティブなサブスクリプションをチェック
-      $activeSubscription = Subscription::where('user_id', $user->id)
-        ->whereIn('status', ['active', 'trialing', 'past_due'])
-        ->first();
+      $activeSubscription = $user->activeSubscription();
 
       if ($activeSubscription) {
         // 既に同じプランの場合
@@ -210,11 +208,12 @@ class StripeService extends BaseService
     try {
       $subscription = $user->activeSubscription();
 
+      // サブスクリプションが存在しない場合
       if (!$subscription) {
         return $this->successResponse('no_subscription', [
           'has_subscription' => false,
           'plan' => $user->plan ?? 'free',
-          'subscription_status' => null,
+          'subscription_status' => $user->subscription_status,
           'current_period_end' => null,
           'next_billing_date' => null,
           'can_cancel' => false,
@@ -223,9 +222,39 @@ class StripeService extends BaseService
 
       // Stripeから最新情報を取得
       $stripeSubscription = null;
+      $actualPlan = $subscription->plan; // デフォルトはローカルDBの値
+      $actualStatus = $subscription->status; // デフォルトはローカルDBの値
+
       if ($subscription->stripe_subscription_id && $this->client) {
         try {
           $stripeSubscription = $this->client->subscriptions->retrieve($subscription->stripe_subscription_id);
+
+          // Stripeから取得した情報でローカル情報を更新
+          if ($stripeSubscription) {
+            $actualStatus = $stripeSubscription->status;
+
+            // Stripeのプライス情報からプランを判定
+            $priceId = $stripeSubscription->items->data[0]->price->id ?? null;
+            if ($priceId) {
+              $planFromPrice = $this->getPlanFromPriceId($priceId);
+              if ($planFromPrice !== null) {
+                $actualPlan = $planFromPrice;
+              }
+            }
+
+            // ローカルデータベースの情報も更新
+            $subscription->update([
+              'plan' => $actualPlan,
+              'status' => $actualStatus,
+              'current_period_end' => \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end),
+            ]);
+
+            // ユーザーの情報も更新
+            $user->update([
+              'plan' => $actualPlan,
+              'subscription_status' => $actualStatus,
+            ]);
+          }
         } catch (Exception $e) {
           Log::warning('Stripe subscription retrieval failed', [
             'subscription_id' => $subscription->stripe_subscription_id,
@@ -235,7 +264,7 @@ class StripeService extends BaseService
       }
 
       $nextBillingDate = $subscription->current_period_end;
-      $canCancel = in_array($subscription->status, ['active', 'trialing']);
+      $canCancel = in_array($actualStatus, ['active', 'trialing']);
 
       // Stripeから取得した情報で更新
       if ($stripeSubscription) {
@@ -245,8 +274,8 @@ class StripeService extends BaseService
 
       return $this->successResponse('subscription_found', [
         'has_subscription' => true,
-        'plan' => $subscription->plan,
-        'subscription_status' => $subscription->status,
+        'plan' => $actualPlan, // 実際のプランを返す
+        'subscription_status' => $actualStatus, // 実際のステータスを返す
         'current_period_end' => $nextBillingDate,
         'next_billing_date' => $nextBillingDate,
         'can_cancel' => $canCancel,
@@ -335,6 +364,20 @@ class StripeService extends BaseService
       ]);
       return $this->errorResponse('cancel_error', 'サブスクリプションのキャンセルに失敗しました');
     }
+  }
+
+  /**
+   * Stripe Price IDからプラン名を取得
+   */
+  private function getPlanFromPriceId(string $priceId): ?string
+  {
+    // 設定ファイルから価格IDを取得
+    $priceMapping = [
+      config('services.stripe.prices.standard') => 'standard',
+      config('services.stripe.prices.premium') => 'premium',
+    ];
+
+    return $priceMapping[$priceId] ?? null;
   }
 
   /**
