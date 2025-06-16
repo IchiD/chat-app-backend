@@ -372,4 +372,36 @@ class StripeService extends BaseService
       ]);
     }
   }
+
+  /**
+   * 管理者によるStripeサブスクリプションのキャンセル
+   */
+  public function cancelSubscriptionAdmin(string $subscriptionId)
+  {
+    return $this->client->subscriptions->cancel($subscriptionId);
+  }
+
+  /**
+   * 管理者によるStripeサブスクリプションの再開
+   */
+  public function resumeSubscriptionAdmin(string $subscriptionId)
+  {
+    return $this->client->subscriptions->update($subscriptionId, [
+      'cancel_at_period_end' => false,
+    ]);
+  }
+
+  /**
+   * 支払いの返金を実行
+   */
+  public function refundPayment(string $chargeId, ?int $amount = null)
+  {
+    $params = ['charge' => $chargeId];
+
+    if ($amount) {
+      $params['amount'] = $amount;
+    }
+
+    return $this->client->refunds->create($params);
+  }
 }
