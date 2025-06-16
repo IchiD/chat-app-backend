@@ -388,6 +388,9 @@
               <i class="fas fa-comments me-2"></i> お問い合わせ
               <span id="unread-support-badge" class="badge bg-danger rounded-circle ms-2" style="display: none;">0</span>
             </a>
+            <a href="{{ route('admin.billing.dashboard') }}" class="nav-link {{ request()->routeIs('admin.billing*') ? 'active' : '' }}">
+              <i class="fas fa-credit-card me-2"></i> 決済管理
+            </a>
             @if(auth('admin')->user() && auth('admin')->user()->isSuperAdmin())
             <a href="{{ route('admin.admins') }}" class="nav-link {{ request()->routeIs('admin.admins') ? 'active' : '' }}">
               <i class="fas fa-user-shield me-2"></i> 管理者
