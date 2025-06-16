@@ -272,6 +272,52 @@ class BillingController extends Controller
   }
 
   /**
+   * 決済履歴をCSVエクスポート
+   */
+  public function exportPayments(Request $request)
+  {
+    $query = PaymentTransaction::with(['user:id,name,email', 'subscription:id,plan']);
+
+    if ($status = $request->get('status')) {
+      $query->where('status', $status);
+    }
+    if ($type = $request->get('type')) {
+      $query->where('type', $type);
+    }
+    if ($from = $request->get('from')) {
+      $query->whereDate('created_at', '>=', $from);
+    }
+    if ($to = $request->get('to')) {
+      $query->whereDate('created_at', '<=', $to);
+    }
+
+    if (!$query->exists()) {
+      return redirect()->back()->with('error', 'エクスポートするデータがありません。');
+    }
+
+    $filename = 'payments_' . date('Y-m-d') . '.csv';
+
+    return response()->streamDownload(function () use ($query) {
+      $handle = fopen('php://output', 'w');
+      fwrite($handle, "\xEF\xBB\xBF");
+      fputcsv($handle, ['ID', 'ユーザー', 'タイプ', '金額', 'ステータス', '支払日']);
+      $query->orderByDesc('created_at')->chunk(1000, function ($payments) use ($handle) {
+        foreach ($payments as $p) {
+          fputcsv($handle, [
+            $p->id,
+            $p->user->name,
+            $p->subscription ? strtoupper($p->subscription->plan) : $p->type,
+            $p->amount,
+            $p->status,
+            optional($p->paid_at)->format('Y-m-d H:i:s'),
+          ]);
+        }
+      });
+      fclose($handle);
+    }, $filename);
+  }
+
+  /**
    * Webhook ログ一覧
    */
   public function webhooks(Request $request)
