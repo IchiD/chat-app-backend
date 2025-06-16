@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\BillingController;
 
 Route::get('/', function () {
   return view('welcome');
@@ -94,5 +95,24 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('admins/{id}/edit', [AdminDashboardController::class, 'editAdmin'])->name('admins.edit');
     Route::put('admins/{id}', [AdminDashboardController::class, 'updateAdmin'])->name('admins.update');
     Route::delete('admins/{id}', [AdminDashboardController::class, 'deleteAdmin'])->name('admins.delete');
+
+    // Billing Management Routes
+    Route::prefix('billing')->name('billing.')->group(function () {
+      Route::get('/', [BillingController::class, 'dashboard'])->name('dashboard');
+      Route::get('subscriptions', [BillingController::class, 'index'])->name('subscriptions.index');
+      Route::get('subscriptions/{id}', [BillingController::class, 'show'])->name('subscriptions.show');
+      Route::post('subscriptions/{id}/cancel', [BillingController::class, 'cancelSubscription'])->name('subscriptions.cancel');
+      Route::post('subscriptions/{id}/resume', [BillingController::class, 'resumeSubscription'])->name('subscriptions.resume');
+
+      Route::get('payments', [BillingController::class, 'payments'])->name('payments.index');
+      Route::get('payments/{id}', [BillingController::class, 'showPayment'])->name('payments.show');
+      Route::post('payments/{id}/refund', [BillingController::class, 'refundPayment'])->name('payments.refund');
+
+      Route::get('webhooks', [BillingController::class, 'webhooks'])->name('webhooks.index');
+      Route::get('webhooks/{id}', [BillingController::class, 'showWebhook'])->name('webhooks.show');
+
+      Route::get('analytics', [BillingController::class, 'analytics'])->name('analytics.index');
+      Route::get('analytics/export', [BillingController::class, 'exportAnalytics'])->name('analytics.export');
+    });
   });
 });
