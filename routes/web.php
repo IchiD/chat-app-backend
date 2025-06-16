@@ -105,6 +105,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
       Route::post('subscriptions/{id}/resume', [BillingController::class, 'resumeSubscription'])->name('subscriptions.resume');
 
       Route::get('payments', [BillingController::class, 'payments'])->name('payments.index');
+      Route::get('payments/export', [BillingController::class, 'exportPayments'])->name('payments.export');
       Route::get('payments/{id}', [BillingController::class, 'showPayment'])->name('payments.show');
       Route::post('payments/{id}/refund', [BillingController::class, 'refundPayment'])->name('payments.refund');
 
