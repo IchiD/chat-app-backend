@@ -135,14 +135,26 @@ class StripeService extends BaseService
   {
     $event = $payload['type'] ?? null;
     $data = $payload['data']['object'] ?? [];
+    $eventId = $payload['id'] ?? 'unknown';
 
-    // Webhookログの作成
-    $webhookLog = WebhookLog::create([
-      'stripe_event_id' => $payload['id'] ?? 'unknown',
-      'event_type' => $event ?? 'unknown',
-      'payload' => $payload,
-      'status' => 'pending'
-    ]);
+    // 既存のWebhookログを確認、なければ作成
+    $webhookLog = WebhookLog::where('stripe_event_id', $eventId)->first();
+
+    if (!$webhookLog) {
+      $webhookLog = WebhookLog::create([
+        'stripe_event_id' => $eventId,
+        'event_type' => $event ?? 'unknown',
+        'payload' => $payload,
+        'status' => 'pending'
+      ]);
+    } else {
+      // 既存のログを再処理用に更新
+      $webhookLog->update([
+        'status' => 'pending',
+        'error_message' => null,
+        'processed_at' => null
+      ]);
+    }
 
     try {
       if ($event === 'checkout.session.completed') {
@@ -169,22 +181,44 @@ class StripeService extends BaseService
             ]);
 
             // PaymentTransaction の記録
-            PaymentTransaction::create([
-              'user_id' => $user->id,
-              'subscription_id' => $subscription->id,
-              'stripe_payment_intent_id' => $data['payment_intent'] ?? 'unknown',
-              'stripe_charge_id' => $data['charges']['data'][0]['id'] ?? null,
-              'amount' => ($data['amount_total'] ?? 0) / 100, // Stripeはcents単位
-              'currency' => $data['currency'] ?? 'jpy',
-              'status' => 'succeeded',
-              'type' => 'subscription',
-              'paid_at' => now(),
-              'metadata' => [
-                'session_id' => $data['id'],
-                'customer_email' => $data['customer_email'],
-                'plan' => $plan
-              ]
-            ]);
+            $paymentIntentId = $data['payment_intent'] ?? null;
+            $sessionId = $data['id'];
+
+            // サブスクリプションの場合、payment_intentがnullになることがあるので
+            // セッションIDをベースにしたユニークなIDを作成
+            $uniquePaymentId = $paymentIntentId ?: 'session_' . $sessionId;
+
+            // 既存のPaymentTransactionが存在するかチェック
+            $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', $uniquePaymentId)
+              ->orWhere('metadata->session_id', $sessionId)
+              ->first();
+
+            if (!$existingTransaction) {
+              PaymentTransaction::create([
+                'user_id' => $user->id,
+                'subscription_id' => $subscription->id,
+                'stripe_payment_intent_id' => $uniquePaymentId,
+                'stripe_charge_id' => $data['charges']['data'][0]['id'] ?? null,
+                'amount' => ($data['amount_total'] ?? 0) / 100, // Stripeはcents単位
+                'currency' => $data['currency'] ?? 'jpy',
+                'status' => 'succeeded',
+                'type' => 'subscription',
+                'paid_at' => now(),
+                'metadata' => [
+                  'session_id' => $sessionId,
+                  'customer_email' => $data['customer_email'],
+                  'plan' => $plan,
+                  'stripe_subscription_id' => $data['subscription'],
+                  'is_subscription_payment' => true
+                ]
+              ]);
+            } else {
+              Log::info('PaymentTransaction already exists, skipping creation', [
+                'session_id' => $sessionId,
+                'existing_id' => $existingTransaction->id,
+                'user_id' => $user->id
+              ]);
+            }
 
             // 履歴記録
             $action = $previousPlan === 'free' ? SubscriptionHistory::ACTION_CREATED : SubscriptionHistory::ACTION_UPGRADED;
