@@ -308,7 +308,7 @@ class BillingController extends Controller
           fputcsv($handle, [
             $p->id,
             $p->user->name,
-            $p->subscription ? strtoupper($p->subscription->plan) : $p->type,
+            $p->plan_at_payment ? strtoupper($p->plan_at_payment) : $p->type,
             $p->amount * 100, // 現在decimal保存のため×100
             $p->status,
             optional($p->paid_at)->format('Y-m-d H:i:s'),

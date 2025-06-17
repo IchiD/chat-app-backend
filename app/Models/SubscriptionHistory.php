@@ -56,8 +56,8 @@ class SubscriptionHistory extends Model
   {
     return match ($this->action) {
       self::ACTION_CREATED => 'プラン開始',
-      self::ACTION_UPGRADED => 'アップグレード',
-      self::ACTION_DOWNGRADED => 'ダウングレード',
+      self::ACTION_UPGRADED => '変更',
+      self::ACTION_DOWNGRADED => '変更',
       self::ACTION_CANCELED => 'キャンセル',
       self::ACTION_RENEWED => '更新',
       self::ACTION_REACTIVATED => '再開',
@@ -102,8 +102,8 @@ class SubscriptionHistory extends Model
 
     return match ($this->action) {
       self::ACTION_CREATED => "{$toPlan}プランを開始しました",
-      self::ACTION_UPGRADED => "{$fromPlan}プランから{$toPlan}プランにアップグレードしました",
-      self::ACTION_DOWNGRADED => "{$fromPlan}プランから{$toPlan}プランにダウングレードしました",
+      self::ACTION_UPGRADED => "{$fromPlan}プランから{$toPlan}プランに変更しました",
+      self::ACTION_DOWNGRADED => "{$fromPlan}プランから{$toPlan}プランに変更しました",
       self::ACTION_CANCELED => "{$fromPlan}プランをキャンセルしました",
       self::ACTION_RENEWED => "{$toPlan}プランを更新しました",
       self::ACTION_REACTIVATED => "{$toPlan}プランを再開しました",

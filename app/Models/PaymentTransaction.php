@@ -72,4 +72,13 @@ class PaymentTransaction extends Model
   {
     return $this->amount - $this->refund_amount;
   }
+
+  /**
+   * metadataから決済時のプラン情報を取得
+   * この方法で、アップグレード後でも過去の決済時の正しいプランが表示される
+   */
+  public function getPlanAtPaymentAttribute()
+  {
+    return $this->metadata['plan'] ?? ($this->subscription ? $this->subscription->plan : null);
+  }
 }

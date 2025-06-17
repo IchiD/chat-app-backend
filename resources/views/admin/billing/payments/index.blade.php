@@ -95,8 +95,8 @@
                   <small class="text-muted">{{ $payment->user->email }}</small>
                 </td>
                 <td>
-                  @if($payment->subscription)
-                  {{ strtoupper($payment->subscription->plan) }}
+                  @if($payment->plan_at_payment)
+                  {{ strtoupper($payment->plan_at_payment) }}
                   @else
                   {{ $payment->type }}
                   @endif

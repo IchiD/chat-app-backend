@@ -49,15 +49,12 @@ class StripeService extends BaseService
           ($activeSubscription->plan === 'free' && in_array($plan, ['standard', 'premium']));
         $isDowngrade = ($activeSubscription->plan === 'premium' && $plan === 'standard');
 
-        // テスト環境ではダウングレードも許可
-        $isTestMode = str_starts_with(config('services.stripe.secret'), 'sk_test_');
-
         if ($isUpgrade) {
           Log::info("User {$user->id} attempting to upgrade from {$activeSubscription->plan} to {$plan}");
           // アップグレードの場合は既存サブスクリプションを更新
           return $this->upgradeSubscription($user, $activeSubscription, $plan);
-        } elseif ($isDowngrade && $isTestMode) {
-          Log::info("User {$user->id} attempting to downgrade from {$activeSubscription->plan} to {$plan} (test mode)");
+        } elseif ($isDowngrade) {
+          Log::info("User {$user->id} attempting to downgrade from {$activeSubscription->plan} to {$plan}");
           // ダウングレードも既存サブスクリプションを更新
           return $this->upgradeSubscription($user, $activeSubscription, $plan);
         } else {
@@ -77,16 +74,8 @@ class StripeService extends BaseService
           );
         }
 
-        // テスト環境ではダウングレードを許可
-        if ($user->plan === 'premium' && $plan === 'standard') {
-          $isTestMode = str_starts_with(config('services.stripe.secret'), 'sk_test_');
-          if (!$isTestMode) {
-            return $this->errorResponse(
-              'downgrade_not_allowed',
-              'ダウングレードはサポート経由でのみ可能です'
-            );
-          }
-        }
+        // ダウングレードを許可
+        // 以前はテスト環境のみの制限がありましたが、本番環境でも許可します
       }
 
       // 3. プランの有効性チェック
@@ -309,7 +298,7 @@ class StripeService extends BaseService
               $data['subscription'],
               $data['customer'],
               ($data['amount_total'] ?? 0) / 100,
-              'Stripe決済完了による' . ($action === SubscriptionHistory::ACTION_CREATED ? 'プラン開始' : 'アップグレード'),
+              'Stripe決済完了による' . ($action === SubscriptionHistory::ACTION_CREATED ? 'プラン開始' : 'プラン変更'),
               null,
               $eventId // Webhook Event IDを渡す
             );
@@ -349,11 +338,12 @@ class StripeService extends BaseService
         $invoiceId = $data['id'] ?? null;
         $subscriptionId = $data['subscription'] ?? null;
         $customerEmail = $data['customer_email'] ?? null;
-        $amountPaid = ($data['amount_paid'] ?? 0) / 100; // セントから円に変換
+        // 日割り計算が適用された場合、totalの方が正確な請求額
+        $amountPaid = ($data['total'] ?? $data['amount_paid'] ?? 0) / 100; // セントから円に変換
         $billingReason = $data['billing_reason'] ?? null;
 
-        if ($subscriptionId && $customerEmail && in_array($billingReason, ['subscription_cycle', 'subscription_update', 'subscription_create'])) {
-          // 月次請求、アップグレード、新規作成時の請求を処理
+        if ($subscriptionId && $customerEmail && in_array($billingReason, ['subscription_cycle', 'subscription_update'])) {
+          // 月次請求、アップグレード時の請求を処理（新規作成はcheckout.session.completedで処理済み）
           $user = User::where('email', $customerEmail)->first();
           $subscription = Subscription::where('stripe_subscription_id', $subscriptionId)->first();
 
