@@ -64,9 +64,20 @@ class StripeController extends Controller
       ->with('user:id,name,email')
       ->paginate(10);
 
+    // formatted_amountアクセサを含む形でデータを変換
+    $transformedData = $histories->getCollection()->map(function ($history) {
+      $historyArray = $history->toArray();
+      $historyArray['formatted_amount'] = $history->formatted_amount;
+      // 金額も×100して正しい円金額にする
+      if ($history->amount) {
+        $historyArray['amount'] = $history->amount * 100;
+      }
+      return $historyArray;
+    });
+
     return response()->json([
       'status' => 'success',
-      'data' => $histories->items(),
+      'data' => $transformedData,
       'pagination' => [
         'current_page' => $histories->currentPage(),
         'last_page' => $histories->lastPage(),

@@ -17,6 +17,7 @@ class SubscriptionHistory extends Model
     'to_plan',
     'stripe_subscription_id',
     'stripe_customer_id',
+    'webhook_event_id',
     'amount',
     'currency',
     'notes',
@@ -86,7 +87,9 @@ class SubscriptionHistory extends Model
       return '¥0';
     }
 
-    return '¥' . number_format($this->amount);
+    // decimalで保存されているため×100して正しい円金額にする
+    $amount = $this->amount * 100;
+    return '¥' . number_format($amount, 0);
   }
 
   /**

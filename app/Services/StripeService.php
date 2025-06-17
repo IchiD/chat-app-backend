@@ -309,7 +309,9 @@ class StripeService extends BaseService
               $data['subscription'],
               $data['customer'],
               ($data['amount_total'] ?? 0) / 100,
-              'Stripe決済完了による' . ($action === SubscriptionHistory::ACTION_CREATED ? 'プラン開始' : 'アップグレード')
+              'Stripe決済完了による' . ($action === SubscriptionHistory::ACTION_CREATED ? 'プラン開始' : 'アップグレード'),
+              null,
+              $eventId // Webhook Event IDを渡す
             );
           }
         }
@@ -337,7 +339,9 @@ class StripeService extends BaseService
             $subscription->stripe_subscription_id,
             $subscription->stripe_customer_id,
             null,
-            'Stripeでのサブスクリプションキャンセル'
+            'Stripeでのサブスクリプションキャンセル',
+            null,
+            $eventId // Webhook Event IDを渡す
           );
         }
       } elseif ($event === 'invoice.payment_succeeded') {
@@ -605,9 +609,40 @@ class StripeService extends BaseService
     ?string $stripeCustomerId = null,
     ?float $amount = null,
     ?string $notes = null,
-    ?array $metadata = null
+    ?array $metadata = null,
+    ?string $webhookEventId = null
   ): void {
     try {
+      // Webhook Event IDベースの冪等性チェック（最も確実）
+      if ($webhookEventId) {
+        $existingHistory = SubscriptionHistory::where('webhook_event_id', $webhookEventId)->first();
+        if ($existingHistory) {
+          Log::info('Subscription history already exists for webhook event, skipping creation', [
+            'webhook_event_id' => $webhookEventId,
+            'existing_id' => $existingHistory->id,
+            'user_id' => $user->id,
+          ]);
+          return;
+        }
+      }
+
+      // フォールバック: 業務ロジックベースの重複チェック
+      $existingHistory = SubscriptionHistory::where('user_id', $user->id)
+        ->where('action', $action)
+        ->where('to_plan', $toPlan)
+        ->where('stripe_subscription_id', $stripeSubscriptionId)
+        ->where('created_at', '>=', now()->subMinutes(5)) // 緊急時のフォールバック
+        ->first();
+
+      if ($existingHistory) {
+        Log::info('Subscription history already exists (fallback check), skipping creation', [
+          'user_id' => $user->id,
+          'action' => $action,
+          'existing_id' => $existingHistory->id,
+        ]);
+        return;
+      }
+
       SubscriptionHistory::create([
         'user_id' => $user->id,
         'action' => $action,
@@ -615,6 +650,7 @@ class StripeService extends BaseService
         'to_plan' => $toPlan,
         'stripe_subscription_id' => $stripeSubscriptionId,
         'stripe_customer_id' => $stripeCustomerId,
+        'webhook_event_id' => $webhookEventId,
         'amount' => $amount,
         'currency' => 'jpy',
         'notes' => $notes,
