@@ -311,7 +311,21 @@ class StripeService extends BaseService
             'status' => $data['status'],
             'current_period_end' => now()->setTimestamp($data['current_period_end']),
           ]);
-          $subscription->user->update(['subscription_status' => $data['status']]);
+
+          // キャンセル状態保護：cancel_at_period_endがtrueまたはwill_cancelの場合は上書きしない
+          $cancelAtPeriodEnd = $data['cancel_at_period_end'] ?? false;
+          $shouldPreserveStatus = $cancelAtPeriodEnd ||
+            $subscription->cancel_at_period_end ||
+            $subscription->user->subscription_status === 'will_cancel';
+
+          if ($shouldPreserveStatus) {
+            // キャンセル状態保護：プランのみ更新、subscription_statusは保持
+            $planFromStatus = $data['status'] === 'active' ? $subscription->plan : 'free';
+            $subscription->user->update(['plan' => $planFromStatus]);
+          } else {
+            // 通常の更新
+            $subscription->user->update(['subscription_status' => $data['status']]);
+          }
         }
       } elseif ($event === 'customer.subscription.deleted') {
         $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
@@ -412,6 +426,7 @@ class StripeService extends BaseService
    */
   public function getSubscriptionDetails(User $user): array
   {
+
     try {
       $subscription = $user->activeSubscription();
 
@@ -456,11 +471,21 @@ class StripeService extends BaseService
               'current_period_end' => \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end),
             ]);
 
-            // ユーザーの情報も更新
-            $user->update([
-              'plan' => $actualPlan,
-              'subscription_status' => $actualStatus,
-            ]);
+            // キャンセル状態の絶対的保護
+            $shouldKeepWillCancel = $stripeSubscription->cancel_at_period_end ||
+              $subscription->cancel_at_period_end ||
+              $user->subscription_status === 'will_cancel';
+
+            if ($shouldKeepWillCancel) {
+              // キャンセル状態の場合は絶対に上書きしない - プランのみ更新
+              $user->update(['plan' => $actualPlan]);
+            } else {
+              // 通常の更新
+              $user->update([
+                'plan' => $actualPlan,
+                'subscription_status' => $actualStatus,
+              ]);
+            }
           }
         } catch (Exception $e) {
           Log::warning('Stripe subscription retrieval failed', [

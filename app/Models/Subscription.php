@@ -10,28 +10,29 @@ use App\Models\PaymentTransaction;
 
 class Subscription extends Model
 {
-    use HasFactory;
+  use HasFactory;
 
-    protected $fillable = [
-        'user_id',
-        'stripe_subscription_id',
-        'stripe_customer_id',
-        'plan',
-        'status',
-        'current_period_end',
-    ];
+  protected $fillable = [
+    'user_id',
+    'stripe_subscription_id',
+    'stripe_customer_id',
+    'plan',
+    'status',
+    'current_period_end',
+    'cancel_at_period_end',
+  ];
 
-    protected $casts = [
-        'current_period_end' => 'datetime',
-    ];
+  protected $casts = [
+    'current_period_end' => 'datetime',
+  ];
 
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
+  public function user(): BelongsTo
+  {
+    return $this->belongsTo(User::class);
+  }
 
-    public function paymentTransactions(): HasMany
-    {
-        return $this->hasMany(PaymentTransaction::class);
-    }
+  public function paymentTransactions(): HasMany
+  {
+    return $this->hasMany(PaymentTransaction::class);
+  }
 }
