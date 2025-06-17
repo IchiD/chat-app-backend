@@ -479,13 +479,19 @@ class StripeService extends BaseService
         $canCancel = in_array($stripeSubscription->status, ['active', 'trialing']);
       }
 
+      // キャンセル予定かどうかの判定
+      $willCancelAtPeriodEnd = $user->subscription_status === 'will_cancel' ||
+        ($stripeSubscription && $stripeSubscription->cancel_at_period_end) ||
+        $subscription->cancel_at_period_end ?? false;
+
       return $this->successResponse('subscription_found', [
         'has_subscription' => true,
         'plan' => $actualPlan, // 実際のプランを返す
-        'subscription_status' => $actualStatus, // 実際のステータスを返す
+        'subscription_status' => $user->subscription_status ?? $actualStatus, // ユーザーの状態を優先
         'current_period_end' => $nextBillingDate,
         'next_billing_date' => $nextBillingDate,
-        'can_cancel' => $canCancel,
+        'can_cancel' => $canCancel && !$willCancelAtPeriodEnd, // キャンセル予定の場合はキャンセルできない
+        'will_cancel_at_period_end' => $willCancelAtPeriodEnd,
         'stripe_subscription_id' => $subscription->stripe_subscription_id,
         'stripe_customer_id' => $subscription->stripe_customer_id,
       ]);
@@ -514,7 +520,7 @@ class StripeService extends BaseService
         return $this->errorResponse('cannot_cancel', 'このサブスクリプションはキャンセルできません');
       }
 
-      // Stripeでキャンセル実行
+      // Stripeでキャンセル実行（期間終了時キャンセル）
       $stripeSubscription = null;
       if ($this->client && $subscription->stripe_subscription_id) {
         try {
@@ -530,13 +536,13 @@ class StripeService extends BaseService
         }
       }
 
-      // ローカルデータベース更新
+      // ローカルデータベース更新（期間終了まではアクティブ状態を維持）
       $subscription->update([
-        'status' => 'canceled',
+        'cancel_at_period_end' => true,
       ]);
 
       $user->update([
-        'subscription_status' => 'canceled',
+        'subscription_status' => 'will_cancel', // 期間終了時にキャンセル予定
       ]);
 
       // 履歴記録
@@ -544,11 +550,11 @@ class StripeService extends BaseService
         $user,
         SubscriptionHistory::ACTION_CANCELED,
         $subscription->plan,
-        $subscription->plan, // キャンセル時は同じプラン
+        $subscription->plan, // キャンセル予約時はプランは変更されない
         $subscription->stripe_subscription_id,
         $subscription->stripe_customer_id,
         null,
-        'ユーザーによるキャンセル'
+        'ユーザーによるキャンセル（期間終了時に有効）'
       );
 
       Log::info("Subscription canceled", [

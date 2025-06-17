@@ -823,6 +823,7 @@ class User extends Authenticatable
     return match ($this->subscription_status) {
       'active' => 'アクティブ',
       'canceled' => 'キャンセル済み',
+      'will_cancel' => '解約予定',
       'past_due' => '支払い遅延',
       'trialing' => 'トライアル中',
       'incomplete' => '不完全',
@@ -830,5 +831,13 @@ class User extends Authenticatable
       'unpaid' => '未払い',
       default => $this->subscription_status ?? '未設定',
     };
+  }
+
+  /**
+   * キャンセル予定かどうかを判定
+   */
+  public function willCancelAtPeriodEnd(): bool
+  {
+    return $this->subscription_status === 'will_cancel';
   }
 }

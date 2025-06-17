@@ -223,6 +223,11 @@ class GoogleAuthController extends Controller
         }
       }
 
+      // 最終ログイン日時を更新
+      $user->update([
+        'last_login_at' => Carbon::now(),
+      ]);
+
       // Sanctumトークンを発行
       $tokenResult = $user->createToken('authToken');
       $tokenResult->accessToken->update([
