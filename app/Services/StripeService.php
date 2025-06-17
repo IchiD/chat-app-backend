@@ -54,8 +54,12 @@ class StripeService extends BaseService
 
         if ($isUpgrade) {
           Log::info("User {$user->id} attempting to upgrade from {$activeSubscription->plan} to {$plan}");
+          // アップグレードの場合は既存サブスクリプションを更新
+          return $this->upgradeSubscription($user, $activeSubscription, $plan);
         } elseif ($isDowngrade && $isTestMode) {
           Log::info("User {$user->id} attempting to downgrade from {$activeSubscription->plan} to {$plan} (test mode)");
+          // ダウングレードも既存サブスクリプションを更新
+          return $this->upgradeSubscription($user, $activeSubscription, $plan);
         } else {
           return $this->errorResponse(
             'invalid_plan_change',
@@ -125,6 +129,81 @@ class StripeService extends BaseService
         'error' => $e->getMessage(),
       ]);
       return $this->errorResponse('stripe_error', '決済セッションの作成に失敗しました');
+    }
+  }
+
+  /**
+   * 既存サブスクリプションのアップグレード/ダウングレード
+   */
+  private function upgradeSubscription(User $user, Subscription $subscription, string $newPlan): array
+  {
+    try {
+      // 新しいプランのプライスIDを取得
+      $newPriceId = config("services.stripe.prices.$newPlan");
+      if (empty($newPriceId)) {
+        return $this->errorResponse('invalid_plan', '指定されたプランは存在しません');
+      }
+
+      // Stripeサブスクリプションを取得
+      $stripeSubscription = $this->client->subscriptions->retrieve($subscription->stripe_subscription_id);
+
+      if (!$stripeSubscription) {
+        return $this->errorResponse('subscription_not_found', 'Stripeサブスクリプションが見つかりません');
+      }
+
+      // サブスクリプションアイテムの更新（差額請求あり）
+      $this->client->subscriptions->update($subscription->stripe_subscription_id, [
+        'items' => [
+          [
+            'id' => $stripeSubscription->items->data[0]->id,
+            'price' => $newPriceId,
+          ],
+        ],
+        'proration_behavior' => 'always_invoice', // 差額を即座に請求
+      ]);
+
+      // 履歴記録（更新前にプランを記録）
+      $oldPlan = $subscription->plan;
+
+      $this->recordSubscriptionHistory(
+        $user,
+        SubscriptionHistory::ACTION_UPGRADED,
+        $oldPlan,
+        $newPlan,
+        $subscription->stripe_subscription_id,
+        $subscription->stripe_customer_id,
+        null, // 金額は後でinvoice.payment_succeededで記録
+        'プランアップグレード - 差額請求'
+      );
+
+      // ローカルデータベースの更新
+      $subscription->update([
+        'plan' => $newPlan,
+      ]);
+
+      $user->update([
+        'plan' => $newPlan,
+      ]);
+
+      Log::info("Subscription upgraded successfully", [
+        'user_id' => $user->id,
+        'subscription_id' => $subscription->stripe_subscription_id,
+        'from_plan' => $subscription->plan,
+        'to_plan' => $newPlan,
+      ]);
+
+      return $this->successResponse('subscription_upgraded', [
+        'message' => 'プランが正常に変更されました。差額はすぐに請求されます。',
+        'new_plan' => $newPlan,
+      ]);
+    } catch (Exception $e) {
+      Log::error('Subscription upgrade failed', [
+        'user_id' => $user->id,
+        'subscription_id' => $subscription->stripe_subscription_id,
+        'new_plan' => $newPlan,
+        'error' => $e->getMessage(),
+      ]);
+      return $this->errorResponse('upgrade_failed', 'プラン変更に失敗しました: ' . $e->getMessage());
     }
   }
 
@@ -260,6 +339,55 @@ class StripeService extends BaseService
             null,
             'Stripeでのサブスクリプションキャンセル'
           );
+        }
+      } elseif ($event === 'invoice.payment_succeeded') {
+        // アップグレード時の差額請求を処理
+        $invoiceId = $data['id'] ?? null;
+        $subscriptionId = $data['subscription'] ?? null;
+        $customerEmail = $data['customer_email'] ?? null;
+        $amountPaid = ($data['amount_paid'] ?? 0) / 100; // セントから円に変換
+        $billingReason = $data['billing_reason'] ?? null;
+
+        if ($subscriptionId && $customerEmail && in_array($billingReason, ['subscription_cycle', 'subscription_update', 'subscription_create'])) {
+          // 月次請求、アップグレード、新規作成時の請求を処理
+          $user = User::where('email', $customerEmail)->first();
+          $subscription = Subscription::where('stripe_subscription_id', $subscriptionId)->first();
+
+          if ($user && $subscription) {
+            // 重複チェック
+            $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', 'invoice_' . $invoiceId)
+              ->orWhere('metadata->invoice_id', $invoiceId)
+              ->first();
+
+            if (!$existingTransaction) {
+              PaymentTransaction::create([
+                'user_id' => $user->id,
+                'subscription_id' => $subscription->id,
+                'stripe_payment_intent_id' => 'invoice_' . $invoiceId,
+                'stripe_charge_id' => $data['charge'] ?? null,
+                'amount' => $amountPaid,
+                'currency' => $data['currency'] ?? 'jpy',
+                'status' => 'succeeded',
+                'type' => 'subscription',
+                'paid_at' => now(),
+                'metadata' => [
+                  'invoice_id' => $invoiceId,
+                  'customer_email' => $customerEmail,
+                  'plan' => $subscription->plan,
+                  'stripe_subscription_id' => $subscriptionId,
+                  'billing_reason' => $billingReason,
+                  'is_upgrade_payment' => true
+                ]
+              ]);
+
+              Log::info('PaymentTransaction created for invoice payment', [
+                'invoice_id' => $invoiceId,
+                'user_id' => $user->id,
+                'amount' => $amountPaid,
+                'billing_reason' => $billingReason
+              ]);
+            }
+          }
         }
       }
 

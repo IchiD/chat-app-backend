@@ -33,16 +33,16 @@ class BillingController extends Controller
     $stats = [
       'monthly_revenue' => PaymentTransaction::succeeded()
         ->where('created_at', '>=', $thisMonth)
-        ->sum('amount'),
+        ->sum('amount') * 100, // 現在decimal保存のため×100
       'last_month_revenue' => PaymentTransaction::succeeded()
         ->whereBetween('created_at', [$lastMonth, $thisMonth])
-        ->sum('amount'),
+        ->sum('amount') * 100, // 現在decimal保存のため×100
       'active_subscriptions' => Subscription::where('status', 'active')->count(),
       'new_subscriptions_this_month' => Subscription::where('created_at', '>=', $thisMonth)->count(),
       'canceled_subscriptions_this_month' => Subscription::where('status', 'canceled')
         ->where('updated_at', '>=', $thisMonth)
         ->count(),
-      'total_revenue' => PaymentTransaction::succeeded()->sum('amount'),
+      'total_revenue' => PaymentTransaction::succeeded()->sum('amount') * 100, // 現在decimal保存のため×100
     ];
 
     // 売上成長率の計算
@@ -68,7 +68,7 @@ class BillingController extends Controller
       $revenue = PaymentTransaction::succeeded()
         ->whereYear('created_at', $month->year)
         ->whereMonth('created_at', $month->month)
-        ->sum('amount');
+        ->sum('amount') * 100; // 現在decimal保存のため×100
 
       $monthlyRevenue[] = [
         'month' => $month->format('Y-m'),
@@ -261,7 +261,7 @@ class BillingController extends Controller
     }
 
     try {
-      $this->stripeService->refundPayment($payment->stripe_charge_id, (int)($payment->amount * 100)); // Stripe expects cents
+      $this->stripeService->refundPayment($payment->stripe_charge_id, (int)($payment->amount * 100)); // decimal保存なので×100してセントに
       $payment->update([
         'status' => 'refunded',
         'refund_amount' => $payment->amount
@@ -309,7 +309,7 @@ class BillingController extends Controller
             $p->id,
             $p->user->name,
             $p->subscription ? strtoupper($p->subscription->plan) : $p->type,
-            $p->amount,
+            $p->amount * 100, // 現在decimal保存のため×100
             $p->status,
             optional($p->paid_at)->format('Y-m-d H:i:s'),
           ]);
@@ -438,7 +438,7 @@ class BillingController extends Controller
       ->map(function ($item) {
         return [
           'month' => $item->month,
-          'revenue' => (float) $item->revenue,
+          'revenue' => (float) $item->revenue * 100, // 現在decimal保存のため×100
         ];
       })
       ->toArray();
