@@ -15,14 +15,11 @@
       <h1 class="h3 mb-0">
         <i class="fas fa-file-invoice-dollar me-2"></i>決済詳細
       </h1>
-      @if($payment->status === 'succeeded')
-      <form method="POST" action="{{ route('admin.billing.payments.refund', $payment->id) }}" class="d-inline" onsubmit="return confirm('返金処理を実行しますか？');">
-        @csrf
-        <button type="submit" class="btn btn-danger">
-          <i class="fas fa-undo me-1"></i>返金
-        </button>
-      </form>
-      @endif
+      <a href="https://dashboard.stripe.com/payments/{{ $payment->stripe_payment_intent_id }}"
+        target="_blank"
+        class="btn btn-outline-info">
+        <i class="fas fa-external-link-alt me-1"></i>Stripe管理画面で表示
+      </a>
     </div>
   </div>
 </div>
@@ -63,13 +60,20 @@
       <div class="card-body">
         <dl class="row mb-0">
           <dt class="col-sm-5">PaymentIntent ID</dt>
-          <dd class="col-sm-7">{{ $payment->stripe_payment_intent_id }}</dd>
+          <dd class="col-sm-7">
+            <a href="https://dashboard.stripe.com/payments/{{ $payment->stripe_payment_intent_id }}"
+              target="_blank"
+              class="text-decoration-none">
+              {{ $payment->stripe_payment_intent_id }}
+              <i class="fas fa-external-link-alt ms-1 text-muted"></i>
+            </a>
+          </dd>
           <dt class="col-sm-5">Charge ID</dt>
           <dd class="col-sm-7">{{ $payment->stripe_charge_id ?? '-' }}</dd>
           <dt class="col-sm-5">タイプ</dt>
           <dd class="col-sm-7">{{ $payment->type }}</dd>
           <dt class="col-sm-5">返金額</dt>
-          <dd class="col-sm-7">{{ $payment->refund_amount }}</dd>
+          <dd class="col-sm-7">{{ $payment->refund_amount ? '¥' . number_format($payment->refund_amount * 100) : '-' }}</dd>
         </dl>
       </div>
     </div>

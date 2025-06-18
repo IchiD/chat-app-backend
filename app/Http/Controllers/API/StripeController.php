@@ -57,6 +57,14 @@ class StripeController extends Controller
     return response()->json($result, $status);
   }
 
+  public function resumeSubscription(): JsonResponse
+  {
+    $user = Auth::user();
+    $result = $this->service->resumeSubscription($user);
+    $status = $result['status'] === StripeService::STATUS_SUCCESS ? 200 : 500;
+    return response()->json($result, $status);
+  }
+
   public function getSubscriptionHistory(): JsonResponse
   {
     $user = Auth::user();

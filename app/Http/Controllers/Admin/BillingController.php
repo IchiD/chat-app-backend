@@ -244,36 +244,6 @@ class BillingController extends Controller
   }
 
   /**
-   * 返金処理
-   */
-  public function refundPayment($id)
-  {
-    $payment = PaymentTransaction::findOrFail($id);
-
-    // 既に返金済みの場合のチェック
-    if ($payment->status === 'refunded') {
-      return redirect()->back()->with('error', 'この決済は既に返金されています。');
-    }
-
-    // 返金対象外のステータスチェック
-    if ($payment->status !== 'succeeded') {
-      return redirect()->back()->with('error', '成功した決済のみ返金可能です。');
-    }
-
-    try {
-      $this->stripeService->refundPayment($payment->stripe_charge_id, (int)($payment->amount * 100)); // decimal保存なので×100してセントに
-      $payment->update([
-        'status' => 'refunded',
-        'refund_amount' => $payment->amount
-      ]);
-      return redirect()->back()->with('success', '返金処理が完了しました。');
-    } catch (\Exception $e) {
-      Log::error('Payment refund failed', ['payment_id' => $id, 'error' => $e->getMessage()]);
-      return redirect()->back()->with('error', '返金処理に失敗しました。');
-    }
-  }
-
-  /**
    * 決済履歴をCSVエクスポート
    */
   public function exportPayments(Request $request)

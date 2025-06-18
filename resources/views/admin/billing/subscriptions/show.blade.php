@@ -17,12 +17,21 @@
       </h1>
       <div>
         @if($subscription->status === 'active')
+        @if($subscription->cancel_at_period_end)
+        <form method="POST" action="{{ route('admin.billing.subscriptions.resume', $subscription->id) }}" class="d-inline" onsubmit="return confirm('解約を取り消しますか？');">
+          @csrf
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-redo me-1"></i>解約取り消し
+          </button>
+        </form>
+        @else
         <form method="POST" action="{{ route('admin.billing.subscriptions.cancel', $subscription->id) }}" class="d-inline" onsubmit="return confirm('本当にキャンセルしますか？');">
           @csrf
           <button type="submit" class="btn btn-danger">
             <i class="fas fa-ban me-1"></i>キャンセル
           </button>
         </form>
+        @endif
         @else
         <form method="POST" action="{{ route('admin.billing.subscriptions.resume', $subscription->id) }}" class="d-inline" onsubmit="return confirm('サブスクリプションを再開しますか？');">
           @csrf
@@ -54,7 +63,17 @@
           <dt class="col-sm-4">プラン</dt>
           <dd class="col-sm-8">{{ strtoupper($subscription->plan) }}</dd>
           <dt class="col-sm-4">ステータス</dt>
-          <dd class="col-sm-8">{{ $subscription->status }}</dd>
+          <dd class="col-sm-8">
+            {{ $subscription->status }}
+            @if($subscription->cancel_at_period_end)
+            <br><span class="badge bg-warning text-dark">
+              <i class="fas fa-exclamation-triangle me-1"></i>解約予定
+            </span>
+            <small class="text-muted d-block mt-1">
+              {{ optional($subscription->current_period_end)->format('Y/m/d') }} に解約予定
+            </small>
+            @endif
+          </dd>
           <dt class="col-sm-4">次回更新日</dt>
           <dd class="col-sm-8">{{ optional($subscription->current_period_end)->format('Y/m/d') }}</dd>
         </dl>
@@ -72,6 +91,17 @@
           <dd class="col-sm-7">{{ $subscription->stripe_subscription_id }}</dd>
           <dt class="col-sm-5">Customer ID</dt>
           <dd class="col-sm-7">{{ $subscription->stripe_customer_id }}</dd>
+          @if($subscription->cancel_at_period_end)
+          <dt class="col-sm-5">解約設定</dt>
+          <dd class="col-sm-7">
+            <span class="text-warning">
+              <i class="fas fa-exclamation-triangle me-1"></i>期間終了時に解約
+            </span>
+            <br><small class="text-muted">
+              {{ optional($subscription->current_period_end)->format('Y年m月d日 H:i') }} に自動解約
+            </small>
+          </dd>
+          @endif
         </dl>
       </div>
     </div>

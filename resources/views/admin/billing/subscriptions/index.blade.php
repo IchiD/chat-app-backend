@@ -92,6 +92,11 @@
                 <td>
                   @if($subscription->status === 'active')
                   <span class="badge bg-success">アクティブ</span>
+                  @if($subscription->cancel_at_period_end)
+                  <br><span class="badge bg-warning text-dark mt-1">
+                    <i class="fas fa-exclamation-triangle me-1"></i>解約予定
+                  </span>
+                  @endif
                   @elseif($subscription->status === 'canceled')
                   <span class="badge bg-secondary">キャンセル</span>
                   @elseif($subscription->status === 'past_due')

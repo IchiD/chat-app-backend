@@ -132,6 +132,7 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
   Route::post('/stripe/create-checkout-session', [StripeController::class, 'createCheckoutSession']);
   Route::get('/stripe/subscription', [StripeController::class, 'getSubscriptionDetails']);
   Route::post('/stripe/subscription/cancel', [StripeController::class, 'cancelSubscription']);
+  Route::post('/stripe/subscription/resume', [StripeController::class, 'resumeSubscription']);
   Route::get('/stripe/subscription/history', [StripeController::class, 'getSubscriptionHistory']);
 
   // メールアドレス変更関連

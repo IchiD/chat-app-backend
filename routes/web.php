@@ -107,7 +107,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
       Route::get('payments', [BillingController::class, 'payments'])->name('payments.index');
       Route::get('payments/export', [BillingController::class, 'exportPayments'])->name('payments.export');
       Route::get('payments/{id}', [BillingController::class, 'showPayment'])->name('payments.show');
-      Route::post('payments/{id}/refund', [BillingController::class, 'refundPayment'])->name('payments.refund');
 
       Route::get('webhooks', [BillingController::class, 'webhooks'])->name('webhooks.index');
       Route::get('webhooks/{id}', [BillingController::class, 'showWebhook'])->name('webhooks.show');

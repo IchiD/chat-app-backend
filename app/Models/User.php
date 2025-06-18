@@ -575,22 +575,38 @@ class User extends Authenticatable
   }
 
   /**
+   * 名前変更提案チェック結果のキャッシュ
+   */
+  private $shouldSuggestNameChangeCache = null;
+
+  /**
    * 名前変更提案が必要かどうかをチェック
    * （削除前の名前と現在の名前が異なり、まだ提案を受けていない場合）
    */
   public function shouldSuggestNameChange(): bool
   {
+    // キャッシュされた結果があり、関連するプロパティが変更されていない場合はキャッシュを使用
+    if ($this->shouldSuggestNameChangeCache !== null && !$this->isDirty(['previous_name', 'name', 'is_verified'])) {
+      return $this->shouldSuggestNameChangeCache;
+    }
+
     $result = !empty($this->previous_name) &&
       $this->previous_name !== $this->name &&
       $this->is_verified; // 認証済みユーザーのみ対象
 
-    Log::info('名前変更提案チェック', [
-      'user_id' => $this->id,
-      'previous_name' => $this->previous_name,
-      'current_name' => $this->name,
-      'is_verified' => $this->is_verified,
-      'should_suggest' => $result
-    ]);
+    // 結果をキャッシュ
+    $this->shouldSuggestNameChangeCache = $result;
+
+    // デバッグ環境でのみログ出力（オプション）
+    if (config('app.debug') && config('app.log_name_suggestions', false)) {
+      \Illuminate\Support\Facades\Log::debug('名前変更提案チェック', [
+        'user_id' => $this->id,
+        'previous_name' => $this->previous_name,
+        'current_name' => $this->name,
+        'is_verified' => $this->is_verified,
+        'should_suggest' => $result
+      ]);
+    }
 
     return $result;
   }
@@ -600,6 +616,9 @@ class User extends Authenticatable
    */
   public function markNameSuggestionComplete(): bool
   {
+    // キャッシュをクリア
+    $this->shouldSuggestNameChangeCache = null;
+
     return $this->update(['previous_name' => null]);
   }
 

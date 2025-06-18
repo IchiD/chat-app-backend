@@ -149,6 +149,7 @@ class StripeService extends BaseService
           ],
         ],
         'proration_behavior' => 'always_invoice', // 差額を即座に請求
+        'cancel_at_period_end' => false, // プラン変更時は必ずキャンセル予定を解除
       ]);
 
       // 履歴記録（更新前にプランを記録）
@@ -168,17 +169,22 @@ class StripeService extends BaseService
       // ローカルデータベースの更新
       $subscription->update([
         'plan' => $newPlan,
+        'cancel_at_period_end' => false, // プラン変更時はキャンセル予定を解除
       ]);
 
       $user->update([
         'plan' => $newPlan,
+        'subscription_status' => 'active', // プラン変更時は必ずactiveに戻す
       ]);
 
       Log::info("Subscription upgraded successfully", [
         'user_id' => $user->id,
         'subscription_id' => $subscription->stripe_subscription_id,
-        'from_plan' => $subscription->plan,
+        'from_plan' => $oldPlan,
         'to_plan' => $newPlan,
+        'previous_subscription_status' => $user->subscription_status,
+        'new_subscription_status' => 'active',
+        'cancel_at_period_end_set_to_false' => true,
       ]);
 
       return $this->successResponse('subscription_upgraded', [
@@ -307,24 +313,56 @@ class StripeService extends BaseService
       } elseif ($event === 'customer.subscription.updated') {
         $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
         if ($subscription) {
+          // Stripeからのcancel_at_period_endフラグ
+          $cancelAtPeriodEnd = $data['cancel_at_period_end'] ?? false;
+
+          // サブスクリプションの基本情報を更新
           $subscription->update([
             'status' => $data['status'],
             'current_period_end' => now()->setTimestamp($data['current_period_end']),
+            'cancel_at_period_end' => $cancelAtPeriodEnd,
           ]);
 
-          // キャンセル状態保護：cancel_at_period_endがtrueまたはwill_cancelの場合は上書きしない
-          $cancelAtPeriodEnd = $data['cancel_at_period_end'] ?? false;
-          $shouldPreserveStatus = $cancelAtPeriodEnd ||
-            $subscription->cancel_at_period_end ||
-            $subscription->user->subscription_status === 'will_cancel';
+          // Stripeのプライス情報からプラン変更を検出
+          $priceId = $data['items']['data'][0]['price']['id'] ?? null;
+          if ($priceId) {
+            $newPlan = $this->getPlanFromPriceId($priceId);
+            if ($newPlan && $newPlan !== $subscription->plan) {
+              // プラン変更が検出された場合
+              Log::info('Plan change detected in webhook', [
+                'subscription_id' => $subscription->stripe_subscription_id,
+                'old_plan' => $subscription->plan,
+                'new_plan' => $newPlan,
+                'cancel_at_period_end' => $cancelAtPeriodEnd,
+              ]);
+              $subscription->update(['plan' => $newPlan]);
+            }
+          }
 
-          if ($shouldPreserveStatus) {
-            // キャンセル状態保護：プランのみ更新、subscription_statusは保持
-            $planFromStatus = $data['status'] === 'active' ? $subscription->plan : 'free';
-            $subscription->user->update(['plan' => $planFromStatus]);
+          // ユーザーステータスの更新ロジック
+          if ($cancelAtPeriodEnd) {
+            // キャンセル予定の場合はwill_cancelに設定
+            Log::info('Setting user to will_cancel status', [
+              'user_id' => $subscription->user->id,
+              'subscription_id' => $subscription->stripe_subscription_id,
+              'cancel_at_period_end' => $cancelAtPeriodEnd,
+            ]);
+            $subscription->user->update([
+              'plan' => $subscription->plan,
+              'subscription_status' => 'will_cancel',
+            ]);
           } else {
-            // 通常の更新
-            $subscription->user->update(['subscription_status' => $data['status']]);
+            // キャンセルが解除された場合（プラン変更等）はactiveに戻す
+            Log::info('Setting user to active status', [
+              'user_id' => $subscription->user->id,
+              'subscription_id' => $subscription->stripe_subscription_id,
+              'cancel_at_period_end' => $cancelAtPeriodEnd,
+              'previous_status' => $subscription->user->subscription_status,
+            ]);
+            $subscription->user->update([
+              'plan' => $subscription->plan,
+              'subscription_status' => $data['status'], // activeになる
+            ]);
           }
         }
       } elseif ($event === 'customer.subscription.deleted') {
@@ -469,18 +507,18 @@ class StripeService extends BaseService
               'plan' => $actualPlan,
               'status' => $actualStatus,
               'current_period_end' => \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end),
+              'cancel_at_period_end' => $stripeSubscription->cancel_at_period_end,
             ]);
 
-            // キャンセル状態の絶対的保護
-            $shouldKeepWillCancel = $stripeSubscription->cancel_at_period_end ||
-              $subscription->cancel_at_period_end ||
-              $user->subscription_status === 'will_cancel';
-
-            if ($shouldKeepWillCancel) {
-              // キャンセル状態の場合は絶対に上書きしない - プランのみ更新
-              $user->update(['plan' => $actualPlan]);
+            // ユーザーステータスの更新
+            if ($stripeSubscription->cancel_at_period_end) {
+              // キャンセル予定の場合はwill_cancelを維持
+              $user->update([
+                'plan' => $actualPlan,
+                'subscription_status' => 'will_cancel',
+              ]);
             } else {
-              // 通常の更新
+              // キャンセルが解除された場合は通常のactiveに戻す
               $user->update([
                 'plan' => $actualPlan,
                 'subscription_status' => $actualStatus,
@@ -605,6 +643,88 @@ class StripeService extends BaseService
   }
 
   /**
+   * ユーザーによるサブスクリプション解約取り消し（再開）
+   */
+  public function resumeSubscription(User $user): array
+  {
+    try {
+      $subscription = $user->activeSubscription();
+
+      if (!$subscription) {
+        return $this->errorResponse('no_subscription', 'アクティブなサブスクリプションがありません');
+      }
+
+      // キャンセル予定でない場合はエラー
+      if ($user->subscription_status !== 'will_cancel' && !$subscription->cancel_at_period_end) {
+        return $this->errorResponse('not_cancelable', 'このサブスクリプションは解約予定ではありません');
+      }
+
+      // 既に期間終了している場合はエラー
+      if ($subscription->current_period_end && $subscription->current_period_end->isPast()) {
+        return $this->errorResponse('period_ended', 'このサブスクリプションは既に期間が終了しています');
+      }
+
+      // Stripeで解約取り消し実行
+      $stripeSubscription = null;
+      if ($this->client && $subscription->stripe_subscription_id) {
+        try {
+          $stripeSubscription = $this->client->subscriptions->update(
+            $subscription->stripe_subscription_id,
+            ['cancel_at_period_end' => false]
+          );
+        } catch (Exception $e) {
+          Log::warning('Stripe subscription resume failed', [
+            'subscription_id' => $subscription->stripe_subscription_id,
+            'error' => $e->getMessage(),
+          ]);
+          return $this->errorResponse('stripe_error', 'Stripeでの処理に失敗しました');
+        }
+      }
+
+      // ローカルデータベース更新
+      $subscription->update([
+        'cancel_at_period_end' => false,
+      ]);
+
+      $user->update([
+        'subscription_status' => 'active', // アクティブ状態に戻す
+      ]);
+
+      // 履歴記録
+      $this->recordSubscriptionHistory(
+        $user,
+        SubscriptionHistory::ACTION_REACTIVATED,
+        $subscription->plan,
+        $subscription->plan, // プランは変更されない
+        $subscription->stripe_subscription_id,
+        $subscription->stripe_customer_id,
+        null,
+        'ユーザーによる解約取り消し（継続利用）'
+      );
+
+      Log::info("Subscription resumed", [
+        'user_id' => $user->id,
+        'subscription_id' => $subscription->stripe_subscription_id,
+        'cancel_at_period_end' => false,
+      ]);
+
+      return $this->successResponse('subscription_resumed', [
+        'message' => '解約を取り消しました。サブスクリプションは継続されます。',
+        'cancel_at_period_end' => false,
+        'current_period_end' => $stripeSubscription ?
+          \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end) :
+          $subscription->current_period_end,
+      ]);
+    } catch (Exception $e) {
+      Log::error('Resume subscription error: ' . $e->getMessage(), [
+        'user_id' => $user->id,
+        'error' => $e->getMessage(),
+      ]);
+      return $this->errorResponse('resume_error', 'サブスクリプションの再開に失敗しました');
+    }
+  }
+
+  /**
    * Stripe Price IDからプラン名を取得
    */
   private function getPlanFromPriceId(string $priceId): ?string
@@ -702,19 +822,5 @@ class StripeService extends BaseService
     return $this->client->subscriptions->update($subscriptionId, [
       'cancel_at_period_end' => false,
     ]);
-  }
-
-  /**
-   * 支払いの返金を実行
-   */
-  public function refundPayment(string $chargeId, ?int $amount = null)
-  {
-    $params = ['charge' => $chargeId];
-
-    if ($amount) {
-      $params['amount'] = $amount;
-    }
-
-    return $this->client->refunds->create($params);
   }
 }
