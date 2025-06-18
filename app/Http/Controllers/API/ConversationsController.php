@@ -1669,4 +1669,34 @@ class ConversationsController extends Controller
 
     return $memberChatRoom;
   }
+
+  /**
+   * QRコードトークンでグループ情報を取得（認証不要）
+   */
+  public function getGroupInfoByToken(string $token)
+  {
+    $group = Group::where('qr_code_token', $token)
+      ->with('owner:id,name')
+      ->first();
+
+    if (!$group) {
+      return response()->json(['message' => 'グループが見つかりません'], 404);
+    }
+
+    // グループチャットルームがある場合のみ参加可能（group スタイル）
+    $groupChatRoom = $group->groupChatRoom;
+    if (!$groupChatRoom) {
+      return response()->json(['message' => 'このグループは現在参加できません'], 422);
+    }
+
+    return response()->json([
+      'id' => $group->id,
+      'name' => $group->name,
+      'description' => $group->description,
+      'member_count' => $group->getMembersCount(),
+      'max_members' => $group->max_members,
+      'owner_name' => $group->owner->name,
+      'can_join' => $group->canAddMember(),
+    ]);
+  }
 }

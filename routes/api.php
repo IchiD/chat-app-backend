@@ -154,6 +154,9 @@ Route::post('/stripe/webhook', [StripeController::class, 'webhook']);
 // QRコード参加 (認証必須)
 Route::post('/conversations/groups/join/{token}', [ConversationsController::class, 'joinGroupByToken'])->middleware(['auth:sanctum', 'check.user.status']);
 
+// グループ情報取得 (認証不要)
+Route::get('/conversations/groups/info/{token}', [ConversationsController::class, 'getGroupInfoByToken']);
+
 // 既存のユーザー情報取得エンドポイント
 Route::middleware(['auth:sanctum', 'check.user.status'])->get('/user', function (Request $request) {
   return $request->user();
