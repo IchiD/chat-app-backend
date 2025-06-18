@@ -951,6 +951,8 @@ class ConversationsController extends Controller
       'name' => 'sometimes|string|max:100',
       'description' => 'nullable|string',
       'max_members' => 'nullable|integer|min:1|max:500',
+      'chatStyles' => 'sometimes|array|min:1',
+      'chatStyles.*' => 'string|in:group,group_member',
     ]);
 
     $user = Auth::user();
@@ -959,7 +961,48 @@ class ConversationsController extends Controller
       return response()->json(['message' => __('errors.forbidden')], 403);
     }
 
-    $group->update($request->only('name', 'description', 'max_members'));
+    // 更新データを準備
+    $updateData = $request->only('name', 'description', 'max_members');
+
+    // chat_stylesの処理とチャットルーム管理
+    if ($request->has('chatStyles')) {
+      $newChatStyles = $request->chatStyles;
+      $oldChatStyles = $group->chat_styles ?? [];
+
+      $updateData['chat_styles'] = $newChatStyles;
+
+      // トランザクション内でグループ更新とチャットルーム管理を実行
+      DB::transaction(function () use ($group, $updateData, $newChatStyles, $oldChatStyles) {
+        $group->update($updateData);
+
+        // グループチャットルーム管理
+        if (in_array('group', $newChatStyles) && !in_array('group', $oldChatStyles)) {
+          // グループチャットルームを作成
+          $this->createGroupChatRoom($group);
+        } elseif (!in_array('group', $newChatStyles) && in_array('group', $oldChatStyles)) {
+          // グループチャットルームを削除（論理削除）
+          $groupChatRoom = $group->groupChatRoom;
+          if ($groupChatRoom) {
+            $groupChatRoom->delete();
+          }
+        }
+
+        // メンバー間チャット管理
+        if (in_array('group_member', $newChatStyles) && !in_array('group_member', $oldChatStyles)) {
+          // 既存メンバーとの個別チャットを作成
+          $this->createMemberChatsForExistingMembers($group);
+        } elseif (!in_array('group_member', $newChatStyles) && in_array('group_member', $oldChatStyles)) {
+          // メンバー間チャットルームを削除（論理削除）
+          $memberChatRooms = $group->memberChatRooms;
+          foreach ($memberChatRooms as $room) {
+            $room->delete();
+          }
+        }
+      });
+    } else {
+      $group->update($updateData);
+    }
+
     return response()->json($group);
   }
 
@@ -1698,5 +1741,36 @@ class ConversationsController extends Controller
       'owner_name' => $group->owner->name,
       'can_join' => $group->canAddMember(),
     ]);
+  }
+
+  /**
+   * グループチャットルームを作成
+   */
+  private function createGroupChatRoom(Group $group)
+  {
+    // 既存のグループチャットルームがあるかチェック
+    $existingRoom = $group->groupChatRoom;
+    if ($existingRoom) {
+      return $existingRoom;
+    }
+
+    // 新しいグループチャットルームを作成
+    return ChatRoom::create([
+      'type' => 'group_chat',
+      'group_id' => $group->id,
+      'room_token' => Str::random(16),
+    ]);
+  }
+
+  /**
+   * 既存メンバーとの個別チャットを作成
+   */
+  private function createMemberChatsForExistingMembers(Group $group)
+  {
+    $activeMembers = $group->activeMembers()->get();
+
+    foreach ($activeMembers as $member) {
+      $this->createOwnerMemberChatForGroup($group, $member->user_id);
+    }
   }
 }
