@@ -389,7 +389,7 @@
               <span id="unread-support-badge" class="badge bg-danger rounded-circle ms-2" style="display: none;">0</span>
             </a>
             <a href="{{ route('admin.billing.dashboard') }}" class="nav-link {{ request()->routeIs('admin.billing*') ? 'active' : '' }}">
-              <i class="fas fa-credit-card me-2"></i> 決済管理
+              <i class="fas fa-credit-card me-2"></i> サブスク・決済
             </a>
             @if(auth('admin')->user() && auth('admin')->user()->isSuperAdmin())
             <a href="{{ route('admin.admins') }}" class="nav-link {{ request()->routeIs('admin.admins') ? 'active' : '' }}">
