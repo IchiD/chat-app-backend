@@ -36,6 +36,10 @@ class ComprehensiveSeeder extends Seeder
     $this->command->info('5. メッセージデータを作成中...');
     $this->call(MessageSeeder::class);
 
+    // 6. 大規模グループチャットを作成
+    $this->command->info('6. 大規模グループチャットを作成中...');
+    $this->call(LargeGroupSeeder::class);
+
     $this->command->info('=== テストデータの作成が完了しました ===');
     $this->displaySummary();
   }

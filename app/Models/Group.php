@@ -94,7 +94,7 @@ class Group extends Model
   public function members()
   {
     return $this->belongsToMany(User::class, 'group_members')
-      ->withPivot(['joined_at', 'left_at', 'role'])
+      ->withPivot(['joined_at', 'left_at', 'role', 'owner_nickname'])
       ->withTimestamps()
       ->wherePivotNull('left_at'); // アクティブなメンバーのみ
   }

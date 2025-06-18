@@ -110,6 +110,7 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
       // メンバー管理
       Route::patch('/{group}/members/{groupMember}/rejoin', 'toggleMemberRejoin'); // 再参加可否切り替え
       Route::post('/{group}/members/{groupMember}/restore', 'restoreGroupMember'); // メンバー復活
+      Route::patch('/{group}/members/{groupMember}/nickname', 'updateMemberNickname'); // ニックネーム更新
     });
 
     // 特定のチャットルームのメッセージ関連 (room_token を使用)

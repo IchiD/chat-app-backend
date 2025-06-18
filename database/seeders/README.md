@@ -47,7 +47,16 @@
 -   **管理者メッセージ**: 30%の確率で各チャットに追加
 -   **時系列**: 過去 1-7 日間にランダムに配置
 
-### 5. `ComprehensiveSeeder`
+### 5. `LargeGroupSeeder`
+
+パフォーマンス検証のための大規模なグループチャットを作成します：
+
+-   **大規模グループ**: 3 つ作成
+    -   参加人数: 50 人、100 人、200 人
+    -   各グループにはオーナーが存在
+-   **メッセージ**: 各グループに 10 件のメッセージを投稿
+
+### 6. `ComprehensiveSeeder`
 
 上記全ての seeder を適切な順序で実行し、統計情報を表示します。
 
@@ -67,6 +76,7 @@ php artisan db:seed --class=UserSeeder
 php artisan db:seed --class=FriendshipSeeder
 php artisan db:seed --class=ChatRoomSeeder
 php artisan db:seed --class=MessageSeeder
+php artisan db:seed --class=LargeGroupSeeder
 ```
 
 ### 標準の DatabaseSeeder を使用
@@ -172,7 +182,7 @@ $groupChats = [
 
 1. **データの依存関係**: seeder は決められた順序で実行する必要があります
 
-    - Admin → User → Friendship → ChatRoom → Message
+    - Admin → User → Friendship → ChatRoom → Message → LargeGroupSeeder
 
 2. **重複実行**: 同じ seeder を複数回実行すると重複データが作成される可能性があります
 

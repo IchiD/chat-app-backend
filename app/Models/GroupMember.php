@@ -16,6 +16,7 @@ class GroupMember extends Model
     'joined_at',
     'left_at',
     'role',
+    'owner_nickname',
     'can_rejoin',
     'removal_type',
     'removed_by_user_id',

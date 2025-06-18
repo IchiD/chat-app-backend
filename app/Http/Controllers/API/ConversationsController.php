@@ -1368,6 +1368,7 @@ class ConversationsController extends Controller
           'name' => $groupMember->user->name,
           'friend_id' => $groupMember->user->friend_id,
           'group_member_label' => $group->name . 'メンバー',
+          'owner_nickname' => $groupMember->owner_nickname, // オーナー専用ニックネーム
           'role' => $groupMember->role,
           'joined_at' => $groupMember->joined_at,
           'left_at' => $groupMember->left_at,
@@ -1444,6 +1445,35 @@ class ConversationsController extends Controller
     $groupMember->restoreMember();
 
     return response()->json(['message' => 'メンバーを復活しました']);
+  }
+
+  /**
+   * メンバーのニックネームを更新（オーナー専用）
+   */
+  public function updateMemberNickname(Group $group, GroupMember $groupMember, Request $request)
+  {
+    $user = Auth::user();
+
+    // オーナーかチェック
+    if ($group->owner_user_id !== $user->id) {
+      return response()->json(['message' => __('errors.forbidden')], 403);
+    }
+
+    // メンバーがこのグループに属しているかチェック
+    if ($groupMember->group_id !== $group->id) {
+      return response()->json(['message' => '無効なメンバーです'], 422);
+    }
+
+    $request->validate([
+      'owner_nickname' => 'nullable|string|max:100',
+    ]);
+
+    $groupMember->update(['owner_nickname' => $request->owner_nickname]);
+
+    return response()->json([
+      'message' => 'ニックネームを更新しました',
+      'owner_nickname' => $request->owner_nickname
+    ]);
   }
 
   /**
