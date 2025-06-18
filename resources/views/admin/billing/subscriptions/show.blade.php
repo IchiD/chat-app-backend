@@ -28,7 +28,7 @@
         <form method="POST" action="{{ route('admin.billing.subscriptions.cancel', $subscription->id) }}" class="d-inline" onsubmit="return confirm('本当にキャンセルしますか？');">
           @csrf
           <button type="submit" class="btn btn-danger">
-            <i class="fas fa-ban me-1"></i>キャンセル
+            <i class="fas fa-ban me-1"></i>即時停止
           </button>
         </form>
         @endif
