@@ -262,12 +262,37 @@ class StripeService extends BaseService
             // セッションIDをベースにしたユニークなIDを作成
             $uniquePaymentId = $paymentIntentId ?: 'session_' . $sessionId;
 
-            // 既存のPaymentTransactionが存在するかチェック
-            $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', $uniquePaymentId)
-              ->orWhere('metadata->session_id', $sessionId)
-              ->first();
+            // 重複チェックを強化（3Dセキュア対応）
+            $existingTransaction = PaymentTransaction::where(function ($query) use ($uniquePaymentId, $sessionId, $paymentIntentId) {
+              $query->where('stripe_payment_intent_id', $uniquePaymentId)
+                ->orWhere('metadata->session_id', $sessionId);
+
+              // PaymentIntentIDが存在する場合（3Dセキュア等）、そのIDでも検索
+              if ($paymentIntentId) {
+                $query->orWhere('stripe_payment_intent_id', $paymentIntentId)
+                  ->orWhere('metadata->payment_intent_id', $paymentIntentId);
+              }
+            })->first();
 
             if (!$existingTransaction) {
+              // 3Dセキュアの場合、payment_intent.succeededで更新されることを想定してstatusを適切に設定
+              $status = $paymentIntentId ? 'succeeded' : 'succeeded'; // 3Dセキュアでも基本的にはsucceeded
+
+              $transactionMetadata = [
+                'session_id' => $sessionId,
+                'customer_email' => $data['customer_email'],
+                'plan' => $plan,
+                'stripe_subscription_id' => $data['subscription'],
+                'is_subscription_payment' => true,
+                'checkout_session_completed' => true
+              ];
+
+              // PaymentIntentIDがある場合（3Dセキュア等）、メタデータに追加
+              if ($paymentIntentId) {
+                $transactionMetadata['payment_intent_id'] = $paymentIntentId;
+                $transactionMetadata['requires_3ds_confirmation'] = true;
+              }
+
               PaymentTransaction::create([
                 'user_id' => $user->id,
                 'subscription_id' => $subscription->id,
@@ -275,21 +300,24 @@ class StripeService extends BaseService
                 'stripe_charge_id' => $data['charges']['data'][0]['id'] ?? null,
                 'amount' => ($data['amount_total'] ?? 0) / 100, // Stripeはcents単位
                 'currency' => $data['currency'] ?? 'jpy',
-                'status' => 'succeeded',
+                'status' => $status,
                 'type' => 'subscription',
                 'paid_at' => now(),
-                'metadata' => [
-                  'session_id' => $sessionId,
-                  'customer_email' => $data['customer_email'],
-                  'plan' => $plan,
-                  'stripe_subscription_id' => $data['subscription'],
-                  'is_subscription_payment' => true
-                ]
+                'metadata' => $transactionMetadata
+              ]);
+
+              Log::info('PaymentTransaction created from checkout.session.completed', [
+                'session_id' => $sessionId,
+                'payment_intent_id' => $paymentIntentId,
+                'unique_payment_id' => $uniquePaymentId,
+                'user_id' => $user->id,
+                'requires_3ds' => !empty($paymentIntentId)
               ]);
             } else {
               Log::info('PaymentTransaction already exists, skipping creation', [
                 'session_id' => $sessionId,
                 'existing_id' => $existingTransaction->id,
+                'existing_payment_intent_id' => $existingTransaction->stripe_payment_intent_id,
                 'user_id' => $user->id
               ]);
             }
@@ -394,18 +422,41 @@ class StripeService extends BaseService
         $amountPaid = ($data['total'] ?? $data['amount_paid'] ?? 0) / 100; // セントから円に変換
         $billingReason = $data['billing_reason'] ?? null;
 
-        if ($subscriptionId && $customerEmail && in_array($billingReason, ['subscription_cycle', 'subscription_update'])) {
-          // 月次請求、アップグレード時の請求を処理（新規作成はcheckout.session.completedで処理済み）
+        if ($subscriptionId && $customerEmail) {
           $user = User::where('email', $customerEmail)->first();
           $subscription = Subscription::where('stripe_subscription_id', $subscriptionId)->first();
 
           if ($user && $subscription) {
-            // 重複チェック
-            $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', 'invoice_' . $invoiceId)
-              ->orWhere('metadata->invoice_id', $invoiceId)
-              ->first();
+            // より包括的な重複チェック（3Dセキュア対応）
+            $existingTransaction = PaymentTransaction::where(function ($query) use ($invoiceId, $subscriptionId, $user, $amountPaid) {
+              // 1. invoice ID ベースのチェック
+              $query->where('stripe_payment_intent_id', 'invoice_' . $invoiceId)
+                ->orWhere('metadata->invoice_id', $invoiceId);
 
-            if (!$existingTransaction) {
+              // 2. 同じユーザー・金額・時間範囲での重複チェック（3Dセキュア等）
+              $query->orWhere(function ($subQuery) use ($user, $amountPaid, $subscriptionId) {
+                $subQuery->where('user_id', $user->id)
+                  ->where('amount', $amountPaid)
+                  ->where('status', 'succeeded')
+                  ->where('created_at', '>=', now()->subMinutes(5)) // 直近5分以内
+                  ->where(function ($metaQuery) use ($subscriptionId) {
+                    $metaQuery->where('metadata->stripe_subscription_id', $subscriptionId)
+                      ->orWhereJsonContains('metadata->stripe_subscription_id', $subscriptionId);
+                  });
+              });
+            })->first();
+
+            if ($existingTransaction) {
+              Log::info('PaymentTransaction already exists for invoice payment, skipping creation', [
+                'invoice_id' => $invoiceId,
+                'existing_transaction_id' => $existingTransaction->id,
+                'existing_payment_intent_id' => $existingTransaction->stripe_payment_intent_id,
+                'user_id' => $user->id,
+                'billing_reason' => $billingReason,
+                'subscription_creation_detected' => $billingReason === 'subscription_create'
+              ]);
+            } elseif (in_array($billingReason, ['subscription_cycle', 'subscription_update'])) {
+              // 月次請求、アップグレード時の請求のみを処理（新規作成は除外）
               PaymentTransaction::create([
                 'user_id' => $user->id,
                 'subscription_id' => $subscription->id,
@@ -432,7 +483,334 @@ class StripeService extends BaseService
                 'amount' => $amountPaid,
                 'billing_reason' => $billingReason
               ]);
+            } else {
+              Log::info('Skipping PaymentTransaction creation for invoice payment - not a recurring payment', [
+                'invoice_id' => $invoiceId,
+                'user_id' => $user->id,
+                'billing_reason' => $billingReason,
+                'skip_reason' => 'Initial subscription payment already handled by checkout.session.completed'
+              ]);
             }
+          }
+        }
+      } elseif ($event === 'invoice.payment_failed') {
+        // 決済失敗時の処理
+        $invoiceId = $data['id'] ?? null;
+        $subscriptionId = $data['subscription'] ?? null;
+        $customerEmail = $data['customer_email'] ?? null;
+        $attemptCount = $data['attempt_count'] ?? 1;
+        $amountDue = ($data['amount_due'] ?? 0) / 100; // セントから円に変換
+
+        if ($subscriptionId && $customerEmail) {
+          $user = User::where('email', $customerEmail)->first();
+          $subscription = Subscription::where('stripe_subscription_id', $subscriptionId)->first();
+
+          if ($user && $subscription) {
+            // 決済失敗のトランザクション記録
+            $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', 'failed_invoice_' . $invoiceId)->first();
+
+            if (!$existingTransaction) {
+              PaymentTransaction::create([
+                'user_id' => $user->id,
+                'subscription_id' => $subscription->id,
+                'stripe_payment_intent_id' => 'failed_invoice_' . $invoiceId,
+                'stripe_charge_id' => null,
+                'amount' => $amountDue,
+                'currency' => $data['currency'] ?? 'jpy',
+                'status' => 'failed',
+                'type' => 'subscription',
+                'paid_at' => null,
+                'metadata' => [
+                  'invoice_id' => $invoiceId,
+                  'customer_email' => $customerEmail,
+                  'plan' => $subscription->plan,
+                  'stripe_subscription_id' => $subscriptionId,
+                  'attempt_count' => $attemptCount,
+                  'payment_failure' => true,
+                  'failure_reason' => 'invoice_payment_failed'
+                ]
+              ]);
+
+              Log::warning('Payment failed for invoice', [
+                'invoice_id' => $invoiceId,
+                'user_id' => $user->id,
+                'subscription_id' => $subscriptionId,
+                'amount' => $amountDue,
+                'attempt_count' => $attemptCount
+              ]);
+            }
+
+            // サブスクリプション履歴記録
+            $this->recordSubscriptionHistory(
+              $user,
+              SubscriptionHistory::ACTION_PAYMENT_FAILED,
+              $subscription->plan,
+              $subscription->plan, // プランは変更されない
+              $subscription->stripe_subscription_id,
+              $subscription->stripe_customer_id,
+              $amountDue,
+              "決済失敗 (試行回数: {$attemptCount}回目)",
+              [
+                'invoice_id' => $invoiceId,
+                'attempt_count' => $attemptCount,
+                'failure_type' => 'invoice_payment_failed'
+              ],
+              $eventId
+            );
+          }
+        }
+      } elseif ($event === 'payment_intent.payment_failed') {
+        // PaymentIntent決済失敗時の処理
+        $paymentIntentId = $data['id'] ?? null;
+        $amount = ($data['amount'] ?? 0) / 100; // セントから円に変換
+        $currency = $data['currency'] ?? 'jpy';
+        $lastPaymentError = $data['last_payment_error'] ?? null;
+
+        if ($paymentIntentId) {
+          // メタデータからユーザー情報を取得（checkout sessionで設定されている場合）
+          $metadata = $data['metadata'] ?? [];
+          $userId = $metadata['user_id'] ?? null;
+
+          if ($userId) {
+            $user = User::find($userId);
+            if ($user) {
+              // 決済失敗のトランザクション記録
+              $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', $paymentIntentId)->first();
+
+              if (!$existingTransaction) {
+                PaymentTransaction::create([
+                  'user_id' => $user->id,
+                  'subscription_id' => null, // PaymentIntentの段階ではサブスクリプションはまだ未確定
+                  'stripe_payment_intent_id' => $paymentIntentId,
+                  'stripe_charge_id' => null,
+                  'amount' => $amount,
+                  'currency' => $currency,
+                  'status' => 'failed',
+                  'type' => 'subscription',
+                  'paid_at' => null,
+                  'metadata' => [
+                    'user_id' => $userId,
+                    'payment_failure' => true,
+                    'failure_reason' => 'payment_intent_failed',
+                    'error_code' => $lastPaymentError['code'] ?? null,
+                    'error_message' => $lastPaymentError['message'] ?? null,
+                    'error_type' => $lastPaymentError['type'] ?? null
+                  ]
+                ]);
+
+                Log::warning('PaymentIntent failed', [
+                  'payment_intent_id' => $paymentIntentId,
+                  'user_id' => $userId,
+                  'amount' => $amount,
+                  'error_code' => $lastPaymentError['code'] ?? null,
+                  'error_message' => $lastPaymentError['message'] ?? null
+                ]);
+              }
+            }
+          }
+        }
+      } elseif ($event === 'charge.failed') {
+        // Charge失敗時の処理
+        $chargeId = $data['id'] ?? null;
+        $paymentIntentId = $data['payment_intent'] ?? null;
+        $amount = ($data['amount'] ?? 0) / 100; // セントから円に変換
+        $currency = $data['currency'] ?? 'jpy';
+        $failureCode = $data['failure_code'] ?? null;
+        $failureMessage = $data['failure_message'] ?? null;
+
+        if ($chargeId && $paymentIntentId) {
+          // 既存のPaymentTransactionがあれば更新、なければ新規作成
+          $transaction = PaymentTransaction::where('stripe_payment_intent_id', $paymentIntentId)->first();
+
+          if ($transaction) {
+            // 既存トランザクションを失敗状態に更新
+            $transaction->update([
+              'status' => 'failed',
+              'stripe_charge_id' => $chargeId,
+              'metadata' => array_merge($transaction->metadata ?? [], [
+                'charge_failure' => true,
+                'failure_code' => $failureCode,
+                'failure_message' => $failureMessage,
+                'charge_failed_at' => now()->toISOString()
+              ])
+            ]);
+
+            Log::warning('Charge failed - updated existing transaction', [
+              'charge_id' => $chargeId,
+              'payment_intent_id' => $paymentIntentId,
+              'transaction_id' => $transaction->id,
+              'failure_code' => $failureCode,
+              'failure_message' => $failureMessage
+            ]);
+          } else {
+            Log::warning('Charge failed but no corresponding PaymentTransaction found', [
+              'charge_id' => $chargeId,
+              'payment_intent_id' => $paymentIntentId,
+              'failure_code' => $failureCode,
+              'failure_message' => $failureMessage
+            ]);
+          }
+        }
+      } elseif ($event === 'payment_intent.succeeded') {
+        // 3Dセキュア決済成功時などのPaymentIntent成功処理
+        $paymentIntentId = $data['id'] ?? null;
+        $amount = ($data['amount'] ?? 0) / 100; // セントから円に変換
+        $currency = $data['currency'] ?? 'jpy';
+        $charges = $data['charges']['data'] ?? [];
+        $latestCharge = $charges[0] ?? null;
+
+        if ($paymentIntentId) {
+          // メタデータからユーザー情報やサブスクリプション情報を取得
+          $metadata = $data['metadata'] ?? [];
+          $userId = $metadata['user_id'] ?? null;
+          $plan = $metadata['plan'] ?? null;
+
+          // invoice経由でサブスクリプション情報を特定する方法も試す
+          $invoiceId = $data['invoice'] ?? null;
+          $subscription = null;
+          $user = null;
+
+          if ($userId) {
+            $user = User::find($userId);
+          }
+
+          // invoice経由でサブスクリプション情報を取得する試み
+          if ($invoiceId && !$user) {
+            try {
+              $invoice = $this->client->invoices->retrieve($invoiceId);
+              if ($invoice->subscription && $invoice->customer_email) {
+                $user = User::where('email', $invoice->customer_email)->first();
+                $subscription = Subscription::where('stripe_subscription_id', $invoice->subscription)->first();
+              }
+            } catch (Exception $e) {
+              Log::warning('Failed to retrieve invoice for payment_intent.succeeded', [
+                'payment_intent_id' => $paymentIntentId,
+                'invoice_id' => $invoiceId,
+                'error' => $e->getMessage()
+              ]);
+            }
+          }
+
+          if ($user) {
+            // 3Dセキュア決済では、checkout.session.completedで既にトランザクションが作成されているため、
+            // payment_intent.succeededでは既存トランザクションの更新のみを行う
+
+            // より包括的な重複チェック（3Dセキュア対応）
+            $existingTransaction = PaymentTransaction::where(function ($query) use ($paymentIntentId, $user, $amount) {
+              // 1. Payment IntentIDによる完全一致検索
+              $query->where('stripe_payment_intent_id', $paymentIntentId);
+
+              // 2. メタデータ内のPaymentIntentIDで検索
+              $query->orWhere('metadata->payment_intent_id', $paymentIntentId);
+
+              // 3. 同じユーザー・金額・時間範囲での重複チェック（実際の金額で確認）
+              $query->orWhere(function ($subQuery) use ($user, $amount, $paymentIntentId) {
+                $subQuery->where('user_id', $user->id)
+                  ->where('amount', $amount)
+                  ->where('status', 'succeeded')
+                  ->where('created_at', '>=', now()->subMinutes(10)) // 10分以内の範囲を拡大
+                  ->where(function ($metaQuery) use ($paymentIntentId) {
+                    // メタデータ内にPaymentIntentIDが含まれている、または含まれていない場合
+                    $metaQuery->where('metadata->payment_intent_id', $paymentIntentId)
+                      ->orWhereNull('metadata->payment_intent_id');
+                  });
+              });
+            })->first();
+
+            if ($existingTransaction) {
+              // 既存の記録を成功状態に更新（3Dセキュア認証完了）
+              $existingTransaction->update([
+                'status' => 'succeeded',
+                'stripe_charge_id' => $latestCharge['id'] ?? null,
+                'stripe_payment_intent_id' => $paymentIntentId, // 正確なPayment Intent IDに更新
+                'paid_at' => now(),
+                'metadata' => array_merge($existingTransaction->metadata ?? [], [
+                  'payment_intent_succeeded_at' => now()->toISOString(),
+                  'requires_action_completed' => true,
+                  '3ds_authentication' => true,
+                  'original_payment_intent_id' => $paymentIntentId
+                ])
+              ]);
+
+              Log::info('PaymentIntent succeeded - updated existing transaction for 3DS', [
+                'payment_intent_id' => $paymentIntentId,
+                'transaction_id' => $existingTransaction->id,
+                'user_id' => $user->id,
+                '3ds_completed' => true,
+                'original_stripe_payment_intent_id' => $existingTransaction->getOriginal('stripe_payment_intent_id')
+              ]);
+            } else {
+              // checkout.session.completedが発生しなかった稀なケースでのみ新規作成
+              Log::warning('Creating new transaction for payment_intent.succeeded - checkout.session.completed not processed', [
+                'payment_intent_id' => $paymentIntentId,
+                'user_id' => $user->id,
+                'metadata' => $metadata
+              ]);
+
+              $transactionData = [
+                'user_id' => $user->id,
+                'subscription_id' => $subscription ? $subscription->id : null,
+                'stripe_payment_intent_id' => $paymentIntentId,
+                'stripe_charge_id' => $latestCharge['id'] ?? null,
+                'amount' => $amount,
+                'currency' => $currency,
+                'status' => 'succeeded',
+                'type' => 'subscription',
+                'paid_at' => now(),
+                'metadata' => [
+                  'user_id' => $userId,
+                  'plan' => $plan,
+                  'payment_intent_succeeded' => true,
+                  'requires_action_completed' => true,
+                  '3ds_authentication' => true,
+                  'invoice_id' => $invoiceId,
+                  'no_checkout_session_completed' => true
+                ]
+              ];
+
+              PaymentTransaction::create($transactionData);
+
+              Log::info('PaymentIntent succeeded - created new transaction (fallback)', [
+                'payment_intent_id' => $paymentIntentId,
+                'user_id' => $user->id,
+                'amount' => $amount,
+                '3ds_completed' => true
+              ]);
+
+              // サブスクリプションとユーザーステータスの更新（新規作成の場合のみ）
+              if ($subscription && $plan) {
+                $subscription->update(['status' => 'active']);
+                $user->update([
+                  'plan' => $plan,
+                  'subscription_status' => 'active'
+                ]);
+
+                // 履歴記録
+                $this->recordSubscriptionHistory(
+                  $user,
+                  SubscriptionHistory::ACTION_CREATED,
+                  'free',
+                  $plan,
+                  $subscription->stripe_subscription_id,
+                  $subscription->stripe_customer_id,
+                  $amount,
+                  '3Dセキュア認証完了による決済成功（フォールバック）',
+                  [
+                    'payment_intent_id' => $paymentIntentId,
+                    '3ds_authentication' => true,
+                    'requires_action_completed' => true,
+                    'fallback_creation' => true
+                  ],
+                  $eventId
+                );
+              }
+            }
+          } else {
+            Log::warning('PaymentIntent succeeded but user not found', [
+              'payment_intent_id' => $paymentIntentId,
+              'metadata' => $metadata,
+              'invoice_id' => $invoiceId
+            ]);
           }
         }
       }

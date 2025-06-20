@@ -14,14 +14,14 @@ class ReprocessFailedWebhooks extends Command
    *
    * @var string
    */
-  protected $signature = 'webhook:reprocess-failed {--id= : Specific webhook ID to reprocess} {--limit=10 : Maximum number of webhooks to reprocess}';
+  protected $signature = 'webhook:reprocess-failed {--id= : Specific webhook ID to reprocess} {--limit=10 : Maximum number of webhooks to reprocess} {--type= : Specific event type to reprocess}';
 
   /**
    * The console command description.
    *
    * @var string
    */
-  protected $description = 'Reprocess failed webhook logs';
+  protected $description = 'Reprocess failed webhook logs or specific event types';
 
   /**
    * Execute the console command.

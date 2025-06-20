@@ -38,6 +38,7 @@ class SubscriptionHistory extends Model
   const ACTION_CANCELED = 'canceled';
   const ACTION_RENEWED = 'renewed';
   const ACTION_REACTIVATED = 'reactivated';
+  const ACTION_PAYMENT_FAILED = 'payment_failed';
 
   // プラン定数
   const PLAN_FREE = 'free';
@@ -61,6 +62,7 @@ class SubscriptionHistory extends Model
       self::ACTION_CANCELED => 'キャンセル',
       self::ACTION_RENEWED => '更新',
       self::ACTION_REACTIVATED => '再開',
+      self::ACTION_PAYMENT_FAILED => '決済失敗',
       default => $this->action,
     };
   }
@@ -107,6 +109,7 @@ class SubscriptionHistory extends Model
       self::ACTION_CANCELED => "{$fromPlan}プランをキャンセルしました",
       self::ACTION_RENEWED => "{$toPlan}プランを更新しました",
       self::ACTION_REACTIVATED => "{$toPlan}プランを再開しました",
+      self::ACTION_PAYMENT_FAILED => "決済が失敗しました",
       default => "プランを{$toPlan}に変更しました",
     };
   }
