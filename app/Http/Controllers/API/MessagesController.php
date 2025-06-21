@@ -126,14 +126,10 @@ class MessagesController extends Controller
       }
     }
 
-    // メッセージを取得後、このチャットルームを既読にする（新アーキテクチャでは簡素化）
-    // 既読管理は新アーキテクチャでは別途実装する予定のため、一旦コメントアウト
-    // $participant = $chatRoom->participants()->where('user_id', $user->id)->first();
-    // if ($participant && $messages->isNotEmpty()) {
-    //   $participant->update([
-    //     'last_read_at' => now(),
-    //   ]);
-    // }
+    // メッセージを取得後、このチャットルームを既読にする
+    if ($messages->isNotEmpty()) {
+      \App\Models\ChatRoomRead::updateLastRead($user->id, $chatRoom->id);
+    }
 
     return response()->json($messages);
   }

@@ -141,10 +141,13 @@ class ConversationsController extends Controller
       return true;
     });
 
-    $processedChatRooms = $filteredChatRooms->map(function ($chatRoom) use ($user) {
-      // 未読メッセージ数を計算（新アーキテクチャでは既読管理が変更されるため一時的に0を返す）
-      // TODO: 新しい既読管理テーブルの実装後にここを更新する
-      $unreadCount = 0;
+    // 未読メッセージ数を一括取得
+    $chatRoomIds = $filteredChatRooms->pluck('id')->toArray();
+    $unreadCounts = \App\Models\ChatRoomRead::getUnreadCountsForChatRooms($user->id, $chatRoomIds);
+
+    $processedChatRooms = $filteredChatRooms->map(function ($chatRoom) use ($user, $unreadCounts) {
+      // 未読メッセージ数を取得
+      $unreadCount = $unreadCounts[$chatRoom->id] ?? 0;
 
       $result = [
         'id' => $chatRoom->id,
@@ -331,7 +334,7 @@ class ConversationsController extends Controller
           'friend_id' => $otherParticipant->friend_id,
         ] : null,
         'latest_message' => $existingChatRoom->latestMessage,
-        'unread_messages_count' => 0, // TODO: 未読数計算
+        'unread_messages_count' => \App\Models\ChatRoomRead::getUnreadCount($currentUser->id, $existingChatRoom->id),
       ], 200);
     }
 
@@ -474,9 +477,8 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'このチャットルームの参加者ではありません。'], 403);
     }
 
-    // 新アーキテクチャでは既読管理の仕組みが変更されるため、
-    // 現在は単純に成功レスポンスを返す
-    // TODO: 新しい既読管理テーブルの実装後にここを更新する
+    // 既読管理テーブルを更新
+    \App\Models\ChatRoomRead::updateLastRead($user->id, $chatRoom->id);
 
     return response()->json(['message' => '既読にしました。']);
   }
@@ -738,7 +740,7 @@ class ConversationsController extends Controller
           ]
         ],
         'latest_message' => $existingChatRoom->latestMessage,
-        'unread_messages_count' => 0, // TODO: 未読数計算
+        'unread_messages_count' => \App\Models\ChatRoomRead::getUnreadCount($user->id, $existingChatRoom->id),
         'created_at' => $existingChatRoom->created_at,
         'updated_at' => $existingChatRoom->updated_at,
       ], 200);
@@ -829,7 +831,7 @@ class ConversationsController extends Controller
         ]
       ],
       'latest_message' => $chatRoom->latestMessage,
-      'unread_messages_count' => 0, // TODO: 未読数計算
+      'unread_messages_count' => \App\Models\ChatRoomRead::getUnreadCount($user->id, $chatRoom->id),
       'created_at' => $chatRoom->created_at,
       'updated_at' => $chatRoom->updated_at,
     ], 200);
