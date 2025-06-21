@@ -28,6 +28,10 @@ class StripeConfigCheck extends Command
     $this->checkPriceConfiguration();
     $this->newLine();
 
+    // 4. 価格API動作チェック
+    $this->checkPricingAPI();
+    $this->newLine();
+
     $this->info('✅ Stripe configuration check completed!');
   }
 
@@ -65,7 +69,7 @@ class StripeConfigCheck extends Command
 
     try {
       $stripe = new StripeClient($secretKey);
-      $account = $stripe->account->retrieve();
+      $account = $stripe->accounts->retrieve();
 
       $mode = str_starts_with($secretKey, 'sk_test_') ? 'Test Mode' : 'Live Mode';
       $this->info("  ✅ Connection successful");
@@ -107,17 +111,51 @@ class StripeConfigCheck extends Command
 
         try {
           $price = $stripe->prices->retrieve($priceId);
-          $amount = number_format($price->unit_amount / 100);
+          $amount = $this->convertStripeAmount($price->unit_amount, $price->currency);
+          $formattedAmount = $this->formatPrice($amount, $price->currency);
           $currency = strtoupper($price->currency);
           $interval = $price->recurring->interval ?? 'one-time';
 
-          $this->info("  ✅ {$plan}: {$currency} {$amount} per {$interval} (ID: {$priceId})");
+          $this->info("  ✅ {$plan}: {$formattedAmount} per {$interval} (ID: {$priceId})");
         } catch (Exception $e) {
           $this->error("  ❌ {$plan}: Invalid price ID ({$priceId}) - {$e->getMessage()}");
         }
       }
     } catch (Exception $e) {
       $this->error("  ❌ Failed to check prices: {$e->getMessage()}");
+    }
+  }
+
+  private function checkPricingAPI()
+  {
+    $this->info('🏷️ Pricing API Check:');
+
+    try {
+      $controller = new \App\Http\Controllers\API\AppConfigController();
+      $response = $controller->getPricing();
+      $data = json_decode($response->getContent(), true);
+
+      if ($data['status'] === 'success') {
+        $this->info('  ✅ Pricing API working correctly');
+        
+        $plans = $data['data']['plans'];
+        foreach (['free', 'standard', 'premium'] as $plan) {
+          if (isset($plans[$plan])) {
+            $planData = $plans[$plan];
+            $verified = $planData['stripe_verified'] ?? false;
+            $verifiedIcon = $verified ? '✅' : '⚠️';
+            $this->info("  {$verifiedIcon} {$plan}: {$planData['formatted_price']} ({$planData['name']})");
+          }
+        }
+
+        $stripeEnabled = $data['data']['stripe_enabled'] ? 'Enabled' : 'Disabled';
+        $testMode = $data['data']['test_mode'] ? 'Test Mode' : 'Live Mode';
+        $this->info("  📊 Stripe: {$stripeEnabled} ({$testMode})");
+      } else {
+        $this->error('  ❌ Pricing API failed: ' . ($data['message'] ?? 'Unknown error'));
+      }
+    } catch (Exception $e) {
+      $this->error('  ❌ Pricing API error: ' . $e->getMessage());
     }
   }
 
@@ -128,5 +166,39 @@ class StripeConfigCheck extends Command
     }
 
     return substr($value, 0, 4) . str_repeat('*', strlen($value) - 8) . substr($value, -4);
+  }
+
+  /**
+   * Stripeの価格を適切な通貨単位に変換
+   */
+  private function convertStripeAmount(int $unitAmount, string $currency): float
+  {
+    // ゼロ小数点通貨（日本円、韓国ウォンなど）
+    $zeroDecimalCurrencies = ['jpy', 'krw', 'pyg', 'vnd', 'xaf', 'xof', 'bif', 'clp', 'djf', 'gnf', 'kmf', 'mga', 'rwf', 'vuv', 'xpf'];
+    
+    if (in_array(strtolower($currency), $zeroDecimalCurrencies)) {
+      return (float) $unitAmount; // そのまま返す
+    }
+    
+    return $unitAmount / 100; // セントから主要通貨単位に変換
+  }
+
+  /**
+   * 価格を適切な形式でフォーマット
+   */
+  private function formatPrice(float $amount, string $currency): string
+  {
+    $currency = strtolower($currency);
+    
+    switch ($currency) {
+      case 'jpy':
+        return '¥' . number_format($amount, 0);
+      case 'usd':
+        return '$' . number_format($amount, 2);
+      case 'eur':
+        return '€' . number_format($amount, 2);
+      default:
+        return strtoupper($currency) . ' ' . number_format($amount, 2);
+    }
   }
 }

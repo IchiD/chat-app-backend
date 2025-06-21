@@ -95,6 +95,71 @@ class StripeController extends Controller
     ]);
   }
 
+  /**
+   * Stripe Customer Portal URLを生成
+   */
+  public function createCustomerPortalSession(Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+      
+      // アクティブなサブスクリプションを取得
+      $activeSubscription = $user->activeSubscription();
+      
+      if (!$activeSubscription) {
+        return response()->json([
+          'status' => 'error',
+          'message' => 'アクティブなサブスクリプションが必要です'
+        ], 403);
+      }
+
+      $customerId = $activeSubscription->stripe_customer_id;
+      $returnUrl = $request->input('return_url', config('app.frontend_url') . '/user/subscription');
+
+      $session = $this->service->createCustomerPortalSession($customerId, $returnUrl);
+
+      return response()->json([
+        'status' => 'success',
+        'data' => [
+          'url' => $session->url
+        ]
+      ]);
+
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+      \Log::error('Stripe customer portal session creation error: ' . $e->getMessage(), [
+        'customer_id' => $customerId ?? null,
+        'return_url' => $returnUrl ?? null,
+        'error' => $e->getMessage()
+      ]);
+      
+      // Customer Portal設定エラーの場合
+      if (str_contains($e->getMessage(), 'configuration')) {
+        return response()->json([
+          'status' => 'error',
+          'message' => '請求書機能は現在準備中です。Stripe Customer Portal設定を完了する必要があります。',
+          'error_type' => 'configuration_required'
+        ], 500);
+      }
+      
+      return response()->json([
+        'status' => 'error',
+        'message' => '請求書ページの作成に失敗しました: ' . $e->getMessage()
+      ], 500);
+      
+    } catch (\Exception $e) {
+      \Log::error('Customer portal session creation failed: ' . $e->getMessage(), [
+        'customer_id' => $customerId ?? null,
+        'return_url' => $returnUrl ?? null,
+        'error' => $e->getMessage()
+      ]);
+
+      return response()->json([
+        'status' => 'error',
+        'message' => '内部サーバーエラーが発生しました'
+      ], 500);
+    }
+  }
+
   public function webhook(Request $request): Response
   {
     $payload = $request->getContent();

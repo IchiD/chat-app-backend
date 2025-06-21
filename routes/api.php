@@ -30,6 +30,8 @@ Route::middleware(['web'])->group(function () {
 
 // アプリケーション設定情報取得
 Route::get('/config', [AppConfigController::class, 'getPublicConfig']);
+Route::get('/app-config', [AppConfigController::class, 'index']);
+Route::get('/pricing', [AppConfigController::class, 'getPricing']);
 Route::post('/external/fetch', [ExternalResourceController::class, 'fetch']);
 
 // 外部システム向け認証
@@ -135,6 +137,10 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
   Route::post('/stripe/subscription/cancel', [StripeController::class, 'cancelSubscription']);
   Route::post('/stripe/subscription/resume', [StripeController::class, 'resumeSubscription']);
   Route::get('/stripe/subscription/history', [StripeController::class, 'getSubscriptionHistory']);
+  Route::post('/stripe/customer-portal', [StripeController::class, 'createCustomerPortalSession']);
+
+  // 価格設定キャッシュクリア（管理者用）
+  Route::post('/admin/pricing/clear-cache', [AppConfigController::class, 'clearPricingCache']);
 
   // メールアドレス変更関連
   Route::put('/user/update-email', [AuthController::class, 'requestEmailChange']);

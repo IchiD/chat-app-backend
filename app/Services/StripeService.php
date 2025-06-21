@@ -1201,4 +1201,15 @@ class StripeService extends BaseService
       'cancel_at_period_end' => false,
     ]);
   }
+
+  /**
+   * Customer Portal セッションを作成
+   */
+  public function createCustomerPortalSession(string $customerId, string $returnUrl)
+  {
+    return $this->client->billingPortal->sessions->create([
+      'customer' => $customerId,
+      'return_url' => $returnUrl,
+    ]);
+  }
 }
