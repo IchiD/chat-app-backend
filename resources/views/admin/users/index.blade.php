@@ -52,6 +52,8 @@
                 <option value="created_at_asc" {{ request('sort') == 'created_at_asc' ? 'selected' : '' }}>登録日（古い順）</option>
                 <option value="name_asc" {{ request('sort') == 'name_asc' ? 'selected' : '' }}>名前（昇順）</option>
                 <option value="name_desc" {{ request('sort') == 'name_desc' ? 'selected' : '' }}>名前（降順）</option>
+                <option value="plan_asc" {{ request('sort') == 'plan_asc' ? 'selected' : '' }}>プラン（昇順）</option>
+                <option value="plan_desc" {{ request('sort') == 'plan_desc' ? 'selected' : '' }}>プラン（降順）</option>
               </select>
             </div>
             <div class="col-md-3 d-flex align-items-end">
@@ -88,6 +90,7 @@
                 <th>プロフィール</th>
                 <th>メールアドレス</th>
                 <th>認証状態</th>
+                <th>プラン</th>
                 <th>フレンドID</th>
                 <th>登録日</th>
                 <th>削除情報</th>
@@ -127,6 +130,19 @@
                     <i class="fas fa-ban me-1"></i>バン済み
                   </span>
                   @endif
+                </td>
+                <td>
+                  @php
+                    $planClass = match($user->plan) {
+                      'free' => 'bg-secondary',
+                      'standard' => 'bg-warning',
+                      'premium' => 'bg-danger',
+                      default => 'bg-secondary'
+                    };
+                  @endphp
+                  <span class="badge {{ $planClass }}">
+                    {{ $user->plan_display }}
+                  </span>
                 </td>
                 <td>
                   <code class="bg-light p-1 rounded">{{ $user->friend_id }}</code>

@@ -112,6 +112,12 @@ class AdminDashboardController extends Controller
       case 'name_desc':
         $query->orderBy('name', 'desc');
         break;
+      case 'plan_asc':
+        $query->orderBy('plan', 'asc');
+        break;
+      case 'plan_desc':
+        $query->orderBy('plan', 'desc');
+        break;
       case 'created_at_desc':
       default:
         $query->orderBy('created_at', 'desc');
