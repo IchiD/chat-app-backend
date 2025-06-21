@@ -910,7 +910,27 @@ class ConversationsController extends Controller
       ->with(['chatRooms'])
       ->get();
 
-    return response()->json($groups);
+    // 各グループに未読メッセージ数とロール情報を追加
+    $processedGroups = $groups->map(function ($group) use ($user) {
+      $groupData = $group->toArray();
+
+      // オーナーなのでroleはowner
+      $groupData['role'] = 'owner';
+
+      // グループチャットルームの未読メッセージ数を取得
+      $groupChatRoom = $group->groupChatRoom;
+      $unreadCount = 0;
+
+      if ($groupChatRoom) {
+        $unreadCount = \App\Models\ChatRoomRead::getUnreadCount($user->id, $groupChatRoom->id);
+      }
+
+      $groupData['unread_messages_count'] = $unreadCount;
+
+      return $groupData;
+    });
+
+    return response()->json($processedGroups);
   }
 
   /**
