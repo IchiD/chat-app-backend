@@ -211,7 +211,7 @@
         <h5 class="modal-title">メンバー削除確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form id="removeMemberForm" method="POST">
+      <form id="removeMemberForm" method="POST" onsubmit="handleFormSubmit(event)">
         @csrf
         @method('DELETE')
         <div class="modal-body">
@@ -242,7 +242,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-          <button type="submit" class="btn btn-danger">削除する</button>
+          <button type="submit" class="btn btn-danger" onclick="console.log('Delete button clicked')">削除する</button>
         </div>
       </form>
     </div>
@@ -349,15 +349,25 @@
   }
 
   function showRemoveMemberModal(userId, userName) {
+    console.log('showRemoveMemberModal called:', userId, userName);
+
     const modal = document.getElementById('removeMemberModal');
     const form = document.getElementById('removeMemberForm');
     const message = document.getElementById('removeMemberMessage');
 
+    console.log('Modal elements:', {
+      modal,
+      form,
+      message
+    });
+
     if (!modal || !form || !message) {
+      console.error('Required modal elements not found');
       return;
     }
 
     const actionUrl = `{{ route('admin.groups.members.remove', ['groupId' => $group->id, 'memberId' => '__USER_ID__']) }}`.replace('__USER_ID__', userId);
+    console.log('Action URL:', actionUrl);
 
     form.action = actionUrl;
     message.textContent = `「${userName}」をグループから削除しますか？`;
@@ -407,5 +417,53 @@
 
     new bootstrap.Modal(modal).show();
   }
+
+  function handleFormSubmit(event) {
+    console.log('Form submit triggered');
+    const form = event.target;
+    console.log('Form action:', form.action);
+    console.log('Form method:', form.method);
+
+    // CSRFトークンの確認
+    const csrfToken = form.querySelector('input[name="_token"]');
+    console.log('CSRF token:', csrfToken ? csrfToken.value : 'NOT FOUND');
+
+    const methodInput = form.querySelector('input[name="_method"]');
+    console.log('Method input:', methodInput ? methodInput.value : 'NOT FOUND');
+
+    // フォームデータの確認
+    const formData = new FormData(form);
+    console.log('Form data:');
+    for (let [key, value] of formData.entries()) {
+      console.log(`  ${key}: ${value}`);
+    }
+
+    // 実際の送信を続行
+    return true;
+  }
+
+  // DOMが読み込まれた後にイベントリスナーを追加
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, setting up event listeners');
+
+    // フォーム送信イベントリスナーを直接追加
+    const removeMemberForm = document.getElementById('removeMemberForm');
+    if (removeMemberForm) {
+      console.log('Adding submit event listener to removeMemberForm');
+      removeMemberForm.addEventListener('submit', function(event) {
+        console.log('Submit event listener triggered');
+        handleFormSubmit(event);
+      });
+    } else {
+      console.error('removeMemberForm not found');
+    }
+
+    // 削除ボタンのクリックイベントも監視
+    document.addEventListener('click', function(event) {
+      if (event.target.type === 'submit' && event.target.classList.contains('btn-danger')) {
+        console.log('Delete submit button clicked');
+      }
+    });
+  });
 </script>
 @endsection

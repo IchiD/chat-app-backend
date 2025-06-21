@@ -1443,17 +1443,33 @@ class AdminDashboardController extends Controller
    */
   public function removeMember(Request $request, $groupId, $memberId)
   {
+    \Log::info('removeMember called', [
+      'groupId' => $groupId,
+      'memberId' => $memberId,
+      'request_data' => $request->all(),
+      'method' => $request->method(),
+      'url' => $request->url()
+    ]);
+
     $admin = Auth::guard('admin')->user();
 
     if (!$admin->isAdmin()) {
+      \Log::warning('Access denied: Admin check failed', ['admin_id' => $admin->id ?? 'null']);
       abort(403, 'アクセス権限がありません。');
     }
 
     try {
       $group = Group::findOrFail($groupId);
+      \Log::info('Group found', ['group_id' => $group->id, 'group_name' => $group->name]);
+
       $member = $group->groupMembers()->where('user_id', $memberId)->first();
+      \Log::info('Member lookup result', [
+        'member_found' => $member ? true : false,
+        'member_data' => $member ? $member->toArray() : null
+      ]);
 
       if (!$member) {
+        \Log::warning('Member not found', ['group_id' => $groupId, 'user_id' => $memberId]);
         return redirect()->back()
           ->with('error', 'メンバーが見つかりません。');
       }
@@ -1465,11 +1481,16 @@ class AdminDashboardController extends Controller
 
       // オーナーの削除は禁止
       if ($member->role === 'owner') {
+        \Log::warning('Attempted to remove owner', ['member_id' => $memberId, 'group_id' => $groupId]);
         return redirect()->back()
           ->with('error', 'グループオーナーは削除できません。');
       }
 
       $canRejoin = $request->get('can_rejoin', true); // デフォルトで再参加許可
+      \Log::info('Processing member removal', [
+        'can_rejoin' => $canRejoin,
+        'reason' => $request->reason
+      ]);
 
       // メンバーを退会処理
       $member->update([
@@ -1482,9 +1503,17 @@ class AdminDashboardController extends Controller
       $reason = $request->reason ?? '管理者による削除';
       \App\Services\OperationLogService::log('backend', 'remove_group_member', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId . ' reason:' . $reason);
 
+      \Log::info('Member removed successfully', ['member_id' => $memberId, 'group_id' => $groupId]);
+
       return redirect()->route('admin.groups.show', $group->id)
         ->with('success', 'メンバーを削除しました。');
     } catch (\Exception $e) {
+      \Log::error('Exception in removeMember', [
+        'error' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString()
+      ]);
       return redirect()->back()
         ->with('error', 'メンバーの削除に失敗しました。');
     }
