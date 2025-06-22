@@ -12,8 +12,11 @@ return new class extends Migration
    */
   public function up(): void
   {
-    // まず、enumに'friend_chat'を追加
-    DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('group_chat', 'member_chat', 'friend_chat')");
+    // SQLiteの場合はスキーマ変更をスキップ
+    if (DB::getDriverName() !== 'sqlite') {
+      // まず、enumに'friend_chat'を追加
+      DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('group_chat', 'member_chat', 'friend_chat')");
+    }
 
     // 既存のmember_chatデータで、group_idがnullのものをfriend_chatに変更
     DB::table('chat_rooms')
@@ -32,7 +35,10 @@ return new class extends Migration
       ->where('type', 'friend_chat')
       ->update(['type' => 'member_chat']);
 
-    // enumからfriend_chatを削除
-    DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('group_chat', 'member_chat')");
+    // SQLiteの場合はスキーマ変更をスキップ
+    if (DB::getDriverName() !== 'sqlite') {
+      // enumからfriend_chatを削除
+      DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('group_chat', 'member_chat')");
+    }
   }
 };

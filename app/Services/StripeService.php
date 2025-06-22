@@ -133,6 +133,26 @@ class StripeService extends BaseService
         return $this->errorResponse('invalid_plan', '指定されたプランは存在しません');
       }
 
+      // ダウングレード時のチェック（premium → standard）
+      if ($subscription->plan === 'premium' && $newPlan === 'standard') {
+        // ユーザーが所有するグループを取得し、メンバー数をチェック
+        $largeGroups = \App\Models\Group::where('owner_user_id', $user->id)
+          ->withCount('activeMembers')
+          ->get()
+          ->filter(function ($group) {
+            return $group->active_members_count > 50;
+          });
+
+        if ($largeGroups->count() > 0) {
+          $groupNames = $largeGroups->pluck('name')->toArray();
+          return $this->errorResponse('downgrade_blocked', [
+            'message' => 'グループ編集ページでメンバーの人数を50人以下にしてください。',
+            'groups' => $groupNames,
+            'link' => '/user/groups'
+          ]);
+        }
+      }
+
       // Stripeサブスクリプションを取得
       $stripeSubscription = $this->client->subscriptions->retrieve($subscription->stripe_subscription_id);
 
@@ -177,6 +197,11 @@ class StripeService extends BaseService
         'subscription_status' => 'active', // プラン変更時は必ずactiveに戻す
       ]);
 
+      // グループの上限人数を更新
+      $newMaxMembers = $newPlan === 'premium' ? 200 : 50;
+      \App\Models\Group::where('owner_user_id', $user->id)
+        ->update(['max_members' => $newMaxMembers]);
+
       Log::info("Subscription upgraded successfully", [
         'user_id' => $user->id,
         'subscription_id' => $subscription->stripe_subscription_id,
@@ -185,6 +210,7 @@ class StripeService extends BaseService
         'previous_subscription_status' => $user->subscription_status,
         'new_subscription_status' => 'active',
         'cancel_at_period_end_set_to_false' => true,
+        'groups_updated' => \App\Models\Group::where('owner_user_id', $user->id)->count(),
       ]);
 
       return $this->successResponse('subscription_upgraded', [
@@ -253,6 +279,11 @@ class StripeService extends BaseService
               'plan' => $plan,
               'subscription_status' => 'active',
             ]);
+
+            // グループの上限人数を更新
+            $newMaxMembers = $plan === 'premium' ? 200 : 50;
+            \App\Models\Group::where('owner_user_id', $user->id)
+              ->update(['max_members' => $newMaxMembers]);
 
             // PaymentTransaction の記録
             $paymentIntentId = $data['payment_intent'] ?? null;
@@ -364,6 +395,11 @@ class StripeService extends BaseService
                 'cancel_at_period_end' => $cancelAtPeriodEnd,
               ]);
               $subscription->update(['plan' => $newPlan]);
+
+              // グループの上限人数を更新
+              $newMaxMembers = $newPlan === 'premium' ? 200 : 50;
+              \App\Models\Group::where('owner_user_id', $subscription->user->id)
+                ->update(['max_members' => $newMaxMembers]);
             }
           }
 
@@ -398,6 +434,10 @@ class StripeService extends BaseService
         if ($subscription) {
           $subscription->update(['status' => 'canceled']);
           $subscription->user->update(['subscription_status' => 'canceled', 'plan' => 'free']);
+
+          // グループの上限人数を50に戻す（フリープランはグループ機能が使えないため）
+          \App\Models\Group::where('owner_user_id', $subscription->user->id)
+            ->update(['max_members' => 50]);
 
           // 履歴記録
           $this->recordSubscriptionHistory(

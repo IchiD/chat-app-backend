@@ -12,7 +12,10 @@ return new class extends Migration
    */
   public function up(): void
   {
-    DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('member_chat', 'friend_chat', 'group_chat', 'support_chat') DEFAULT 'member_chat'");
+    // SQLiteの場合はスキーマ変更をスキップ
+    if (DB::getDriverName() !== 'sqlite') {
+      DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('member_chat', 'friend_chat', 'group_chat', 'support_chat') DEFAULT 'member_chat'");
+    }
   }
 
   /**
@@ -20,6 +23,9 @@ return new class extends Migration
    */
   public function down(): void
   {
-    DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('member_chat', 'friend_chat', 'group_chat') DEFAULT 'member_chat'");
+    // SQLiteの場合はスキーマ変更をスキップ
+    if (DB::getDriverName() !== 'sqlite') {
+      DB::statement("ALTER TABLE chat_rooms MODIFY COLUMN type ENUM('member_chat', 'friend_chat', 'group_chat') DEFAULT 'member_chat'");
+    }
   }
 };

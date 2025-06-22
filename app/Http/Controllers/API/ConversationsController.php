@@ -861,12 +861,18 @@ class ConversationsController extends Controller
     $user = Auth::user();
     $chatStyles = $request->chatStyles;
 
-    $result = DB::transaction(function () use ($user, $request, $chatStyles) {
+    // ユーザーのプランに基づいてデフォルトの上限人数を設定
+    $defaultMaxMembers = 50; // デフォルトはスタンダードプラン
+    if ($user->plan === 'premium') {
+      $defaultMaxMembers = 200;
+    }
+
+    $result = DB::transaction(function () use ($user, $request, $chatStyles, $defaultMaxMembers) {
       // 1. グループを作成
       $group = Group::create([
         'name' => $request->name,
         'description' => $request->description,
-        'max_members' => $request->max_members ?? 50,
+        'max_members' => $request->max_members ?? $defaultMaxMembers,
         'owner_user_id' => $user->id,
         'chat_styles' => $chatStyles,
       ]);
