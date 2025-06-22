@@ -582,14 +582,6 @@ class ConversationsController extends Controller
           ], 403);
         }
 
-        $groupChatRoom = $group->groupChatRoom;
-        if (!$groupChatRoom) {
-          return response()->json([
-            'message' => 'グループチャットが存在しないため、このチャットにアクセスできません。',
-            'group_status' => 'no_chat_room'
-          ], 403);
-        }
-
         // 両方のユーザーがグループメンバーであることを確認
         if (!$group->hasMember($user->id) || !$group->hasMember($otherUserId)) {
           return response()->json([
@@ -877,21 +869,21 @@ class ConversationsController extends Controller
         'chat_styles' => $chatStyles,
       ]);
 
+      // 2. オーナーをグループメンバーとして必ず追加（チャットスタイルに関わらず）
+      GroupMember::create([
+        'group_id' => $group->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'role' => 'owner',
+      ]);
+
       $chatRooms = [];
 
-      // 2. 'group'スタイルが選択されている場合、グループ全体チャットルームを作成
+      // 3. 'group'スタイルが選択されている場合、グループ全体チャットルームを作成
       if (in_array('group', $chatStyles)) {
         $groupChatRoom = ChatRoom::create([
           'type' => 'group_chat',
           'group_id' => $group->id,
-        ]);
-
-        // オーナーをグループメンバーとして追加
-        GroupMember::create([
-          'group_id' => $group->id,
-          'user_id' => $user->id,
-          'joined_at' => now(),
-          'role' => 'owner',
         ]);
 
         $chatRooms[] = $groupChatRoom;
@@ -1111,12 +1103,6 @@ class ConversationsController extends Controller
       return response()->json(['message' => '自分自身をグループに追加することはできません'], 422);
     }
 
-    // グループチャットルームを取得
-    $groupChatRoom = $group->groupChatRoom;
-    if (!$groupChatRoom) {
-      return response()->json(['message' => 'グループチャットルームが見つかりません'], 404);
-    }
-
     // メンバー数制限チェック
     if (!$group->canAddMember()) {
       return response()->json(['message' => 'メンバー数が上限に達しています'], 422);
@@ -1138,7 +1124,7 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'このユーザーはグループへの再参加が禁止されています'], 422);
     }
 
-    $result = DB::transaction(function () use ($group, $groupChatRoom, $targetUser, $user) {
+    $result = DB::transaction(function () use ($group, $targetUser, $user) {
       // 論理削除されたメンバーレコードがあるかチェック
       $existingMember = GroupMember::where('group_id', $group->id)
         ->where('user_id', $targetUser->id)
@@ -1306,12 +1292,6 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'グループのメンバー数が上限に達しています'], 422);
     }
 
-    // グループチャットルームがある場合のみ参加可能（group スタイル）
-    $groupChatRoom = $group->groupChatRoom;
-    if (!$groupChatRoom) {
-      return response()->json(['message' => 'このグループにはグループチャットが設定されていません'], 422);
-    }
-
     // 既に参加しているかチェック
     if ($group->hasMember($user->id)) {
       return response()->json(['message' => '既に参加しています'], 422);
@@ -1328,7 +1308,7 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'このグループへの再参加が禁止されています'], 422);
     }
 
-    $result = DB::transaction(function () use ($group, $groupChatRoom, $user) {
+    $result = DB::transaction(function () use ($group, $user) {
       // 論理削除されたメンバーレコードがあるかチェック
       $existingMember = GroupMember::where('group_id', $group->id)
         ->where('user_id', $user->id)
@@ -1603,12 +1583,6 @@ class ConversationsController extends Controller
       'target_user_id' => $targetUserId
     ]);
 
-    // グループチャットルームを取得してメンバーかチェック
-    $groupChatRoom = $group->groupChatRoom;
-    if (!$groupChatRoom) {
-      return response()->json(['message' => 'グループチャットルームが見つかりません'], 404);
-    }
-
     // 両方がグループメンバーかチェック
     $userIsMember = $group->hasMember($user->id);
     $targetIsMember = $group->hasMember($targetUserId);
@@ -1849,12 +1823,6 @@ class ConversationsController extends Controller
       return response()->json(['message' => 'グループが見つかりません'], 404);
     }
 
-    // グループチャットルームがある場合のみ参加可能（group スタイル）
-    $groupChatRoom = $group->groupChatRoom;
-    if (!$groupChatRoom) {
-      return response()->json(['message' => 'このグループは現在参加できません'], 422);
-    }
-
     return response()->json([
       'id' => $group->id,
       'name' => $group->name,
@@ -1863,6 +1831,7 @@ class ConversationsController extends Controller
       'max_members' => $group->max_members,
       'owner_name' => $group->owner->name,
       'can_join' => $group->canAddMember(),
+      'chat_styles' => $group->chat_styles,
     ]);
   }
 
@@ -1875,6 +1844,20 @@ class ConversationsController extends Controller
     $existingRoom = $group->groupChatRoom;
     if ($existingRoom) {
       return $existingRoom;
+    }
+
+    // オーナーがGroupMemberとして存在しない場合は追加
+    $ownerMember = GroupMember::where('group_id', $group->id)
+      ->where('user_id', $group->owner_user_id)
+      ->first();
+
+    if (!$ownerMember) {
+      GroupMember::create([
+        'group_id' => $group->id,
+        'user_id' => $group->owner_user_id,
+        'joined_at' => now(),
+        'role' => 'owner',
+      ]);
     }
 
     // 新しいグループチャットルームを作成
