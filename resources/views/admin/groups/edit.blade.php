@@ -68,22 +68,33 @@
 
           <div class="mb-3">
             <label class="form-label">チャットスタイル <span class="text-danger">*</span></label>
+            <div class="alert alert-warning py-2">
+              <small><i class="fas fa-exclamation-triangle me-1"></i>一度設定されたチャットスタイルは削除できません。新しいスタイルのみ追加可能です。</small>
+            </div>
             <div class="border rounded p-3">
               <div class="form-check">
                 <input class="form-check-input @error('chat_styles') is-invalid @enderror"
                   type="checkbox" value="group" id="chat_style_group" name="chat_styles[]"
-                  {{ in_array('group', old('chat_styles', $group->chat_styles ?? [])) ? 'checked' : '' }}>
-                <label class="form-check-label" for="chat_style_group">
+                  {{ in_array('group', old('chat_styles', $group->chat_styles ?? [])) ? 'checked' : '' }}
+                  {{ in_array('group', $group->chat_styles ?? []) ? 'disabled' : '' }}>
+                <label class="form-check-label {{ in_array('group', $group->chat_styles ?? []) ? 'text-muted' : '' }}" for="chat_style_group">
                   <strong>グループチャット</strong>
+                  @if(in_array('group', $group->chat_styles ?? []))
+                  <span class="badge bg-primary ms-2">設定済み</span>
+                  @endif
                   <div class="text-muted small">全メンバーが参加する共通チャット</div>
                 </label>
               </div>
               <div class="form-check mt-2">
                 <input class="form-check-input @error('chat_styles') is-invalid @enderror"
                   type="checkbox" value="group_member" id="chat_style_member" name="chat_styles[]"
-                  {{ in_array('group_member', old('chat_styles', $group->chat_styles ?? [])) ? 'checked' : '' }}>
-                <label class="form-check-label" for="chat_style_member">
+                  {{ in_array('group_member', old('chat_styles', $group->chat_styles ?? [])) ? 'checked' : '' }}
+                  {{ in_array('group_member', $group->chat_styles ?? []) ? 'disabled' : '' }}>
+                <label class="form-check-label {{ in_array('group_member', $group->chat_styles ?? []) ? 'text-muted' : '' }}" for="chat_style_member">
                   <strong>メンバー間チャット</strong>
+                  @if(in_array('group_member', $group->chat_styles ?? []))
+                  <span class="badge bg-success ms-2">設定済み</span>
+                  @endif
                   <div class="text-muted small">メンバー同士の1対1チャット</div>
                 </label>
               </div>
@@ -118,7 +129,7 @@
       <div class="card-body">
         <ul class="mb-0">
           <li>メンバー上限は現在のメンバー数以下には設定できません</li>
-          <li>チャットスタイルの変更は既存のチャットルームには影響しません</li>
+          <li>一度設定されたチャットスタイルは削除できません（新しいスタイルの追加のみ可能）</li>
           <li>グループ名の変更は全メンバーに反映されます</li>
           <li>オーナー権限の変更はここではできません</li>
         </ul>

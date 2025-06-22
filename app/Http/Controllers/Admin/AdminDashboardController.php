@@ -1426,6 +1426,18 @@ class AdminDashboardController extends Controller
         'chat_styles.*' => 'in:group,group_member',
       ]);
 
+      // 既存のチャットスタイルが削除されていないかチェック
+      $oldChatStyles = $group->chat_styles ?? [];
+      $newChatStyles = $request->chat_styles;
+
+      foreach ($oldChatStyles as $oldStyle) {
+        if (!in_array($oldStyle, $newChatStyles)) {
+          return redirect()->back()
+            ->with('error', 'チャットスタイルの削除はできません。既存のスタイルは保持する必要があります。')
+            ->withInput();
+        }
+      }
+
       $group->update([
         'name' => $request->name,
         'description' => $request->description,

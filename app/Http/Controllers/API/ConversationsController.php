@@ -1018,34 +1018,33 @@ class ConversationsController extends Controller
       $newChatStyles = $request->chatStyles;
       $oldChatStyles = $group->chat_styles ?? [];
 
+      // 既存のチャットスタイルが削除されていないかチェック
+      foreach ($oldChatStyles as $oldStyle) {
+        if (!in_array($oldStyle, $newChatStyles)) {
+          return response()->json([
+            'message' => 'チャットスタイルの削除はできません。既存のスタイルは保持する必要があります。',
+            'current_styles' => $oldChatStyles,
+            'attempted_styles' => $newChatStyles
+          ], 422);
+        }
+      }
+
       $updateData['chat_styles'] = $newChatStyles;
 
       // トランザクション内でグループ更新とチャットルーム管理を実行
       DB::transaction(function () use ($group, $updateData, $newChatStyles, $oldChatStyles) {
         $group->update($updateData);
 
-        // グループチャットルーム管理
+        // グループチャットルーム管理（新規追加のみ）
         if (in_array('group', $newChatStyles) && !in_array('group', $oldChatStyles)) {
           // グループチャットルームを作成
           $this->createGroupChatRoom($group);
-        } elseif (!in_array('group', $newChatStyles) && in_array('group', $oldChatStyles)) {
-          // グループチャットルームを削除（論理削除）
-          $groupChatRoom = $group->groupChatRoom;
-          if ($groupChatRoom) {
-            $groupChatRoom->delete();
-          }
         }
 
-        // メンバー間チャット管理
+        // メンバー間チャット管理（新規追加のみ）
         if (in_array('group_member', $newChatStyles) && !in_array('group_member', $oldChatStyles)) {
           // 既存メンバーとの個別チャットを作成
           $this->createMemberChatsForExistingMembers($group);
-        } elseif (!in_array('group_member', $newChatStyles) && in_array('group_member', $oldChatStyles)) {
-          // メンバー間チャットルームを削除（論理削除）
-          $memberChatRooms = $group->memberChatRooms;
-          foreach ($memberChatRooms as $room) {
-            $room->delete();
-          }
         }
       });
     } else {
