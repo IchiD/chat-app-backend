@@ -55,6 +55,7 @@ class ConversationsController extends Controller
         ->toArray();
 
       // member_chatは自分が実際の参加者であるもののみを取得
+      // また、自分がアクティブなメンバーであるグループのもののみ取得
       $memberChatRoomIds = ChatRoom::whereIn('group_id', $memberGroupIds)
         ->where('type', 'member_chat')
         ->where(function ($query) use ($user) {
@@ -91,7 +92,7 @@ class ConversationsController extends Controller
       ])
       ->get();
 
-    $filteredChatRooms = $chatRooms->filter(function ($chatRoom) use ($user, $friendIds) {
+    $filteredChatRooms = $chatRooms->filter(function ($chatRoom) use ($user, $friendIds, $memberGroupIds) {
       // friend_chatは相手ユーザーが削除・バンされていない場合のみ表示する
       if ($chatRoom->type === 'friend_chat') {
         $otherParticipant = $chatRoom->participant1_id === $user->id
@@ -123,6 +124,13 @@ class ConversationsController extends Controller
       // member_chat はグループオーナー自身には不要、また相手ユーザーが削除・バンされている場合も除外
       if ($chatRoom->type === 'member_chat') {
         if ($chatRoom->group && $chatRoom->group->owner_user_id === $user->id) {
+          return false;
+        }
+
+        // 自分がそのグループから削除されている場合は表示しない
+        // （$memberGroupIdsに含まれるのは既にアクティブメンバーのみだが、
+        // 他の処理により含まれる可能性もあるため追加チェック）
+        if ($chatRoom->group && !in_array($chatRoom->group->id, $memberGroupIds)) {
           return false;
         }
 
