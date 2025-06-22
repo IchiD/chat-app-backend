@@ -642,12 +642,18 @@ class ConversationsController extends Controller
 
     // チャットタイプに応じて追加情報を設定
     if ($chatRoom->type === 'group_chat' && $chatRoom->group) {
-      // グループチャットの場合は参加者数を追加
+      // グループチャットの場合は参加者数とオーナー情報を追加
       $participantCount = $chatRoom->group->getMembersCount();
+      $groupOwner = User::find($chatRoom->group->owner_user_id);
 
       $responseData['name'] = $chatRoom->group->name;
       $responseData['group_name'] = $chatRoom->group->name;
       $responseData['participant_count'] = $participantCount;
+      $responseData['group_owner'] = $groupOwner ? [
+        'id' => $groupOwner->id,
+        'name' => $groupOwner->name,
+        'friend_id' => $groupOwner->friend_id,
+      ] : null;
       $responseData['participants'] = [
         [
           'id' => $chatRoom->group->id,
