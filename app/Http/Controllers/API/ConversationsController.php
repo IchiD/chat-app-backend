@@ -925,6 +925,19 @@ class ConversationsController extends Controller
         $unreadCount = \App\Models\ChatRoomRead::getUnreadCount($user->id, $groupChatRoom->id);
       }
 
+      // グループ内個別チャットルームの未読メッセージ数も追加
+      $memberChatRooms = $group->memberChatRooms()
+        ->where(function ($query) use ($user) {
+          $query->where('participant1_id', $user->id)
+            ->orWhere('participant2_id', $user->id);
+        })
+        ->get();
+
+      foreach ($memberChatRooms as $memberChatRoom) {
+        $memberUnreadCount = \App\Models\ChatRoomRead::getUnreadCount($user->id, $memberChatRoom->id);
+        $unreadCount += $memberUnreadCount;
+      }
+
       $groupData['unread_messages_count'] = $unreadCount;
 
       return $groupData;
@@ -1353,7 +1366,27 @@ class ConversationsController extends Controller
       ->with('user:id,name,friend_id')
       ->where('user_id', '!=', $user->id) // 自分以外のメンバー
       ->get()
-      ->map(function ($groupMember) use ($group) {
+      ->map(function ($groupMember) use ($group, $user) {
+        // 各メンバーとの個別チャットルームの未読メッセージ数を取得
+        $unreadCount = 0;
+
+        $memberChatRoom = ChatRoom::where('type', 'member_chat')
+          ->where('group_id', $group->id)
+          ->where(function ($query) use ($user, $groupMember) {
+            $query->where(function ($q) use ($user, $groupMember) {
+              $q->where('participant1_id', $user->id)
+                ->where('participant2_id', $groupMember->user_id);
+            })->orWhere(function ($q) use ($user, $groupMember) {
+              $q->where('participant1_id', $groupMember->user_id)
+                ->where('participant2_id', $user->id);
+            });
+          })
+          ->first();
+
+        if ($memberChatRoom) {
+          $unreadCount = \App\Models\ChatRoomRead::getUnreadCount($user->id, $memberChatRoom->id);
+        }
+
         return [
           'id' => $groupMember->user->id,
           'name' => $groupMember->user->name,
@@ -1361,6 +1394,7 @@ class ConversationsController extends Controller
           'group_member_label' => $group->name . 'メンバー',
           'role' => $groupMember->role,
           'joined_at' => $groupMember->joined_at,
+          'unread_messages_count' => $unreadCount, // 未読メッセージ数を追加
         ];
       });
 
@@ -1383,7 +1417,30 @@ class ConversationsController extends Controller
       ->with(['user:id,name,friend_id', 'removedByUser:id,name'])
       ->where('user_id', '!=', $user->id) // 自分以外のメンバー
       ->get()
-      ->map(function ($groupMember) use ($group) {
+      ->map(function ($groupMember) use ($group, $user) {
+        // 各メンバーとの個別チャットルームの未読メッセージ数を取得
+        $unreadCount = 0;
+
+        // アクティブなメンバーのみ未読数を計算
+        if ($groupMember->left_at === null) {
+          $memberChatRoom = ChatRoom::where('type', 'member_chat')
+            ->where('group_id', $group->id)
+            ->where(function ($query) use ($user, $groupMember) {
+              $query->where(function ($q) use ($user, $groupMember) {
+                $q->where('participant1_id', $user->id)
+                  ->where('participant2_id', $groupMember->user_id);
+              })->orWhere(function ($q) use ($user, $groupMember) {
+                $q->where('participant1_id', $groupMember->user_id)
+                  ->where('participant2_id', $user->id);
+              });
+            })
+            ->first();
+
+          if ($memberChatRoom) {
+            $unreadCount = \App\Models\ChatRoomRead::getUnreadCount($user->id, $memberChatRoom->id);
+          }
+        }
+
         return [
           'id' => $groupMember->user->id,
           'member_id' => $groupMember->id, // GroupMemberのID
@@ -1401,6 +1458,7 @@ class ConversationsController extends Controller
             'name' => $groupMember->removedByUser->name,
           ] : null,
           'is_active' => $groupMember->left_at === null,
+          'unread_messages_count' => $unreadCount, // 未読メッセージ数を追加
         ];
       });
 
