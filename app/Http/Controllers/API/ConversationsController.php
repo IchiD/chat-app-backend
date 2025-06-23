@@ -1413,15 +1413,29 @@ class ConversationsController extends Controller
     }
 
     $members = $group->groupMembers()
-      ->with(['user:id,name,friend_id', 'removedByUser:id,name'])
+      ->with(['removedByUser:id,name'])
       ->where('user_id', '!=', $user->id) // 自分以外のメンバー
       ->get()
       ->map(function ($groupMember) use ($group, $user) {
+        // 削除済みユーザーも含めて取得
+        $memberUser = \App\Models\User::withTrashed()->find($groupMember->user_id);
+
+        // デバッグログ追加
+        \Log::info('getAllGroupMembers - メンバー情報', [
+          'group_member_id' => $groupMember->id,
+          'user_id' => $groupMember->user_id,
+          'left_at' => $groupMember->left_at,
+          'removal_type' => $groupMember->removal_type,
+          'memberUser_exists' => !is_null($memberUser),
+          'memberUser_trashed' => $memberUser ? $memberUser->trashed() : null,
+          'memberUser_deleted_at' => $memberUser ? $memberUser->deleted_at : null,
+        ]);
+
         // 各メンバーとの個別チャットルームの未読メッセージ数を取得
         $unreadCount = 0;
 
         // アクティブなメンバーのみ未読数を計算
-        if ($groupMember->left_at === null) {
+        if ($groupMember->left_at === null && $memberUser && !$memberUser->trashed()) {
           $memberChatRoom = ChatRoom::where('type', 'member_chat')
             ->where('group_id', $group->id)
             ->where(function ($query) use ($user, $groupMember) {
@@ -1440,24 +1454,54 @@ class ConversationsController extends Controller
           }
         }
 
+        // グループから削除されているかユーザーが削除されているかをチェック
+        $isRemovedFromGroup = !is_null($groupMember->left_at);
+        $isUserDeleted = $memberUser && $memberUser->trashed();
+        $isDeletedUser = $isRemovedFromGroup || $isUserDeleted || !$memberUser;
+
+        // 削除済みユーザーまたはユーザーが見つからない場合の処理
+        if (!$memberUser) {
+          return [
+            'id' => null,
+            'member_id' => $groupMember->id,
+            'name' => '削除済みユーザー',
+            'friend_id' => '不明',
+            'group_member_label' => $group->name . 'メンバー',
+            'owner_nickname' => $groupMember->owner_nickname,
+            'role' => $groupMember->role,
+            'joined_at' => $groupMember->joined_at,
+            'left_at' => $groupMember->left_at,
+            'can_rejoin' => $groupMember->removal_type === 'user_leave' ? true : $groupMember->can_rejoin,
+            'removal_type' => $groupMember->removal_type,
+            'removed_by_user' => $groupMember->removedByUser ? [
+              'id' => $groupMember->removedByUser->id,
+              'name' => $groupMember->removedByUser->name,
+            ] : null,
+            'is_active' => false,
+            'is_deleted_user' => true,
+            'unread_messages_count' => 0,
+          ];
+        }
+
         return [
-          'id' => $groupMember->user->id,
-          'member_id' => $groupMember->id, // GroupMemberのID
-          'name' => $groupMember->user->name,
-          'friend_id' => $groupMember->user->friend_id,
+          'id' => $memberUser->id,
+          'member_id' => $groupMember->id,
+          'name' => $memberUser->name,
+          'friend_id' => $memberUser->friend_id,
           'group_member_label' => $group->name . 'メンバー',
-          'owner_nickname' => $groupMember->owner_nickname, // オーナー専用ニックネーム
+          'owner_nickname' => $groupMember->owner_nickname,
           'role' => $groupMember->role,
           'joined_at' => $groupMember->joined_at,
           'left_at' => $groupMember->left_at,
-          'can_rejoin' => $groupMember->can_rejoin,
+          'can_rejoin' => $groupMember->removal_type === 'user_leave' ? true : $groupMember->can_rejoin,
           'removal_type' => $groupMember->removal_type,
           'removed_by_user' => $groupMember->removedByUser ? [
             'id' => $groupMember->removedByUser->id,
             'name' => $groupMember->removedByUser->name,
           ] : null,
-          'is_active' => $groupMember->left_at === null,
-          'unread_messages_count' => $unreadCount, // 未読メッセージ数を追加
+          'is_active' => !$isDeletedUser,
+          'is_deleted_user' => $isDeletedUser,
+          'unread_messages_count' => $unreadCount,
         ];
       });
 
@@ -1512,7 +1556,7 @@ class ConversationsController extends Controller
 
     // 削除されていないメンバーかチェック
     if ($groupMember->left_at === null) {
-      return response()->json(['message' => '削除されていないメンバーです'], 422);
+      return response()->json(['message' => 'このユーザーは復活できません'], 422);
     }
 
     // メンバー数制限チェック

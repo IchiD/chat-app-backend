@@ -1578,7 +1578,7 @@ class AdminDashboardController extends Controller
 
       if (!$user) {
         return redirect()->back()
-          ->with('error', '指定されたユーザーは存在しないか、削除・バンされています。');
+          ->with('error', '指定されたユーザーは存在しないか、削除されています。');
       }
 
       // メンバーを追加
@@ -1696,7 +1696,7 @@ class AdminDashboardController extends Controller
       // 削除されていないメンバーかチェック
       if ($member->left_at === null) {
         return redirect()->back()
-          ->with('error', '削除されていないメンバーです。');
+          ->with('error', '削除されて存在しないメンバーです。');
       }
 
       // メンバー数制限チェック
