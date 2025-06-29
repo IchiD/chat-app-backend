@@ -490,6 +490,16 @@ class User extends Authenticatable
 
       // ユーザーの友達関係も論理削除
       $this->deleteFriendshipsByAdmin($adminId, "ユーザー（{$this->name}）の削除に伴う友達関係の削除: " . ($reason ?? '管理者による削除'));
+
+      // ユーザーが所属するグループのメンバー情報も更新
+      \App\Models\GroupMember::where('user_id', $this->id)
+        ->whereNull('left_at')
+        ->update([
+          'left_at' => now(),
+          'removal_type' => 'kicked_by_admin',
+          'removed_by_admin_id' => $adminId,
+          'can_rejoin' => false,
+        ]);
     }
 
     return $result;
@@ -523,6 +533,16 @@ class User extends Authenticatable
 
       // ユーザーの友達関係も論理削除
       $this->deleteFriendshipsBySelf($reason ?? 'ユーザー自身による削除');
+
+      // ユーザーが所属するグループのメンバー情報も更新
+      \App\Models\GroupMember::where('user_id', $this->id)
+        ->whereNull('left_at')
+        ->update([
+          'left_at' => now(),
+          'removal_type' => 'self_leave',
+          'removed_by_user_id' => $this->id,
+          'can_rejoin' => true, // 自己削除の場合は再参加可能
+        ]);
     }
 
     return $result;
@@ -561,6 +581,9 @@ class User extends Authenticatable
 
       // ユーザーの自己削除が原因で削除された友達関係を復元
       $this->restoreFriendshipsBySelf();
+
+      // グループメンバーの復活は自動で行わない
+      // グループオーナーまたは管理画面からの明示的な操作が必要
     }
 
     return $result;
@@ -694,6 +717,9 @@ class User extends Authenticatable
 
       // ユーザーの削除が原因で削除された友達関係を復元
       $this->restoreFriendshipsByAdmin();
+
+      // グループメンバーの復活は自動で行わない
+      // グループオーナーまたは管理画面からの明示的な操作が必要
     }
 
     return $result;

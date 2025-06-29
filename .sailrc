@@ -1,0 +1,23 @@
+#!/bin/bash
+# Sail configuration file
+
+# 環境変数の確認
+if [ ! -f .env ]; then
+    echo "Error: .env file not found!"
+    exit 1
+fi
+
+# APP_KEYの確認
+if ! grep -q "APP_KEY=" .env || grep -q "APP_KEY=$" .env; then
+    echo "Generating APP_KEY..."
+    php artisan key:generate
+fi
+
+# キャッシュのクリア（起動時）
+echo "Clearing caches on startup..."
+php artisan config:clear
+php artisan cache:clear
+
+# 設定の再読み込み
+echo "Loading configuration..."
+php artisan config:cache 

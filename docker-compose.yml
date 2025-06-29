@@ -18,12 +18,21 @@ services:
             XDEBUG_MODE: "${SAIL_XDEBUG_MODE:-off}"
             XDEBUG_CONFIG: "${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}"
             IGNITION_LOCAL_SITES_PATH: "${PWD}"
+            DB_CONNECTION: "${DB_CONNECTION:-mysql}"
+            DB_HOST: "${DB_HOST:-mysql}"
+            DB_PORT: "${DB_PORT:-3306}"
+            DB_DATABASE: "${DB_DATABASE:-laravel}"
+            DB_USERNAME: "${DB_USERNAME:-sail}"
+            DB_PASSWORD: "${DB_PASSWORD:-password}"
+            SESSION_DRIVER: "${SESSION_DRIVER:-file}"
+            CACHE_STORE: "${CACHE_STORE:-file}"
         volumes:
             - ".:/var/www/html"
         networks:
             - sail
         depends_on:
-            - mysql
+            mysql:
+                condition: service_healthy
     mysql:
         image: "mysql/mysql-server:8.0"
         ports:
@@ -34,7 +43,6 @@ services:
             MYSQL_DATABASE: "${DB_DATABASE}"
             MYSQL_USER: "${DB_USERNAME}"
             MYSQL_PASSWORD: "${DB_PASSWORD}"
-            MYSQL_ALLOW_EMPTY_PASSWORD: 1
         volumes:
             - "sail-mysql:/var/lib/mysql"
             - "./vendor/laravel/sail/database/mysql/create-testing-database.sh:/docker-entrypoint-initdb.d/10-create-testing-database.sh"
@@ -46,8 +54,10 @@ services:
                 - mysqladmin
                 - ping
                 - "-p${DB_PASSWORD}"
-            retries: 3
-            timeout: 5s
+            interval: 5s
+            timeout: 20s
+            retries: 10
+            start_period: 30s
 
     phpmyadmin:
         image: phpmyadmin/phpmyadmin
@@ -57,7 +67,7 @@ services:
         environment:
             PMA_HOST: mysql
             PMA_USER: root
-            PMA_PASSWORD: ""
+            PMA_PASSWORD: "${DB_PASSWORD}"
             PMA_ARBITRARY: 1
         networks:
             - sail

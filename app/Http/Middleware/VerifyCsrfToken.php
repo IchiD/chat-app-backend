@@ -13,5 +13,6 @@ class VerifyCsrfToken extends Middleware
    */
   protected $except = [
     'admin/login',  // 管理者ログインのみ例外
+    'api/stripe/webhook',  // Stripe webhook
   ];
 }

@@ -11,9 +11,11 @@ return new class extends Migration
    */
   public function up(): void
   {
-    Schema::table('subscriptions', function (Blueprint $table) {
-      $table->boolean('cancel_at_period_end')->default(false)->after('status');
-    });
+    if (Schema::hasTable('subscriptions')) {
+      Schema::table('subscriptions', function (Blueprint $table) {
+        $table->boolean('cancel_at_period_end')->default(false)->after('status');
+      });
+    }
   }
 
   /**
@@ -21,8 +23,10 @@ return new class extends Migration
    */
   public function down(): void
   {
-    Schema::table('subscriptions', function (Blueprint $table) {
-      $table->dropColumn('cancel_at_period_end');
-    });
+    if (Schema::hasTable('subscriptions')) {
+      Schema::table('subscriptions', function (Blueprint $table) {
+        $table->dropColumn('cancel_at_period_end');
+      });
+    }
   }
 };

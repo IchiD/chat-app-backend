@@ -1110,12 +1110,30 @@ class ConversationsController extends Controller
     }
 
     // メンバー数制限チェック
-    if (!$group->canAddMember()) {
+    $currentCount = $group->getMembersCount();
+    $maxMembers = $group->max_members;
+    $canAdd = $group->canAddMember();
+
+    \Log::info('メンバー追加時のデバッグ情報', [
+      'group_id' => $group->id,
+      'current_count' => $currentCount,
+      'max_members' => $maxMembers,
+      'can_add_member' => $canAdd,
+      'target_user_id' => $targetUser->id,
+      'target_friend_id' => $targetUser->friend_id,
+    ]);
+
+    if (!$canAdd) {
       return response()->json(['message' => 'メンバー数が上限に達しています'], 422);
     }
 
     // 既に参加しているかチェック（アクティブなメンバーのみ）
     if ($group->hasMember($targetUser->id)) {
+      \Log::info('ユーザーは既にメンバーです', [
+        'group_id' => $group->id,
+        'target_user_id' => $targetUser->id,
+        'target_friend_id' => $targetUser->friend_id,
+      ]);
       return response()->json(['message' => '既に参加しています'], 422);
     }
 
