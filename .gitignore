@@ -22,3 +22,11 @@ yarn-error.log
 /.vscode
 /.zed
 .env.local
+
+# 追加の.envファイルパターン
+.env.*
+.env.backup*
+.env.before-*
+.env.working-*
+*.backup
+
