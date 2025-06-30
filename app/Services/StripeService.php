@@ -370,7 +370,10 @@ class StripeService extends BaseService
           }
         }
       } elseif ($event === 'customer.subscription.updated') {
-        $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
+        $subscription = Subscription::with(['user' => function ($query) {
+          $query->withTrashed();
+        }])->where('stripe_subscription_id', $data['id'])->first();
+
         if ($subscription) {
           // Stripeからのcancel_at_period_endフラグ
           $cancelAtPeriodEnd = $data['cancel_at_period_end'] ?? false;
@@ -381,6 +384,37 @@ class StripeService extends BaseService
             'current_period_end' => now()->setTimestamp($data['current_period_end']),
             'cancel_at_period_end' => $cancelAtPeriodEnd,
           ]);
+
+          // ユーザーが削除されている場合はログのみ記録して処理を終了
+          if (!$subscription->user) {
+            Log::warning('User not found for subscription in webhook', [
+              'subscription_id' => $subscription->stripe_subscription_id,
+              'event_type' => $event,
+              'reason' => 'User permanently deleted'
+            ]);
+            // Webhookログを正常処理として更新
+            $webhookLog->update([
+              'status' => 'processed',
+              'processed_at' => now()
+            ]);
+            return;
+          }
+
+          // ユーザーが論理削除されている場合は、サブスクリプション情報の更新のみ行う
+          if ($subscription->user->isDeleted()) {
+            Log::info('Skipping user status update for deleted user in webhook', [
+              'subscription_id' => $subscription->stripe_subscription_id,
+              'user_id' => $subscription->user->id,
+              'user_deleted_at' => $subscription->user->deleted_at,
+              'event_type' => $event
+            ]);
+            // Webhookログを正常処理として更新
+            $webhookLog->update([
+              'status' => 'processed',
+              'processed_at' => now()
+            ]);
+            return;
+          }
 
           // Stripeのプライス情報からプラン変更を検出
           $priceId = $data['items']['data'][0]['price']['id'] ?? null;
@@ -396,14 +430,14 @@ class StripeService extends BaseService
               ]);
               $subscription->update(['plan' => $newPlan]);
 
-              // グループの上限人数を更新
+              // グループの上限人数を更新（削除されていないユーザーのみ）
               $newMaxMembers = $newPlan === 'premium' ? 200 : 50;
               \App\Models\Group::where('owner_user_id', $subscription->user->id)
                 ->update(['max_members' => $newMaxMembers]);
             }
           }
 
-          // ユーザーステータスの更新ロジック
+          // ユーザーステータスの更新ロジック（削除されていないユーザーのみ）
           if ($cancelAtPeriodEnd) {
             // キャンセル予定の場合はwill_cancelに設定
             Log::info('Setting user to will_cancel status', [
@@ -430,9 +464,59 @@ class StripeService extends BaseService
           }
         }
       } elseif ($event === 'customer.subscription.deleted') {
-        $subscription = Subscription::where('stripe_subscription_id', $data['id'])->first();
+        $subscription = Subscription::with(['user' => function ($query) {
+          $query->withTrashed();
+        }])->where('stripe_subscription_id', $data['id'])->first();
+
         if ($subscription) {
           $subscription->update(['status' => 'canceled']);
+
+          // ユーザーが削除されている場合はログのみ記録して処理を終了
+          if (!$subscription->user) {
+            Log::warning('User not found for subscription deletion webhook', [
+              'subscription_id' => $subscription->stripe_subscription_id,
+              'event_type' => $event,
+              'reason' => 'User permanently deleted'
+            ]);
+            // Webhookログを正常処理として更新
+            $webhookLog->update([
+              'status' => 'processed',
+              'processed_at' => now()
+            ]);
+            return;
+          }
+
+          // ユーザーが論理削除されている場合は、履歴記録のみ行う
+          if ($subscription->user->isDeleted()) {
+            Log::info('Processing subscription deletion for deleted user', [
+              'subscription_id' => $subscription->stripe_subscription_id,
+              'user_id' => $subscription->user->id,
+              'user_deleted_at' => $subscription->user->deleted_at,
+              'event_type' => $event
+            ]);
+
+            // 削除されたユーザーでも履歴記録は行う
+            $this->recordSubscriptionHistory(
+              $subscription->user,
+              SubscriptionHistory::ACTION_CANCELED,
+              $subscription->plan,
+              'free',
+              $subscription->stripe_subscription_id,
+              $subscription->stripe_customer_id,
+              null,
+              'Stripeでのサブスクリプションキャンセル（削除済みユーザー）',
+              null,
+              $eventId // Webhook Event IDを渡す
+            );
+            // Webhookログを正常処理として更新
+            $webhookLog->update([
+              'status' => 'processed',
+              'processed_at' => now()
+            ]);
+            return;
+          }
+
+          // アクティブなユーザーの場合のみステータス更新
           $subscription->user->update(['subscription_status' => 'canceled', 'plan' => 'free']);
 
           // グループの上限人数を50に戻す（フリープランはグループ機能が使えないため）
@@ -463,10 +547,27 @@ class StripeService extends BaseService
         $billingReason = $data['billing_reason'] ?? null;
 
         if ($subscriptionId && $customerEmail) {
-          $user = User::where('email', $customerEmail)->first();
+          $user = User::withTrashed()->where('email', $customerEmail)->first();
           $subscription = Subscription::where('stripe_subscription_id', $subscriptionId)->first();
 
           if ($user && $subscription) {
+            // 削除されたユーザーの場合はログのみ記録して処理を終了
+            if ($user->isDeleted()) {
+              Log::info('Skipping payment transaction creation for deleted user', [
+                'invoice_id' => $invoiceId,
+                'user_id' => $user->id,
+                'user_deleted_at' => $user->deleted_at,
+                'event_type' => $event,
+                'billing_reason' => $billingReason
+              ]);
+              // Webhookログを正常処理として更新
+              $webhookLog->update([
+                'status' => 'processed',
+                'processed_at' => now()
+              ]);
+              return;
+            }
+
             // より包括的な重複チェック（3Dセキュア対応）
             $existingTransaction = PaymentTransaction::where(function ($query) use ($invoiceId, $subscriptionId, $user, $amountPaid) {
               // 1. invoice ID ベースのチェック
@@ -542,10 +643,27 @@ class StripeService extends BaseService
         $amountDue = ($data['amount_due'] ?? 0) / 100; // セントから円に変換
 
         if ($subscriptionId && $customerEmail) {
-          $user = User::where('email', $customerEmail)->first();
+          $user = User::withTrashed()->where('email', $customerEmail)->first();
           $subscription = Subscription::where('stripe_subscription_id', $subscriptionId)->first();
 
           if ($user && $subscription) {
+            // 削除されたユーザーの場合はログのみ記録して処理を終了
+            if ($user->isDeleted()) {
+              Log::info('Skipping payment failure transaction for deleted user', [
+                'invoice_id' => $invoiceId,
+                'user_id' => $user->id,
+                'user_deleted_at' => $user->deleted_at,
+                'event_type' => $event,
+                'attempt_count' => $attemptCount
+              ]);
+              // Webhookログを正常処理として更新
+              $webhookLog->update([
+                'status' => 'processed',
+                'processed_at' => now()
+              ]);
+              return;
+            }
+
             // 決済失敗のトランザクション記録
             $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', 'failed_invoice_' . $invoiceId)->first();
 
@@ -612,8 +730,24 @@ class StripeService extends BaseService
           $userId = $metadata['user_id'] ?? null;
 
           if ($userId) {
-            $user = User::find($userId);
+            $user = User::withTrashed()->find($userId);
             if ($user) {
+              // 削除されたユーザーの場合はログのみ記録して処理を終了
+              if ($user->isDeleted()) {
+                Log::info('Skipping payment intent failure for deleted user', [
+                  'payment_intent_id' => $paymentIntentId,
+                  'user_id' => $user->id,
+                  'user_deleted_at' => $user->deleted_at,
+                  'event_type' => $event
+                ]);
+                // Webhookログを正常処理として更新
+                $webhookLog->update([
+                  'status' => 'processed',
+                  'processed_at' => now()
+                ]);
+                return;
+              }
+
               // 決済失敗のトランザクション記録
               $existingTransaction = PaymentTransaction::where('stripe_payment_intent_id', $paymentIntentId)->first();
 
@@ -711,7 +845,7 @@ class StripeService extends BaseService
           $user = null;
 
           if ($userId) {
-            $user = User::find($userId);
+            $user = User::withTrashed()->find($userId);
           }
 
           // invoice経由でサブスクリプション情報を取得する試み
@@ -719,7 +853,7 @@ class StripeService extends BaseService
             try {
               $invoice = $this->client->invoices->retrieve($invoiceId);
               if ($invoice->subscription && $invoice->customer_email) {
-                $user = User::where('email', $invoice->customer_email)->first();
+                $user = User::withTrashed()->where('email', $invoice->customer_email)->first();
                 $subscription = Subscription::where('stripe_subscription_id', $invoice->subscription)->first();
               }
             } catch (Exception $e) {
@@ -732,6 +866,22 @@ class StripeService extends BaseService
           }
 
           if ($user) {
+            // 削除されたユーザーの場合はログのみ記録して処理を終了
+            if ($user->isDeleted()) {
+              Log::info('Skipping payment intent success processing for deleted user', [
+                'payment_intent_id' => $paymentIntentId,
+                'user_id' => $user->id,
+                'user_deleted_at' => $user->deleted_at,
+                'event_type' => $event
+              ]);
+              // Webhookログを正常処理として更新
+              $webhookLog->update([
+                'status' => 'processed',
+                'processed_at' => now()
+              ]);
+              return;
+            }
+
             // 3Dセキュア決済では、checkout.session.completedで既にトランザクションが作成されているため、
             // payment_intent.succeededでは既存トランザクションの更新のみを行う
 
