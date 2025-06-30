@@ -23,10 +23,21 @@ class GoogleAuthController extends Controller
   /**
    * Googleの認証ページにリダイレクト
    */
-  public function redirectToGoogle()
+  public function redirectToGoogle(Request $request)
   {
     try {
       Log::info('Google認証へのリダイレクトを開始');
+
+      // intentパラメータを取得（デフォルトは'login'）
+      $intent = $request->query('intent', 'login');
+
+      // intentが正しい値かチェック
+      if (!in_array($intent, ['login', 'register'])) {
+        $intent = 'login';
+      }
+
+      // セッションにintentを保存
+      session(['google_auth_intent' => $intent]);
 
       // 環境変数の確認
       $clientId = config('services.google.client_id');
@@ -34,7 +45,8 @@ class GoogleAuthController extends Controller
 
       Log::info('Google OAuth設定確認', [
         'client_id' => $clientId ? 'SET' : 'NOT_SET',
-        'redirect_uri' => $redirectUri
+        'redirect_uri' => $redirectUri,
+        'intent' => $intent
       ]);
 
       // redirect_uriを明示的に設定
@@ -58,10 +70,21 @@ class GoogleAuthController extends Controller
    */
   public function handleGoogleCallback(Request $request)
   {
+    // intent変数をtryの外で定義
+    $intent = 'login'; // デフォルト
+
     try {
       Log::info('Googleコールバック処理を開始', [
         'query_params' => $request->query()
       ]);
+
+      // セッションからintentを取得
+      $intent = session('google_auth_intent', 'login');
+
+      // セッションから削除
+      session()->forget('google_auth_intent');
+
+      Log::info('Google認証のintentを取得', ['intent' => $intent]);
 
       // Googleからユーザー情報を取得
       $googleUser = Socialite::driver('google')->user();
@@ -69,7 +92,8 @@ class GoogleAuthController extends Controller
       Log::info('Googleユーザー情報を取得しました', [
         'google_id' => $googleUser->id,
         'email' => $googleUser->email,
-        'name' => $googleUser->name
+        'name' => $googleUser->name,
+        'intent' => $intent
       ]);
 
       // まずGoogle IDで既存ユーザーを検索（削除されたユーザーも含む）
@@ -82,6 +106,16 @@ class GoogleAuthController extends Controller
 
       if ($userByGoogleId) {
         // Google IDで既存ユーザーが見つかった場合
+
+        // 新規登録の意図なのに既存ユーザーがいる場合はエラー
+        if ($intent === 'register' && !$userByGoogleId->isDeleted()) {
+          Log::warning('Google新規登録で既存ユーザーが見つかりました', [
+            'google_id' => $googleUser->id,
+            'email' => $googleUser->email
+          ]);
+          return $this->redirectWithError('このGoogleアカウントは既に登録されています。ログインページからログインしてください。', $intent);
+        }
+
         $user = $userByGoogleId;
 
         Log::info('Google IDで既存ユーザーが見つかりました', [
@@ -115,6 +149,15 @@ class GoogleAuthController extends Controller
         }
       } elseif ($userByEmail) {
         // メールアドレスで既存ユーザーが見つかった場合（Google ID未設定）
+
+        // 新規登録の意図なのに既存ユーザーがいる場合はエラー
+        if ($intent === 'register' && !$userByEmail->isDeleted()) {
+          Log::warning('Google新規登録で既存メールアドレスが見つかりました', [
+            'email' => $googleUser->email
+          ]);
+          return $this->redirectWithError('このメールアドレスは既に登録されています。ログインページからログインしてください。', $intent);
+        }
+
         $user = $userByEmail;
 
         Log::info('メールアドレスで既存ユーザーが見つかりました', [
@@ -134,6 +177,15 @@ class GoogleAuthController extends Controller
         }
       } else {
         // 新規ユーザーの場合
+
+        // ログインの意図なのに新規ユーザーの場合はエラー
+        if ($intent === 'login') {
+          Log::warning('Googleログインで未登録ユーザー', [
+            'email' => $googleUser->email
+          ]);
+          return $this->redirectWithError('このGoogleアカウントは登録されていません。新規登録ページから登録してください。', $intent);
+        }
+
         Log::info('新規ユーザーを作成します', ['email' => $googleUser->email]);
 
         $user = User::create([
@@ -159,8 +211,18 @@ class GoogleAuthController extends Controller
           Log::info('削除されたアカウントのGoogle認証による復元', [
             'user_id' => $user->id,
             'email' => $user->email,
-            'deleted_by_self' => $user->deleted_by_self
+            'deleted_by_self' => $user->deleted_by_self,
+            'intent' => $intent
           ]);
+
+          // ログインの意図で削除されたアカウントにアクセスした場合はエラー
+          if ($intent === 'login') {
+            Log::warning('削除されたアカウントでのGoogleログイン試行', [
+              'user_id' => $user->id,
+              'email' => $user->email
+            ]);
+            return $this->redirectWithError('このアカウントは削除されています。再登録する場合は新規登録ページから登録してください。', $intent);
+          }
 
           // 再登録可能かチェック
           if (!$user->canReRegister()) {
@@ -168,7 +230,7 @@ class GoogleAuthController extends Controller
               'user_id' => $user->id,
               'email' => $user->email
             ]);
-            return $this->redirectWithError('このアカウントでの再登録は許可されていません。管理者にお問い合わせください。');
+            return $this->redirectWithError('このアカウントでの再登録は許可されていません。管理者にお問い合わせください。', $intent);
           }
 
           // 自己削除の場合は復元
@@ -210,7 +272,7 @@ class GoogleAuthController extends Controller
             'user_id' => $user->id,
             'email' => $user->email
           ]);
-          return $this->redirectWithError('このアカウントは利用停止されています。');
+          return $this->redirectWithError('このアカウントは利用停止されています。', $intent);
         }
 
         // メール認証が完了していない場合は自動認証
@@ -230,9 +292,6 @@ class GoogleAuthController extends Controller
 
       // Sanctumトークンを発行
       $tokenResult = $user->createToken('authToken');
-      $tokenResult->accessToken->update([
-        'expires_at' => Carbon::now()->addDay(),
-      ]);
 
       Log::info('Google認証が完了しました', [
         'user_id' => $user->id,
@@ -248,18 +307,22 @@ class GoogleAuthController extends Controller
         'trace' => $e->getTraceAsString()
       ]);
 
-      return $this->redirectWithError('Google認証処理中にエラーが発生しました。');
+      return $this->redirectWithError('Google認証処理中にエラーが発生しました。', $intent);
     }
   }
 
   /**
    * エラー時のフロントエンドリダイレクト
    */
-  private function redirectWithError(string $message)
+  private function redirectWithError(string $message, string $intent = 'login')
   {
     $encodedMessage = urlencode($message);
     $frontendUrl = config('app.frontend_url', 'http://localhost:3000');
-    return redirect("{$frontendUrl}/auth/login?error={$encodedMessage}");
+
+    // intentに応じてリダイレクト先を変更
+    $redirectPath = $intent === 'register' ? '/auth/register' : '/auth/login';
+
+    return redirect("{$frontendUrl}{$redirectPath}?error={$encodedMessage}");
   }
 
   /**
