@@ -11,6 +11,7 @@ use App\Http\Requests\ResetPasswordRequest;
 use App\Http\Requests\VerifyEmailRequest;
 use App\Mail\PreRegistrationEmail;
 use App\Services\AuthService;
+use App\Services\StripeService;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -23,10 +24,12 @@ use Illuminate\Support\Facades\Log;
 class AuthController extends Controller
 {
   protected $authService;
+  protected $stripeService;
 
-  public function __construct(AuthService $authService)
+  public function __construct(AuthService $authService, StripeService $stripeService)
   {
     $this->authService = $authService;
+    $this->stripeService = $stripeService;
   }
   /**
    * 仮登録処理
@@ -641,6 +644,43 @@ class AuthController extends Controller
     }
 
     try {
+      $subscriptionCanceled = false;
+      $subscriptionMessage = '';
+
+      // サブスクリプションのキャンセル処理
+      $subscription = $user->activeSubscription();
+      if ($subscription && $subscription->isActive()) {
+        Log::info('アカウント削除に伴い、Stripeサブスクリプションをキャンセルします', [
+          'user_id' => $user->id,
+          'subscription_id' => $subscription->stripe_subscription_id,
+          'plan' => $subscription->plan,
+          'current_status' => $subscription->status,
+        ]);
+
+        $cancelResult = $this->stripeService->cancelSubscription($user);
+
+        if ($cancelResult['status'] === 'success') {
+          $subscriptionCanceled = true;
+          $currentPeriodEnd = $subscription->fresh()->current_period_end;
+          $endDate = $currentPeriodEnd ? $currentPeriodEnd->format('Y年m月d日') : '現在の請求期間終了時';
+          $subscriptionMessage = "\n\nサブスクリプションは{$endDate}に自動的にキャンセルされます。それまでは引き続きサービスをご利用いただけます。";
+
+          Log::info('サブスクリプションキャンセルが完了しました', [
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->stripe_subscription_id,
+            'cancel_at_period_end' => true,
+            'current_period_end' => $currentPeriodEnd,
+          ]);
+        } else {
+          Log::warning('サブスクリプションキャンセルが失敗しました', [
+            'user_id' => $user->id,
+            'error' => $cancelResult['message'] ?? '不明なエラー',
+          ]);
+          // キャンセル失敗でもアカウント削除は続行するが、警告メッセージを含める
+          $subscriptionMessage = "\n\n注意：サブスクリプションのキャンセル処理でエラーが発生しました。カスタマーサポートにお問い合わせください。";
+        }
+      }
+
       // ユーザー自身による削除を実行
       $result = $user->deleteBySelf($request->reason);
 
@@ -652,12 +692,18 @@ class AuthController extends Controller
           'user_id' => $user->id,
           'email' => $user->email,
           'reason' => $request->reason,
+          'subscription_canceled' => $subscriptionCanceled,
           'ip' => $request->ip(),
         ]);
 
+        // レスポンスメッセージの構築
+        $message = 'アカウントを削除しました。同じメールアドレスで再度登録することができます。';
+        $message .= $subscriptionMessage;
+
         return response()->json([
-          'message' => 'アカウントを削除しました。同じメールアドレスで再度登録することができます。',
-          'status' => 'success'
+          'message' => $message,
+          'status' => 'success',
+          'subscription_canceled' => $subscriptionCanceled,
         ], 200);
       } else {
         throw new \Exception('アカウント削除に失敗しました。');
@@ -667,6 +713,7 @@ class AuthController extends Controller
         'user_id' => $user->id,
         'email' => $user->email,
         'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString(),
         'ip' => $request->ip(),
       ]);
 
