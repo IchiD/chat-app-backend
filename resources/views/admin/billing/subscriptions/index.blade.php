@@ -84,8 +84,16 @@
                 <td>#{{ $subscription->id }}</td>
                 <td>
                   <div>
+                    @if($subscription->user)
                     <strong>{{ $subscription->user->name }}</strong><br>
                     <small class="text-muted">{{ $subscription->user->email }}</small>
+                    @if($subscription->user->isDeleted())
+                    <br><span class="badge bg-warning text-dark">削除済みユーザー</span>
+                    @endif
+                    @else
+                    <strong class="text-muted">削除されたユーザー</strong><br>
+                    <small class="text-muted">ユーザー情報なし</small>
+                    @endif
                   </div>
                 </td>
                 <td>{{ strtoupper($subscription->plan) }}</td>

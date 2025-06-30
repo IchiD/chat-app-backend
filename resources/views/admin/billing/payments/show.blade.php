@@ -33,7 +33,18 @@
           <dt class="col-sm-4">ID</dt>
           <dd class="col-sm-8">#{{ $payment->id }}</dd>
           <dt class="col-sm-4">ユーザー</dt>
-          <dd class="col-sm-8">{{ $payment->user->name }}<br><small class="text-muted">{{ $payment->user->email }}</small></dd>
+          <dd class="col-sm-8">
+            @if($payment->user)
+            {{ $payment->user->name }}
+            @if($payment->user->isDeleted())
+            <span class="badge bg-warning text-dark ms-2">削除済み</span>
+            @endif
+            <br><small class="text-muted">{{ $payment->user->email }}</small>
+            @else
+            <span class="text-muted">削除されたユーザー</span><br>
+            <small class="text-muted">ユーザー情報なし</small>
+            @endif
+          </dd>
           <dt class="col-sm-4">金額</dt>
           <dd class="col-sm-8">{{ $payment->formatted_amount }}</dd>
           <dt class="col-sm-4">ステータス</dt>

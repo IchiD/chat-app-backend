@@ -91,8 +91,16 @@
               <tr>
                 <td>#{{ $payment->id }}</td>
                 <td>
+                  @if($payment->user)
                   <strong>{{ $payment->user->name }}</strong><br>
                   <small class="text-muted">{{ $payment->user->email }}</small>
+                  @if($payment->user->isDeleted())
+                  <br><span class="badge bg-warning text-dark">削除済みユーザー</span>
+                  @endif
+                  @else
+                  <strong class="text-muted">削除されたユーザー</strong><br>
+                  <small class="text-muted">ユーザー情報なし</small>
+                  @endif
                 </td>
                 <td>
                   @if($payment->plan_at_payment)

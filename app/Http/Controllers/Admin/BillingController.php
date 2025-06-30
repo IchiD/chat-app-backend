@@ -105,7 +105,9 @@ class BillingController extends Controller
    */
   public function index(Request $request)
   {
-    $query = Subscription::with('user:id,name,email');
+    $query = Subscription::with(['user' => function ($query) {
+      $query->withTrashed()->select('id', 'name', 'email', 'deleted_at');
+    }]);
 
     // フィルタリング
     if ($status = $request->get('status')) {
@@ -116,7 +118,8 @@ class BillingController extends Controller
     }
     if ($search = $request->get('search')) {
       $query->whereHas('user', function ($q) use ($search) {
-        $q->where('name', 'like', "%{$search}%")
+        $q->withTrashed()
+          ->where('name', 'like', "%{$search}%")
           ->orWhere('email', 'like', "%{$search}%");
       });
     }
@@ -140,9 +143,14 @@ class BillingController extends Controller
    */
   public function show($id)
   {
-    $subscription = Subscription::with(['user', 'paymentTransactions' => function ($query) {
-      $query->orderBy('created_at', 'desc')->limit(10);
-    }])->findOrFail($id);
+    $subscription = Subscription::with([
+      'user' => function ($query) {
+        $query->withTrashed();
+      },
+      'paymentTransactions' => function ($query) {
+        $query->orderBy('created_at', 'desc')->limit(10);
+      }
+    ])->findOrFail($id);
 
     // サブスクリプション履歴
     $history = \App\Models\SubscriptionHistory::where('user_id', $subscription->user_id)
@@ -202,7 +210,12 @@ class BillingController extends Controller
    */
   public function payments(Request $request)
   {
-    $query = PaymentTransaction::with(['user:id,name,email', 'subscription:id,plan']);
+    $query = PaymentTransaction::with([
+      'user' => function ($query) {
+        $query->withTrashed()->select('id', 'name', 'email', 'deleted_at');
+      },
+      'subscription:id,plan'
+    ]);
 
     // フィルタリング
     if ($status = $request->get('status')) {
@@ -237,8 +250,12 @@ class BillingController extends Controller
    */
   public function showPayment($id)
   {
-    $payment = PaymentTransaction::with(['user', 'subscription'])
-      ->findOrFail($id);
+    $payment = PaymentTransaction::with([
+      'user' => function ($query) {
+        $query->withTrashed();
+      },
+      'subscription'
+    ])->findOrFail($id);
 
     return view('admin.billing.payments.show', compact('payment'));
   }
@@ -248,7 +265,12 @@ class BillingController extends Controller
    */
   public function exportPayments(Request $request)
   {
-    $query = PaymentTransaction::with(['user:id,name,email', 'subscription:id,plan']);
+    $query = PaymentTransaction::with([
+      'user' => function ($query) {
+        $query->withTrashed()->select('id', 'name', 'email', 'deleted_at');
+      },
+      'subscription:id,plan'
+    ]);
 
     if ($status = $request->get('status')) {
       $query->where('status', $status);
@@ -277,7 +299,7 @@ class BillingController extends Controller
         foreach ($payments as $p) {
           fputcsv($handle, [
             $p->id,
-            $p->user->name,
+            $p->user ? $p->user->name : '削除されたユーザー',
             $p->plan_at_payment ? strtoupper($p->plan_at_payment) : $p->type,
             $p->amount * 100, // 現在decimal保存のため×100
             $p->status,

@@ -57,8 +57,16 @@
           <dd class="col-sm-8">#{{ $subscription->id }}</dd>
           <dt class="col-sm-4">ユーザー</dt>
           <dd class="col-sm-8">
-            {{ $subscription->user->name }}<br>
-            <small class="text-muted">{{ $subscription->user->email }}</small>
+            @if($subscription->user)
+            {{ $subscription->user->name }}
+            @if($subscription->user->isDeleted())
+            <span class="badge bg-warning text-dark ms-2">削除済み</span>
+            @endif
+            <br><small class="text-muted">{{ $subscription->user->email }}</small>
+            @else
+            <span class="text-muted">削除されたユーザー</span><br>
+            <small class="text-muted">ユーザー情報なし</small>
+            @endif
           </dd>
           <dt class="col-sm-4">プラン</dt>
           <dd class="col-sm-8">{{ strtoupper($subscription->plan) }}</dd>
