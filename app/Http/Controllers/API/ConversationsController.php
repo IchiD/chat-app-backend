@@ -109,6 +109,10 @@ class ConversationsController extends Controller
 
       // support_chatは表示する
       if ($chatRoom->type === 'support_chat') {
+        // メッセージがない場合は表示しない
+        if (!$chatRoom->latestMessage) {
+          return false;
+        }
         return true;
       }
 

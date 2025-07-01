@@ -200,6 +200,9 @@ class GoogleAuthController extends Controller
           'password' => Hash::make(Str::random(32)), // ランダムパスワード
         ]);
 
+        // サポートチャットルームを自動作成
+        $this->createSupportChatRoom($user);
+
         Log::info('新規ユーザーが作成されました', ['user_id' => $user->id]);
         \App\Services\OperationLogService::log('frontend', 'user_register', 'user_id:' . $user->id . ' google:true');
       }
@@ -264,6 +267,9 @@ class GoogleAuthController extends Controller
             'name' => $googleUser->name,
             'email' => $user->email
           ]);
+
+          // 復元されたユーザーのサポートチャットルームを確認・作成
+          $this->createSupportChatRoom($user);
         }
 
         // バンされたアカウントの場合
@@ -352,5 +358,37 @@ class GoogleAuthController extends Controller
     ]);
 
     return redirect($redirectUrl);
+  }
+
+  /**
+   * サポートチャットルームを作成
+   *
+   * @param User $user
+   * @return void
+   */
+  private function createSupportChatRoom(User $user): void
+  {
+    try {
+      // 既存のサポートチャットルームがないことを確認
+      $existingSupport = \App\Models\ChatRoom::where('type', 'support_chat')
+        ->where('participant1_id', $user->id)
+        ->first();
+
+      if (!$existingSupport) {
+        \App\Models\ChatRoom::create([
+          'type' => 'support_chat',
+          'participant1_id' => $user->id,
+          'participant2_id' => null, // サポートチャットは管理者が後から参加
+        ]);
+
+        Log::info('サポートチャットルームを作成しました', ['user_id' => $user->id]);
+      }
+    } catch (\Exception $e) {
+      Log::error('サポートチャットルーム作成でエラーが発生しました', [
+        'user_id' => $user->id,
+        'error' => $e->getMessage()
+      ]);
+      // サポートチャット作成の失敗は登録全体を失敗させない
+    }
   }
 }

@@ -109,6 +109,9 @@ class AuthService extends BaseService
         ]);
       }
 
+      // サポートチャットルームを自動作成
+      $this->createSupportChatRoom($user);
+
       // 認証用メールの送信を同期実施（一時的）
       Mail::to($user->email)->send(new PreRegistrationEmail($user));
 
@@ -128,6 +131,38 @@ class AuthService extends BaseService
       'status'  => 'success',
       'message' => '仮登録完了。確認メールを送信しました。メール内の認証リンクをクリックして本登録を完了してください。'
     ];
+  }
+
+  /**
+   * サポートチャットルームを作成
+   *
+   * @param User $user
+   * @return void
+   */
+  private function createSupportChatRoom(User $user): void
+  {
+    try {
+      // 既存のサポートチャットルームがないことを確認
+      $existingSupport = \App\Models\ChatRoom::where('type', 'support_chat')
+        ->where('participant1_id', $user->id)
+        ->first();
+
+      if (!$existingSupport) {
+        \App\Models\ChatRoom::create([
+          'type' => 'support_chat',
+          'participant1_id' => $user->id,
+          'participant2_id' => null, // サポートチャットは管理者が後から参加
+        ]);
+
+        Log::info('サポートチャットルームを作成しました', ['user_id' => $user->id]);
+      }
+    } catch (\Exception $e) {
+      Log::error('サポートチャットルーム作成でエラーが発生しました', [
+        'user_id' => $user->id,
+        'error' => $e->getMessage()
+      ]);
+      // サポートチャット作成の失敗は登録全体を失敗させない
+    }
   }
 
   /**
