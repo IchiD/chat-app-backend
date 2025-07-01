@@ -657,7 +657,8 @@ class AuthController extends Controller
           'current_status' => $subscription->status,
         ]);
 
-        $cancelResult = $this->stripeService->cancelSubscription($user);
+        // 退会処理時は専用のキャンセル処理を実行
+        $cancelResult = $this->stripeService->cancelSubscriptionForAccountDeletion($user);
 
         if ($cancelResult['status'] === 'success') {
           $subscriptionCanceled = true;

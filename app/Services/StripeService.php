@@ -471,6 +471,11 @@ class StripeService extends BaseService
         if ($subscription) {
           $subscription->update(['status' => 'canceled']);
 
+          // Stripeのデータから利用期限を取得
+          $currentPeriodEnd = isset($data['current_period_end']) ?
+            \Carbon\Carbon::createFromTimestamp($data['current_period_end']) :
+            $subscription->current_period_end;
+
           // ユーザーが削除されている場合はログのみ記録して処理を終了
           if (!$subscription->user) {
             Log::warning('User not found for subscription deletion webhook', [
@@ -505,7 +510,11 @@ class StripeService extends BaseService
               $subscription->stripe_customer_id,
               null,
               'Stripeでのサブスクリプションキャンセル（削除済みユーザー）',
-              null,
+              [
+                'current_period_end' => $currentPeriodEnd ? $currentPeriodEnd->toISOString() : null,
+                'cancel_source' => 'stripe_webhook',
+                'user_deleted' => true,
+              ],
               $eventId // Webhook Event IDを渡す
             );
             // Webhookログを正常処理として更新
@@ -533,7 +542,10 @@ class StripeService extends BaseService
             $subscription->stripe_customer_id,
             null,
             'Stripeでのサブスクリプションキャンセル',
-            null,
+            [
+              'current_period_end' => $currentPeriodEnd ? $currentPeriodEnd->toISOString() : null,
+              'cancel_source' => 'stripe_webhook',
+            ],
             $eventId // Webhook Event IDを渡す
           );
         }
@@ -1176,7 +1188,12 @@ class StripeService extends BaseService
         'subscription_status' => 'will_cancel', // 期間終了時にキャンセル予定
       ]);
 
-      // 履歴記録
+      // 利用可能期限を取得
+      $currentPeriodEnd = $stripeSubscription ?
+        \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end) :
+        $subscription->current_period_end;
+
+      // 履歴記録（利用可能期限をmetadataに含める）
       $this->recordSubscriptionHistory(
         $user,
         SubscriptionHistory::ACTION_CANCELED,
@@ -1185,7 +1202,11 @@ class StripeService extends BaseService
         $subscription->stripe_subscription_id,
         $subscription->stripe_customer_id,
         null,
-        'ユーザーによるキャンセル（期間終了時に有効）'
+        'ユーザーによるキャンセル（期間終了時に有効）',
+        [
+          'current_period_end' => $currentPeriodEnd ? $currentPeriodEnd->toISOString() : null,
+          'cancel_source' => 'user',
+        ]
       );
 
       Log::info("Subscription canceled", [
@@ -1197,12 +1218,86 @@ class StripeService extends BaseService
       return $this->successResponse('subscription_canceled', [
         'message' => 'サブスクリプションをキャンセルしました。現在の期間終了まで利用可能です。',
         'cancel_at_period_end' => $stripeSubscription ? $stripeSubscription->cancel_at_period_end : true,
-        'current_period_end' => $stripeSubscription ?
-          \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end) :
-          $subscription->current_period_end,
+        'current_period_end' => $currentPeriodEnd,
       ]);
     } catch (Exception $e) {
       Log::error('Cancel subscription error: ' . $e->getMessage(), [
+        'user_id' => $user->id,
+        'error' => $e->getMessage(),
+      ]);
+      return $this->errorResponse('cancel_error', 'サブスクリプションのキャンセルに失敗しました');
+    }
+  }
+
+  /**
+   * アカウント削除時のサブスクリプションキャンセル
+   * 重複チェックをバイパスして必ず履歴を記録
+   */
+  public function cancelSubscriptionForAccountDeletion(User $user): array
+  {
+    try {
+      $subscription = $user->activeSubscription();
+
+      if (!$subscription) {
+        return $this->errorResponse('no_subscription', 'アクティブなサブスクリプションがありません');
+      }
+
+      if (!in_array($subscription->status, ['active', 'trialing', 'will_cancel'])) {
+        return $this->errorResponse('cannot_cancel', 'このサブスクリプションはキャンセルできません');
+      }
+
+      // Stripeでキャンセル実行（期間終了時キャンセル）
+      $stripeSubscription = null;
+      if ($this->client && $subscription->stripe_subscription_id) {
+        try {
+          $stripeSubscription = $this->client->subscriptions->update(
+            $subscription->stripe_subscription_id,
+            ['cancel_at_period_end' => true]
+          );
+        } catch (Exception $e) {
+          Log::warning('Stripe subscription cancellation failed for account deletion', [
+            'subscription_id' => $subscription->stripe_subscription_id,
+            'error' => $e->getMessage(),
+          ]);
+        }
+      }
+
+      // ローカルデータベース更新
+      $subscription->update([
+        'cancel_at_period_end' => true,
+      ]);
+
+      $user->update([
+        'subscription_status' => 'will_cancel',
+      ]);
+
+      // 利用可能期限を取得
+      $currentPeriodEnd = $stripeSubscription ?
+        \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end) :
+        $subscription->current_period_end;
+
+      // 退会処理専用の履歴記録（重複チェックをバイパス）
+      $this->recordSubscriptionHistoryForAccountDeletion(
+        $user,
+        $subscription->plan,
+        $subscription->stripe_subscription_id,
+        $subscription->stripe_customer_id,
+        $currentPeriodEnd
+      );
+
+      Log::info("Subscription canceled for account deletion", [
+        'user_id' => $user->id,
+        'subscription_id' => $subscription->stripe_subscription_id,
+        'cancel_at_period_end' => true,
+      ]);
+
+      return $this->successResponse('subscription_canceled', [
+        'message' => 'アカウント削除に伴いサブスクリプションをキャンセルしました。',
+        'cancel_at_period_end' => true,
+        'current_period_end' => $currentPeriodEnd,
+      ]);
+    } catch (Exception $e) {
+      Log::error('Cancel subscription for account deletion error: ' . $e->getMessage(), [
         'user_id' => $user->id,
         'error' => $e->getMessage(),
       ]);
@@ -1335,16 +1430,47 @@ class StripeService extends BaseService
         }
       }
 
+      // キャンセルアクションの場合の特別な重複チェック
+      if ($action === SubscriptionHistory::ACTION_CANCELED) {
+        // 同じサブスクリプションIDで24時間以内のキャンセルログがあるかチェック
+        $existingCancelHistory = SubscriptionHistory::where('user_id', $user->id)
+          ->where('action', SubscriptionHistory::ACTION_CANCELED)
+          ->where('stripe_subscription_id', $stripeSubscriptionId)
+          ->where('created_at', '>=', now()->subHours(24))
+          ->orderBy('created_at', 'desc')
+          ->first();
+
+        if ($existingCancelHistory) {
+          // メタデータが異なる場合のみ、既存レコードを更新
+          if ($metadata && $metadata !== $existingCancelHistory->metadata) {
+            $existingCancelHistory->update([
+              'metadata' => array_merge($existingCancelHistory->metadata ?? [], $metadata),
+              'notes' => $notes ?? $existingCancelHistory->notes,
+            ]);
+            Log::info('Updated existing cancel history with new metadata', [
+              'user_id' => $user->id,
+              'history_id' => $existingCancelHistory->id,
+            ]);
+          } else {
+            Log::info('Cancel history already exists within 24 hours, skipping creation', [
+              'user_id' => $user->id,
+              'existing_id' => $existingCancelHistory->id,
+            ]);
+          }
+          return;
+        }
+      }
+
       // フォールバック: 業務ロジックベースの重複チェック
       $existingHistory = SubscriptionHistory::where('user_id', $user->id)
         ->where('action', $action)
+        ->where('from_plan', $fromPlan)
         ->where('to_plan', $toPlan)
-        ->where('stripe_subscription_id', $stripeSubscriptionId)
-        ->where('created_at', '>=', now()->subMinutes(5)) // 緊急時のフォールバック
+        ->where('created_at', '>=', now()->subMinutes(5))
         ->first();
 
       if ($existingHistory) {
-        Log::info('Subscription history already exists (fallback check), skipping creation', [
+        Log::info('Subscription history already exists for this action, skipping creation', [
           'user_id' => $user->id,
           'action' => $action,
           'existing_id' => $existingHistory->id,
@@ -1352,23 +1478,73 @@ class StripeService extends BaseService
         return;
       }
 
+      // 履歴レコードを作成
       SubscriptionHistory::create([
         'user_id' => $user->id,
         'action' => $action,
         'from_plan' => $fromPlan,
         'to_plan' => $toPlan,
-        'stripe_subscription_id' => $stripeSubscriptionId,
-        'stripe_customer_id' => $stripeCustomerId,
-        'webhook_event_id' => $webhookEventId,
         'amount' => $amount,
         'currency' => 'jpy',
+        'stripe_subscription_id' => $stripeSubscriptionId,
+        'stripe_customer_id' => $stripeCustomerId,
         'notes' => $notes,
         'metadata' => $metadata,
+        'webhook_event_id' => $webhookEventId,
+      ]);
+
+      Log::info('Subscription history recorded', [
+        'user_id' => $user->id,
+        'action' => $action,
+        'from_plan' => $fromPlan,
+        'to_plan' => $toPlan,
       ]);
     } catch (Exception $e) {
       Log::error('Failed to record subscription history', [
         'user_id' => $user->id,
         'action' => $action,
+        'error' => $e->getMessage(),
+      ]);
+    }
+  }
+
+  /**
+   * アカウント削除時のサブスクリプション履歴を記録（重複チェックなし）
+   */
+  private function recordSubscriptionHistoryForAccountDeletion(
+    User $user,
+    string $plan,
+    ?string $stripeSubscriptionId,
+    ?string $stripeCustomerId,
+    ?\Carbon\Carbon $currentPeriodEnd
+  ): void {
+    try {
+      // 退会処理時は重複チェックをバイパスして必ず履歴を記録
+      SubscriptionHistory::create([
+        'user_id' => $user->id,
+        'action' => SubscriptionHistory::ACTION_CANCELED,
+        'from_plan' => $plan,
+        'to_plan' => $plan, // キャンセル時はプラン変更なし
+        'amount' => null,
+        'currency' => 'jpy',
+        'stripe_subscription_id' => $stripeSubscriptionId,
+        'stripe_customer_id' => $stripeCustomerId,
+        'notes' => 'アカウント削除に伴うキャンセル（期間終了時に有効）',
+        'metadata' => [
+          'current_period_end' => $currentPeriodEnd ? $currentPeriodEnd->toISOString() : null,
+          'cancel_source' => 'account_deletion',
+        ],
+      ]);
+
+      Log::info('Account deletion subscription history recorded', [
+        'user_id' => $user->id,
+        'action' => SubscriptionHistory::ACTION_CANCELED,
+        'plan' => $plan,
+        'current_period_end' => $currentPeriodEnd,
+      ]);
+    } catch (Exception $e) {
+      Log::error('Failed to record account deletion subscription history', [
+        'user_id' => $user->id,
         'error' => $e->getMessage(),
       ]);
     }
