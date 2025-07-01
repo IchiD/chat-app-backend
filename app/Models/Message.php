@@ -11,7 +11,7 @@ class Message extends Model
   use HasFactory;
 
   protected $fillable = [
-    'conversation_id',
+    'chat_room_id',
     'sender_id',
     'admin_sender_id',
     'content_type',
@@ -31,13 +31,7 @@ class Message extends Model
     'admin_deleted_at' => 'datetime',
   ];
 
-  /**
-   * このメッセージが属する会話を取得
-   */
-  public function conversation(): BelongsTo
-  {
-    return $this->belongsTo(Conversation::class);
-  }
+
 
   /**
    * このメッセージの送信者を取得（ユーザー）
@@ -112,5 +106,42 @@ class Message extends Model
       'admin_deleted_reason' => null,
       'admin_deleted_by' => null,
     ]);
+  }
+
+  /**
+   * このメッセージが送信されたチャットルーム（新構造）
+   */
+  public function chatRoom(): BelongsTo
+  {
+    return $this->belongsTo(ChatRoom::class);
+  }
+
+  /**
+   * 送信者の表示名を取得（退室状態を考慮）
+   */
+  public function getSenderDisplayName(): string
+  {
+    // 管理者メッセージの場合
+    if ($this->isFromAdmin()) {
+      return $this->adminSender ? $this->adminSender->name : '管理者';
+    }
+
+    // ユーザーメッセージの場合
+    if ($this->sender) {
+      // グループチャットの場合は退室状態をチェック
+      if ($this->chatRoom && $this->chatRoom->isGroupChat() && $this->chatRoom->group) {
+        $memberInfo = $this->chatRoom->group->groupMembers()
+          ->where('user_id', $this->sender_id)
+          ->first();
+
+        if ($memberInfo && $memberInfo->left_at) {
+          return $this->sender->name . '（退室済み）';
+        }
+      }
+
+      return $this->sender->name;
+    }
+
+    return 'ユーザー';
   }
 }

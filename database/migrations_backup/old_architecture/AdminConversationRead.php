@@ -12,7 +12,8 @@ class AdminConversationRead extends Model
 
   protected $fillable = [
     'admin_id',
-    'conversation_id',
+    'conversation_id', // 旧構造用（互換性のため）
+    'chat_room_id',    // 新構造用
     'last_read_at',
   ];
 
@@ -29,7 +30,7 @@ class AdminConversationRead extends Model
   }
 
   /**
-   * この記録に関連する会話を取得
+   * この記録に関連するチャットを取得（旧構造）
    */
   public function conversation(): BelongsTo
   {
@@ -37,14 +38,23 @@ class AdminConversationRead extends Model
   }
 
   /**
-   * 指定した管理者と会話の最後読み取り時刻を更新
+   * この記録に関連するチャットルームを取得（新構造）
    */
-  public static function updateLastRead(int $adminId, int $conversationId): void
+  public function chatRoom(): BelongsTo
+  {
+    return $this->belongsTo(\App\Models\ChatRoom::class);
+  }
+
+  /**
+   * 指定した管理者とチャットの最後読み取り時刻を更新
+   * 新構造（ChatRoom）に対応したバージョン
+   */
+  public static function updateLastRead(int $adminId, int $chatRoomId): void
   {
     static::updateOrCreate(
       [
         'admin_id' => $adminId,
-        'conversation_id' => $conversationId,
+        'chat_room_id' => $chatRoomId,
       ],
       [
         'last_read_at' => now(),
@@ -54,10 +64,11 @@ class AdminConversationRead extends Model
 
   /**
    * 指定した管理者の未読メッセージ数を取得
+   * 新構造（ChatRoom）に対応したバージョン
    */
   public static function getUnreadCount(int $adminId): int
   {
-    return Conversation::where('type', 'support')
+    return \App\Models\ChatRoom::where('type', 'support_chat')
       ->whereNull('deleted_at')
       ->whereHas('messages', function ($messageQuery) use ($adminId) {
         $messageQuery->whereNull('admin_sender_id') // ユーザーからのメッセージのみ
@@ -67,7 +78,7 @@ class AdminConversationRead extends Model
               $subQuery->select('id')
                 ->from('admin_conversation_reads')
                 ->where('admin_id', $adminId)
-                ->whereColumn('conversation_id', 'messages.conversation_id')
+                ->whereColumn('chat_room_id', 'messages.chat_room_id')
                 ->whereColumn('last_read_at', '>=', 'messages.sent_at');
             });
           });
@@ -76,15 +87,16 @@ class AdminConversationRead extends Model
   }
 
   /**
-   * 指定した管理者と会話の未読メッセージ数を取得
+   * 指定した管理者とチャットの未読メッセージ数を取得
+   * 新構造（ChatRoom）に対応したバージョン
    */
-  public static function getConversationUnreadCount(int $adminId, int $conversationId): int
+  public static function getConversationUnreadCount(int $adminId, int $chatRoomId): int
   {
     $lastRead = static::where('admin_id', $adminId)
-      ->where('conversation_id', $conversationId)
+      ->where('chat_room_id', $chatRoomId)
       ->first();
 
-    $query = Message::where('conversation_id', $conversationId)
+    $query = \App\Models\Message::where('chat_room_id', $chatRoomId)
       ->whereNull('admin_sender_id') // ユーザーからのメッセージのみ
       ->whereNull('admin_deleted_at');
 

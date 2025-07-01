@@ -33,10 +33,10 @@
         </div>
       </div>
 
-      <!-- サポート会話リスト -->
+      <!-- サポートチャットリスト -->
       <div class="card">
         <div class="card-header">
-          <h5 class="card-title mb-0">サポート会話一覧 ({{ $conversations->total() }}件)</h5>
+          <h5 class="card-title mb-0">サポートチャット一覧 ({{ $conversations->total() }}件)</h5>
         </div>
         <div class="card-body">
           @if($conversations->count() > 0)
@@ -55,11 +55,15 @@
                 @foreach($conversations as $conversation)
                 <tr>
                   <td>
-                    @if($conversation->conversationParticipants->first() && $conversation->conversationParticipants->first()->user)
+                    @php
+                    // サポートチャットでは participant1 がユーザー、participant2 が管理者（通常はnull）
+                    $user = $conversation->participant1;
+                    @endphp
+                    @if($user)
                     <div>
-                      <strong>{{ $conversation->conversationParticipants->first()->user->name }}</strong>
+                      <strong>{{ $user->name }}</strong>
                       <br>
-                      <small class="text-muted">{{ $conversation->conversationParticipants->first()->user->email }}</small>
+                      <small class="text-muted">{{ $user->email }}</small>
                     </div>
                     @else
                     <span class="text-muted">ユーザー不明</span>
@@ -69,15 +73,11 @@
                     @if($conversation->latestMessage)
                     <div class="d-flex justify-content-between align-items-center">
                       <div>
-                        <div class="text-muted small">
+                        <div class="text-muted small message-content">
                           {{ $conversation->latestMessage->text_content }}
                         </div>
                         <div class="text-muted small">
-                          @if($conversation->latestMessage->admin_sender_id)
-                          管理者：{{ $conversation->latestMessage->adminSender->name ?? '管理者' }}
-                          @else
-                          {{ $conversation->latestMessage->sender->name ?? 'ユーザー' }}
-                          @endif
+                          {{ $conversation->latestMessage->getSenderDisplayName() }}
                           •
                           {{ $conversation->latestMessage->sent_at->format('m/d H:i') }}
                         </div>

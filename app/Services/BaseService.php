@@ -12,15 +12,22 @@ abstract class BaseService
    * 共通のエラーレスポンスを生成するメソッド
    *
    * @param string $errorType エラータイプの識別子
-   * @param string $message   ユーザーに表示するエラーメッセージ
+   * @param string|array $messageOrData ユーザーに表示するエラーメッセージまたはエラーデータ
    * @return array            エラーレスポンスの配列
    */
-  protected function errorResponse(string $errorType, string $message): array
+  protected function errorResponse(string $errorType, $messageOrData): array
   {
+    if (is_array($messageOrData)) {
+      return array_merge([
+        'status'     => self::STATUS_ERROR,
+        'error_type' => $errorType,
+      ], $messageOrData);
+    }
+
     return [
       'status'     => self::STATUS_ERROR,
       'error_type' => $errorType,
-      'message'    => $message,
+      'message'    => $messageOrData,
     ];
   }
 

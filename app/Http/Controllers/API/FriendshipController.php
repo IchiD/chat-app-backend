@@ -223,7 +223,13 @@ class FriendshipController extends Controller
 
       $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer|exists:users,id',
-        'message' => 'nullable|string|max:255'
+        'message' => 'nullable|string|max:30'
+      ], [
+        'user_id.required' => 'ユーザーIDが必要です',
+        'user_id.integer' => 'ユーザーIDは数値である必要があります',
+        'user_id.exists' => '指定されたユーザーが見つかりません',
+        'message.string' => 'メッセージは文字列である必要があります',
+        'message.max' => 'メッセージは30文字以内で入力してください'
       ]);
 
       if ($validator->fails()) {
@@ -274,6 +280,9 @@ class FriendshipController extends Controller
             // 相手から既に申請が来ている場合は自動的に承認する
             $existingFriendship->status = Friendship::STATUS_ACCEPTED;
             $existingFriendship->save();
+
+            // 友達申請承認後、friend_chatを自動作成
+            $this->createFriendChatIfNotExists($currentUser->id, $friendId);
 
             Log::info('友達申請の相互承認', [
               'user_id' => $currentUser->id,
@@ -401,6 +410,9 @@ class FriendshipController extends Controller
         'message' => '友達申請が見つからないか、すでに承認/拒否されています'
       ], 404);
     }
+
+    // 友達申請承認後、friend_chatを自動作成
+    $this->createFriendChatIfNotExists($currentUser->id, $userId);
 
     return response()->json([
       'status' => 'success',
@@ -536,6 +548,56 @@ class FriendshipController extends Controller
       'status' => 'success',
       'message' => '友達申請を取り消しました'
     ]);
+  }
+
+  /**
+   * 友達関係のfriend_chatを作成（存在しない場合のみ）
+   *
+   * @param int $userId1
+   * @param int $userId2
+   * @return void
+   */
+  private function createFriendChatIfNotExists(int $userId1, int $userId2): void
+  {
+    try {
+      // 論理削除されたものも含めて既存のfriend_chatをチェック
+      $existingFriendChat = \App\Models\ChatRoom::getFriendChat($userId1, $userId2);
+
+      if ($existingFriendChat) {
+        // 既存のfriend_chatがある場合は何もしない（復活はしない）
+        Log::info('既存のfriend_chatが見つかりました（復活はしません）', [
+          'chat_room_id' => $existingFriendChat->id,
+          'user_id1' => $userId1,
+          'user_id2' => $userId2,
+          'is_deleted' => $existingFriendChat->trashed()
+        ]);
+      } else {
+        // friend_chatを新規作成
+        \Illuminate\Support\Facades\DB::transaction(function () use ($userId1, $userId2) {
+          $newChatRoom = \App\Models\ChatRoom::create([
+            'type' => 'friend_chat',
+            'group_id' => null,
+            'participant1_id' => $userId1,
+            'participant2_id' => $userId2,
+          ]);
+
+          // 新アーキテクチャでは、participant1_idとparticipant2_idで参加者を管理するため
+          // 別途Participantテーブルへの登録は不要
+        });
+
+        Log::info('友達関係のfriend_chatを新規作成', [
+          'user_id1' => $userId1,
+          'user_id2' => $userId2
+        ]);
+      }
+    } catch (\Exception $e) {
+      Log::error('friend_chat作成/復活でエラー', [
+        'user_id1' => $userId1,
+        'user_id2' => $userId2,
+        'error' => $e->getMessage()
+      ]);
+      // エラーが発生しても友達申請承認は成功させる
+    }
   }
 
   /**

@@ -64,11 +64,11 @@
                 </td>
                 <td>
                   @if($adminUser->role === 'super_admin')
-                  <span class="badge bg-danger">
+                  <span class="badge badge-superadmin">
                     <i class="fas fa-crown me-1"></i>スーパーアドミン
                   </span>
                   @else
-                  <span class="badge bg-primary">
+                  <span class="badge badge-admin">
                     <i class="fas fa-user-cog me-1"></i>アドミン
                   </span>
                   @endif
@@ -87,8 +87,7 @@
                     </button>
                     <ul class="dropdown-menu">
                       <li>
-                        <a class="dropdown-item" href="#"
-                          onclick="alert('編集機能は今後実装予定です')">
+                        <a class="dropdown-item" href="{{ route('admin.admins.edit', $adminUser->id) }}">
                           <i class="fas fa-edit me-2"></i>編集
                         </a>
                       </li>
@@ -97,14 +96,14 @@
                       </li>
                       <li>
                         <a class="dropdown-item text-danger" href="#"
-                          onclick="if(confirm('本当に削除しますか？')) alert('削除機能は今後実装予定です')">
+                          onclick="showDeleteAdminModal({{ $adminUser->id }}, '{{ $adminUser->name }}')">
                           <i class="fas fa-trash me-2"></i>削除
                         </a>
                       </li>
                     </ul>
                   </div>
                   @else
-                  <span class="badge bg-info">
+                  <span class="badge badge-loggedin">
                     <i class="fas fa-user me-1"></i>ログイン中
                   </span>
                   @endif
@@ -218,6 +217,38 @@
     </div>
   </div>
 </div>
+
+<!-- アドミン削除確認モーダル -->
+<div class="modal fade" id="deleteAdminModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">アドミン削除確認</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="deleteAdminForm" method="POST">
+        @csrf
+        @method('DELETE')
+        <div class="modal-body">
+          <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>警告:</strong> この操作により、アドミン「<span id="deleteAdminName"></span>」が完全に削除されます。
+            この操作は取り消すことができません。
+          </div>
+          <div class="mb-3">
+            <label for="deleteReason" class="form-label">削除理由 <span class="text-danger">*</span></label>
+            <textarea class="form-control" id="deleteReason" name="reason" rows="3"
+              placeholder="削除理由を入力してください" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-danger">削除する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('scripts')
@@ -228,4 +259,13 @@
   createModal.show();
 </script>
 @endif
+
+<script>
+  function showDeleteAdminModal(adminId, adminName) {
+    document.getElementById('deleteAdminName').textContent = adminName;
+    document.getElementById('deleteAdminForm').action = `/admin/admins/${adminId}`;
+    document.getElementById('deleteReason').value = '';
+    new bootstrap.Modal(document.getElementById('deleteAdminModal')).show();
+  }
+</script>
 @endsection

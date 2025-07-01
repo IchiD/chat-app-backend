@@ -15,18 +15,22 @@
         </a>
       </div>
 
-      <!-- 会話情報 -->
+      <!-- チャット情報 -->
       <div class="card mb-4">
         <div class="card-header">
-          <h5 class="card-title mb-0">会話情報</h5>
+          <h5 class="card-title mb-0">チャット情報</h5>
         </div>
         <div class="card-body">
           <div class="row">
             <div class="col-md-6">
               <strong>ユーザー:</strong>
-              @if($conversation->conversationParticipants->first() && $conversation->conversationParticipants->first()->user)
-              {{ $conversation->conversationParticipants->first()->user->name }}
-              ({{ $conversation->conversationParticipants->first()->user->email }})
+              @php
+              // サポートチャットでは participant1 がユーザー、participant2 が管理者（通常はnull）
+              $user = $conversation->participant1;
+              @endphp
+              @if($user)
+              {{ $user->name }}
+              ({{ $user->email }})
               @else
               ユーザー不明
               @endif
@@ -62,7 +66,7 @@
                   <div class="message-header mb-2">
                     <strong>
                       @if($isUserMessage)
-                      {{ $conversation->conversationParticipants->first()->user->name ?? 'ユーザー' }}
+                      {{ $message->getSenderDisplayName() }}
                       @else
                       {{ $admin->name }}（管理者）
                       @endif

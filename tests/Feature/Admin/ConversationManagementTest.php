@@ -85,9 +85,9 @@ class ConversationManagementTest extends TestCase
     $response = $this->get('/admin/conversations');
 
     // より具体的なアサーション
-    $response->assertSee('#' . $conv1->id)  // direct会話は表示される
-      ->assertDontSee('#' . $conv2->id)   // support会話は表示されない
-      ->assertSee('#' . $conv3->id);      // 削除済み会話も表示される
+    $response->assertSee('#' . $conv1->id)  // directチャットは表示される
+      ->assertDontSee('#' . $conv2->id)   // supportチャットは表示されない
+      ->assertSee('#' . $conv3->id);      // 削除済みチャットも表示される
   }
 
   // 以下のテストケースは今後実装予定
@@ -151,8 +151,8 @@ class ConversationManagementTest extends TestCase
     $response = $this->get('/admin/conversations?search=' . $conversation1->id);
 
     $response->assertOk()
-      ->assertSee('#' . $conversation1->id)      // 検索された会話は表示
-      ->assertDontSee('#' . $conversation2->id); // 他の会話は表示されない
+      ->assertSee('#' . $conversation1->id)      // 検索されたチャットは表示
+      ->assertDontSee('#' . $conversation2->id); // 他のチャットは表示されない
   }
   public function test_search_by_message_content_partial_match()
   {
@@ -341,7 +341,7 @@ class ConversationManagementTest extends TestCase
     $response = $this->post('/admin/conversations/' . $conversation->id . '/restore');
 
     $response->assertRedirect()
-      ->assertSessionHas('error', 'この会話は削除されていません。');
+      ->assertSessionHas('error', 'このチャットは削除されていません。');
     $conversation->refresh();
     $this->assertNull($conversation->deleted_at);
   }

@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Pagination\Paginator;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,6 +22,10 @@ class AppServiceProvider extends ServiceProvider
    */
   public function boot(): void
   {
+    // ページネーションのデフォルトビューをBootstrap 5に設定
+    Paginator::defaultView('pagination::bootstrap-5');
+    Paginator::defaultSimpleView('pagination::simple-bootstrap-5');
+
     // 本番環境でHTTPS強制
     if (app()->environment('production')) {
       URL::forceScheme('https');

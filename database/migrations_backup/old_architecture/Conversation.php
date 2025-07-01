@@ -14,6 +14,13 @@ class Conversation extends Model
 
   protected $fillable = [
     'type',
+    'name',
+    'description',
+    'max_members',
+    'owner_user_id',
+    'qr_code_token',
+    'group_conversation_id',
+    'chat_styles',
     'deleted_at',
     'deleted_reason',
     'deleted_by',
@@ -21,11 +28,12 @@ class Conversation extends Model
 
   protected $casts = [
     'deleted_at' => 'datetime',
+    'chat_styles' => 'array',
   ];
 
   /**
    * モデルの起動メソッド
-   * creatingイベントでroom_tokenを自動生成
+   * creatingイベントでroom_tokenとqr_code_tokenを自動生成
    */
   protected static function booted(): void
   {
@@ -37,11 +45,19 @@ class Conversation extends Model
         } while (static::where('room_token', $token)->exists());
         $conversation->room_token = $token;
       }
+
+      // グループタイプでqr_code_tokenが空の場合は自動生成
+      if ($conversation->type === 'group' && empty($conversation->qr_code_token)) {
+        do {
+          $qrToken = Str::random(32);
+        } while (static::where('qr_code_token', $qrToken)->exists());
+        $conversation->qr_code_token = $qrToken;
+      }
     });
   }
 
   /**
-   * この会話に参加しているユーザーを取得 (Participantsテーブル経由)
+   * このチャットに参加しているユーザーを取得 (Participantsテーブル経由)
    */
   public function participants(): HasManyThrough
   {
@@ -49,7 +65,7 @@ class Conversation extends Model
   }
 
   /**
-   * この会話のParticipantレコードを取得
+   * このチャットのParticipantレコードを取得
    */
   public function conversationParticipants(): HasMany // より直接的なリレーション名
   {
@@ -57,7 +73,7 @@ class Conversation extends Model
   }
 
   /**
-   * この会話のメッセージを取得
+   * このチャットのメッセージを取得
    */
   public function messages(): HasMany
   {
@@ -65,7 +81,7 @@ class Conversation extends Model
   }
 
   /**
-   * この会話の最新メッセージを取得（削除されたメッセージは除外）
+   * このチャットの最新メッセージを取得（削除されたメッセージは除外）
    */
   public function latestMessage()
   {
@@ -84,7 +100,7 @@ class Conversation extends Model
   }
 
   /**
-   * 会話が論理削除されているかチェック
+   * チャットが論理削除されているかチェック
    */
   public function isDeleted(): bool
   {
@@ -92,7 +108,7 @@ class Conversation extends Model
   }
 
   /**
-   * 管理者による会話削除
+   * 管理者によるチャット削除
    */
   public function deleteByAdmin(?int $adminId, string $reason = null): bool
   {
@@ -104,7 +120,7 @@ class Conversation extends Model
   }
 
   /**
-   * 会話の削除を取り消し
+   * チャットの削除を取り消し
    */
   public function restoreByAdmin(): bool
   {
@@ -113,5 +129,65 @@ class Conversation extends Model
       'deleted_reason' => null,
       'deleted_by' => null,
     ]);
+  }
+
+  /**
+   * グループオーナーを取得
+   */
+  public function owner()
+  {
+    return $this->belongsTo(User::class, 'owner_user_id');
+  }
+
+  /**
+   * グループかどうかをチェック
+   */
+  public function isGroup(): bool
+  {
+    return $this->type === 'group';
+  }
+
+  /**
+   * 親グループチャットを取得（group_memberタイプの場合）
+   */
+  public function parentGroupConversation()
+  {
+    return $this->belongsTo(Conversation::class, 'group_conversation_id');
+  }
+
+  /**
+   * QRコードトークンを再生成
+   */
+  public function regenerateQrToken(): void
+  {
+    if (!$this->isGroup()) {
+      return;
+    }
+
+    do {
+      $token = Str::random(32);
+    } while (static::where('qr_code_token', $token)->exists());
+
+    $this->update(['qr_code_token' => $token]);
+  }
+
+  /**
+   * グループメンバー数を取得
+   */
+  public function getMemberCount(): int
+  {
+    return $this->conversationParticipants()->count();
+  }
+
+  /**
+   * メンバー数制限チェック
+   */
+  public function canAddMember(): bool
+  {
+    if (!$this->isGroup()) {
+      return true;
+    }
+
+    return $this->getMemberCount() < $this->max_members;
   }
 }

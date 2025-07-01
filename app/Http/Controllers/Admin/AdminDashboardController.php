@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Models\User;
 use App\Models\Conversation;
+use App\Models\ChatRoom;
+use App\Models\Group;
 use App\Models\Message;
 use App\Models\Friendship;
 use App\Models\OperationLog;
+use App\Models\Participant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -29,8 +32,8 @@ class AdminDashboardController extends Controller
     $userCount = User::count();
     $adminCount = Admin::count();
 
-    // チャットルーム数
-    $chatRoomCount = Conversation::count();
+    // チャットルーム数（新構造）
+    $chatRoomCount = ChatRoom::count();
 
     // 本日送信されたメッセージ数
     $todayMessagesCount = Message::whereDate('sent_at', date('Y-m-d'))->count();
@@ -72,8 +75,8 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
 
-    // クエリビルダーを初期化
-    $query = User::query();
+    // クエリビルダーを初期化（削除されたユーザーも含む）
+    $query = User::withTrashed();
 
     // 検索機能
     if ($search = $request->get('search')) {
@@ -109,6 +112,12 @@ class AdminDashboardController extends Controller
       case 'name_desc':
         $query->orderBy('name', 'desc');
         break;
+      case 'plan_asc':
+        $query->orderBy('plan', 'asc');
+        break;
+      case 'plan_desc':
+        $query->orderBy('plan', 'desc');
+        break;
       case 'created_at_desc':
       default:
         $query->orderBy('created_at', 'desc');
@@ -130,18 +139,51 @@ class AdminDashboardController extends Controller
   public function showUser($id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::with(['deletedByAdmin', 'conversations.participants', 'messages'])
+    $user = User::withTrashed()->with(['deletedByAdmin'])
       ->findOrFail($id);
 
-    // ユーザーの統計情報
+    // ユーザーの統計情報（新構造に対応）
     $stats = [
-      'total_conversations' => $user->conversations()->count(),
+      'total_chat_rooms' => $user->getChatRooms()->count(),
       'total_messages' => $user->messages()->count(),
       'friends_count' => $user->friends()->count(),
-      'last_login' => null, // TODO: ログイン履歴があれば追加
+      'last_login' => $user->last_login_at ? $user->last_login_at->format('Y/m/d H:i') : null,
     ];
 
-    return view('admin.users.show', compact('admin', 'user', 'stats'));
+    // ユーザーが参加しているチャットルームを取得（最新5件、論理削除されたものも含む）
+    $chatRooms = ChatRoom::withTrashed()
+      ->where('type', '!=', 'support_chat')
+      ->where(function ($query) use ($user) {
+        // 直接参加者として登録されているチャットルーム
+        $query->where('participant1_id', $user->id)
+          ->orWhere('participant2_id', $user->id)
+          // グループメンバーとして参加しているチャットルーム
+          ->orWhereHas('group.activeMembers', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+          });
+      })
+      ->with([
+        'latestMessage.sender',
+        'latestMessage.chatRoom.group.groupMembers',
+        'group',
+        'participant1' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'participant2' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'deletedByAdmin' // 削除を実行した管理者情報も取得
+      ])
+      ->orderBy('updated_at', 'desc')
+      ->take(5)
+      ->get();
+
+    // メッセージを別途ロード（新旧構造混在に対応）
+    $user->load(['messages' => function ($query) {
+      $query->orderBy('sent_at', 'desc')->take(10);
+    }]);
+
+    return view('admin.users.show', compact('admin', 'user', 'stats', 'chatRooms'));
   }
 
   /**
@@ -150,7 +192,7 @@ class AdminDashboardController extends Controller
   public function editUser($id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::findOrFail($id);
+    $user = User::withTrashed()->findOrFail($id);
 
     return view('admin.users.edit', compact('admin', 'user'));
   }
@@ -161,13 +203,15 @@ class AdminDashboardController extends Controller
   public function updateUser(Request $request, $id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::findOrFail($id);
+    $user = User::withTrashed()->findOrFail($id);
 
     $request->validate([
       'name' => 'required|string|max:255',
       'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
       'is_verified' => 'boolean',
       'friend_id' => 'required|string|size:6|unique:users,friend_id,' . $user->id,
+      'plan' => 'required|in:free,standard,premium',
+      'allow_re_registration' => 'boolean',
     ]);
 
     $user->update([
@@ -175,6 +219,8 @@ class AdminDashboardController extends Controller
       'email' => $request->email,
       'is_verified' => $request->boolean('is_verified'),
       'friend_id' => strtoupper($request->friend_id),
+      'plan' => $request->plan,
+      'allow_re_registration' => $request->boolean('allow_re_registration'),
     ]);
     \App\Services\OperationLogService::log('backend', 'update_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
@@ -188,7 +234,7 @@ class AdminDashboardController extends Controller
   public function deleteUser(Request $request, $id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::findOrFail($id);
+    $user = User::withTrashed()->findOrFail($id);
 
     if ($user->isDeleted()) {
       return redirect()->back()->with('error', 'このユーザーは既に削除されています。');
@@ -201,16 +247,8 @@ class AdminDashboardController extends Controller
     $user->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
     \App\Services\OperationLogService::log('backend', 'delete_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
-    // ユーザーが参加している会話も削除
-    $conversations = $user->conversations;
-    foreach ($conversations as $conversation) {
-      if (!$conversation->isDeleted()) {
-        $conversation->deleteByAdmin($admin->id, 'ユーザー削除に伴う会話削除');
-      }
-    }
-
     return redirect()->route('admin.users')
-      ->with('success', 'ユーザーを削除しました。');
+      ->with('success', "ユーザー（ID: {$user->id}、{$user->name}）を削除しました。");
   }
 
   /**
@@ -219,96 +257,164 @@ class AdminDashboardController extends Controller
   public function restoreUser($id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::findOrFail($id);
+    $user = User::withTrashed()->findOrFail($id);
 
     if (!$user->isDeleted()) {
       return redirect()->back()->with('error', 'このユーザーは削除されていません。');
     }
 
-    $user->restoreByAdmin();
-    \App\Services\OperationLogService::log('backend', 'restore_user', 'admin:' . $admin->id . ' user:' . $user->id);
+    try {
+      $user->restoreByAdmin();
+      \App\Services\OperationLogService::log('backend', 'restore_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
-    return redirect()->route('admin.users.show', $user->id)
-      ->with('success', 'ユーザーの削除を取り消しました。');
+      return redirect()->route('admin.users.show', $user->id)
+        ->with('success', "ユーザー（ID: {$user->id}、{$user->name}）の削除を取り消しました。");
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', $e->getMessage());
+    }
   }
 
   /**
-   * ユーザーの会話一覧を表示
+   * 再登録許可フラグの切り替え
+   */
+  public function toggleReRegistration(Request $request, $id)
+  {
+    try {
+      $admin = Auth::guard('admin')->user();
+
+      if (!$admin) {
+        if ($request->ajax() || $request->wantsJson()) {
+          return response()->json(['success' => false, 'message' => '認証が必要です'], 401);
+        }
+        return redirect()->route('admin.login');
+      }
+
+      $user = User::withTrashed()->findOrFail($id);
+
+      $newValue = !$user->allow_re_registration;
+      $user->update(['allow_re_registration' => $newValue]);
+
+      \App\Services\OperationLogService::log('backend', 'toggle_re_registration', 'admin:' . $admin->id . ' user:' . $user->id . ' value:' . ($newValue ? 'true' : 'false'));
+
+      $message = $newValue
+        ? "ユーザー（ID: {$user->id}、{$user->name}）の再登録を許可しました。"
+        : "ユーザー（ID: {$user->id}、{$user->name}）の再登録を禁止しました。";
+
+      // Ajaxリクエストの場合はJSONレスポンスを返す
+      if ($request->ajax() || $request->wantsJson()) {
+        return response()->json([
+          'success' => true,
+          'message' => $message,
+          'allow_re_registration' => $newValue
+        ]);
+      }
+
+      return redirect()->back()->with('success', $message);
+    } catch (\Exception $e) {
+      \Log::error('再登録設定の切り替えでエラーが発生:', ['error' => $e->getMessage(), 'user_id' => $id]);
+
+      if ($request->ajax() || $request->wantsJson()) {
+        return response()->json(['success' => false, 'message' => '処理中にエラーが発生しました'], 500);
+      }
+
+      return redirect()->back()->with('error', '処理中にエラーが発生しました');
+    }
+  }
+
+  /**
+   * ユーザーのチャット一覧を表示
    */
   public function userConversations($id)
   {
     $admin = Auth::guard('admin')->user();
-    $user = User::with(['conversations' => function ($query) {
-      $query->where('type', '!=', 'support')
-        ->with(['participants', 'latestMessage.sender', 'deletedByAdmin', 'messages']);
-    }])->findOrFail($id);
+    $user = User::withTrashed()->findOrFail($id);
 
-    $conversations = $user->conversations()
-      ->where('type', '!=', 'support')
-      ->with(['participants', 'latestMessage.sender', 'deletedByAdmin', 'messages'])
+    // ユーザーが参加しているチャットルーム（サポートチャット以外、論理削除されたものも含む）
+    $chatRooms = ChatRoom::withTrashed()
+      ->where('type', '!=', 'support_chat')
+      ->where(function ($query) use ($user) {
+        // 直接参加者として登録されているチャットルーム
+        $query->where('participant1_id', $user->id)
+          ->orWhere('participant2_id', $user->id)
+          // グループメンバーとして参加しているチャットルーム
+          ->orWhereHas('group.activeMembers', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+          });
+      })
+      ->with([
+        'latestMessage.sender',
+        'latestMessage.chatRoom.group.groupMembers',
+        'group.activeMembers.user',
+        'group.owner',
+        'participant1' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'participant2' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'messages',
+        'deletedByAdmin' // 削除を実行した管理者情報も取得
+      ])
+      ->orderBy('updated_at', 'desc')
       ->paginate(10);
 
-    return view('admin.users.conversations', compact('admin', 'user', 'conversations'));
+    return view('admin.users.conversations', compact('admin', 'user', 'chatRooms'));
   }
 
   /**
-   * 会話詳細を表示
+   * ユーザー管理からチャットルーム詳細へのリダイレクト
    */
   public function userConversationDetail($userId, $conversationId)
   {
-    $admin = Auth::guard('admin')->user();
-    $user = User::findOrFail($userId);
-    $conversation = Conversation::with(['participants', 'messages.sender', 'deletedByAdmin'])
-      ->findOrFail($conversationId);
+    // ユーザーが存在するかチェック
+    $user = User::withTrashed()->findOrFail($userId);
 
-    $messages = $conversation->messages()
-      ->with(['sender', 'adminDeletedBy'])
-      ->orderBy('sent_at', 'desc')
-      ->paginate(20);
-
-    return view('admin.users.conversation-detail', compact('admin', 'user', 'conversation', 'messages'));
+    // 統一URLにリダイレクト（来歴情報付き）
+    return redirect()->route('admin.conversations.detail', [
+      'id' => $conversationId,
+      'from' => 'user',
+      'user_id' => $userId
+    ]);
   }
 
   /**
-   * 会話削除（論理削除）
+   * チャット削除（論理削除）
    */
   public function deleteConversation(Request $request, $userId, $conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($conversationId);
-
-    if ($conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は既に削除されています。');
-    }
+    $chatRoom = ChatRoom::findOrFail($conversationId);
 
     $request->validate([
       'reason' => 'nullable|string|max:500',
     ]);
 
-    $conversation->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
-    \App\Services\OperationLogService::log('backend', 'delete_conversation', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+    // チャットルームを論理削除
+    $chatRoom->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_chat_room', 'admin:' . $admin->id . ' chat_room:' . $chatRoom->id);
 
     return redirect()->route('admin.users.conversations', $userId)
-      ->with('success', '会話を削除しました。');
+      ->with('success', 'チャットルームを削除しました。');
   }
 
   /**
-   * 会話削除の取り消し
+   * チャット削除の取り消し
    */
   public function restoreConversation($userId, $conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($conversationId);
+    $chatRoom = ChatRoom::withTrashed()->findOrFail($conversationId);
 
-    if (!$conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は削除されていません。');
+    if (!$chatRoom->isDeleted()) {
+      return redirect()->back()->with('error', 'このチャットルームは削除されていません。');
     }
 
-    $conversation->restoreByAdmin();
-    \App\Services\OperationLogService::log('backend', 'restore_conversation', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+    $chatRoom->restoreByAdmin();
+    \App\Services\OperationLogService::log('backend', 'restore_chat_room', 'admin:' . $admin->id . ' chat_room:' . $chatRoom->id);
 
     return redirect()->route('admin.users.conversations', $userId)
-      ->with('success', '会話の削除を取り消しました。');
+      ->with('success', 'チャットルームの削除を取り消しました。');
   }
 
   /**
@@ -320,45 +426,125 @@ class AdminDashboardController extends Controller
 
     $search = $request->get('search');
 
-    $query = Conversation::where('type', '!=', 'support')
+    $query = ChatRoom::withTrashed()
+      ->where('type', '!=', 'support_chat')
       ->withCount('messages')
-      ->with(['participants', 'latestMessage.sender', 'deletedByAdmin']);
+      ->with([
+        'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
+        'group.owner', // グループオーナー情報も読み込み
+        'participant1' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'participant2' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含めて取得
+        },
+        'latestMessage.sender',
+        'latestMessage.chatRoom.group.groupMembers',
+        'deletedByAdmin' // 削除を実行した管理者情報も取得
+      ]);
 
     if ($search) {
-      $query->where(function ($subQuery) use ($search) {
-        $subQuery->where('id', $search)
-          ->orWhereHas('messages', function ($messageQuery) use ($search) {
-            $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
-              ->whereNull('deleted_at')
-              ->whereNull('admin_deleted_at');
-          })
-          ->orWhereHas('participants', function ($userQuery) use ($search) {
-            $userQuery->where('name', 'LIKE', '%' . $search . '%');
-          });
+      $searchType = $request->get('search_type', 'all');
+
+      $query->where(function ($subQuery) use ($search, $searchType) {
+        switch ($searchType) {
+          case 'room_token':
+            $subQuery->where('room_token', 'LIKE', '%' . $search . '%');
+            break;
+          case 'id':
+            // 数値のみの場合のみIDで検索
+            if (is_numeric($search)) {
+              $subQuery->where('id', (int)$search);
+            } else {
+              // 数値でない場合は結果なしにする
+              $subQuery->whereRaw('1 = 0');
+            }
+            break;
+          case 'messages':
+            $subQuery->whereHas('messages', function ($messageQuery) use ($search) {
+              $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
+                ->whereNull('deleted_at')
+                ->whereNull('admin_deleted_at');
+            });
+            break;
+          case 'participants':
+            $subQuery->whereHas('participant1', function ($userQuery) use ($search) {
+              $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
+            })->orWhereHas('participant2', function ($userQuery) use ($search) {
+              $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
+            })->orWhereHas('group', function ($groupQuery) use ($search) {
+              $groupQuery->where('name', 'LIKE', '%' . $search . '%');
+            });
+            break;
+          case 'all':
+          default:
+            // IDは数値の場合のみ検索対象とする
+            if (is_numeric($search)) {
+              $subQuery->where('id', (int)$search);
+            } else {
+              $subQuery->whereRaw('1 = 0'); // 数値でない場合はID検索をスキップ
+            }
+            $subQuery
+              ->orWhere('room_token', 'LIKE', '%' . $search . '%')
+              ->orWhereHas('messages', function ($messageQuery) use ($search) {
+                $messageQuery->where('text_content', 'LIKE', '%' . $search . '%')
+                  ->whereNull('deleted_at')
+                  ->whereNull('admin_deleted_at');
+              })
+              ->orWhereHas('participant1', function ($userQuery) use ($search) {
+                $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
+              })
+              ->orWhereHas('participant2', function ($userQuery) use ($search) {
+                $userQuery->withTrashed()->where('name', 'LIKE', '%' . $search . '%');
+              })
+              ->orWhereHas('group', function ($groupQuery) use ($search) {
+                $groupQuery->where('name', 'LIKE', '%' . $search . '%');
+              });
+            break;
+        }
       });
     }
 
-    $conversations = $query->orderBy('updated_at', 'desc')->paginate(20);
-    $conversations->appends($request->query());
+    $chatRooms = $query->orderBy('updated_at', 'desc')->paginate(20);
+    $chatRooms->appends($request->query());
 
-    return view('admin.conversations.index', compact('admin', 'conversations'));
+    return view('admin.conversations.index', compact('admin', 'chatRooms'));
   }
 
   /**
-   * トークルーム詳細表示
+   * トークルーム詳細表示（統一版）
    */
-  public function conversationDetail($id)
+  public function conversationDetail($id, Request $request)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::with(['participants', 'messages.sender', 'deletedByAdmin'])
-      ->findOrFail($id);
+    $chatRoom = ChatRoom::withTrashed()->with([
+      'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
+      'group.owner', // グループオーナー情報も読み込み
+      'participant1' => function ($query) {
+        $query->withTrashed()->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned'); // 削除されたユーザーも含めて取得
+      },
+      'participant2' => function ($query) {
+        $query->withTrashed()->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned'); // 削除されたユーザーも含めて取得
+      },
+      'messages.sender',
+      'messages.adminDeletedBy',
+      'deletedByAdmin' // 削除を実行した管理者情報も取得
+    ])->findOrFail($id);
 
-    $messages = $conversation->messages()
-      ->with(['sender', 'adminDeletedBy'])
+    $messages = $chatRoom->messages()
+      ->with(['sender', 'adminDeletedBy', 'chatRoom.group.groupMembers'])
       ->orderBy('sent_at', 'desc')
       ->paginate(20);
 
-    return view('admin.conversations.detail', compact('admin', 'conversation', 'messages'));
+    // 来歴情報の処理
+    $from = $request->get('from');
+    $user = null;
+
+    if ($from === 'user' && $request->has('user_id')) {
+      $user = User::withTrashed()->find($request->get('user_id'));
+    }
+
+    return view('admin.conversations.detail', compact('admin', 'chatRoom', 'messages', 'from', 'user'));
   }
 
   /**
@@ -367,21 +553,18 @@ class AdminDashboardController extends Controller
   public function deleteConversationDirect(Request $request, $id)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($id);
-
-    if ($conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は既に削除されています。');
-    }
+    $chatRoom = ChatRoom::findOrFail($id);
 
     $request->validate([
       'reason' => 'nullable|string|max:500',
     ]);
 
-    $conversation->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
-    \App\Services\OperationLogService::log('backend', 'delete_conversation_admin', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+    // チャットルームを論理削除
+    $chatRoom->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_chat_room_admin', 'admin:' . $admin->id . ' chat_room:' . $chatRoom->id);
 
     return redirect()->route('admin.conversations')
-      ->with('success', '会話を削除しました。');
+      ->with('success', 'チャットルームを削除しました。');
   }
 
   /**
@@ -390,17 +573,17 @@ class AdminDashboardController extends Controller
   public function restoreConversationDirect($id)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::findOrFail($id);
+    $chatRoom = ChatRoom::withTrashed()->findOrFail($id);
 
-    if (!$conversation->isDeleted()) {
-      return redirect()->back()->with('error', 'この会話は削除されていません。');
+    if (!$chatRoom->isDeleted()) {
+      return redirect()->back()->with('error', 'このチャットルームは削除されていません。');
     }
 
-    $conversation->restoreByAdmin();
-    \App\Services\OperationLogService::log('backend', 'restore_conversation_admin', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
+    $chatRoom->restoreByAdmin();
+    \App\Services\OperationLogService::log('backend', 'restore_chat_room_admin', 'admin:' . $admin->id . ' chat_room:' . $chatRoom->id);
 
     return redirect()->route('admin.conversations')
-      ->with('success', '会話の削除を取り消しました。');
+      ->with('success', 'チャットルームの削除を取り消しました。');
   }
 
   /**
@@ -442,6 +625,51 @@ class AdminDashboardController extends Controller
 
     $message->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
     \App\Services\OperationLogService::log('backend', 'delete_message', 'admin:' . $admin->id . ' message:' . $message->id);
+
+    return redirect()->back()->with('success', 'メッセージを削除しました。');
+  }
+
+  /**
+   * メッセージ更新（直接アクセス用）
+   */
+  public function updateMessageDirect(Request $request, $conversationId, $messageId)
+  {
+    $admin = Auth::guard('admin')->user();
+    $message = Message::findOrFail($messageId);
+    $chatRoom = ChatRoom::findOrFail($conversationId);
+
+    $request->validate([
+      'text_content' => 'required|string|max:1000',
+    ]);
+
+    $message->update([
+      'text_content' => $request->text_content,
+      'edited_at' => now(),
+    ]);
+    \App\Services\OperationLogService::log('backend', 'update_message_direct', 'admin:' . $admin->id . ' message:' . $message->id);
+
+    return redirect()->back()->with('success', 'メッセージを更新しました。');
+  }
+
+  /**
+   * メッセージ削除（直接アクセス用）
+   */
+  public function deleteMessageDirect(Request $request, $conversationId, $messageId)
+  {
+    $admin = Auth::guard('admin')->user();
+    $message = Message::findOrFail($messageId);
+    $chatRoom = ChatRoom::findOrFail($conversationId);
+
+    if ($message->isAdminDeleted()) {
+      return redirect()->back()->with('error', 'このメッセージは既に削除されています。');
+    }
+
+    $request->validate([
+      'reason' => 'nullable|string|max:500',
+    ]);
+
+    $message->deleteByAdmin($admin->id, $request->reason ?? '管理者による削除');
+    \App\Services\OperationLogService::log('backend', 'delete_message_direct', 'admin:' . $admin->id . ' message:' . $message->id);
 
     return redirect()->back()->with('success', 'メッセージを削除しました。');
   }
@@ -489,6 +717,107 @@ class AdminDashboardController extends Controller
     \App\Services\OperationLogService::log('backend', 'create_admin', 'admin:' . $admin->id . ' email:' . $request->email);
 
     return redirect()->route('admin.admins')->with('success', 'アドミンが作成されました。');
+  }
+
+  /**
+   * アドミン編集画面（スーパーアドミンのみ）
+   */
+  public function editAdmin($id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isSuperAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    // 自分自身の編集を禁止
+    if ($admin->id == $id) {
+      return redirect()->route('admin.admins')->with('error', '自分自身は編集できません。');
+    }
+
+    $editAdmin = Admin::findOrFail($id);
+
+    return view('admin.admins.edit', compact('admin', 'editAdmin'));
+  }
+
+  /**
+   * アドミン更新（スーパーアドミンのみ）
+   */
+  public function updateAdmin(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isSuperAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    // 自分自身の編集を禁止
+    if ($admin->id == $id) {
+      return redirect()->route('admin.admins')->with('error', '自分自身は編集できません。');
+    }
+
+    $editAdmin = Admin::findOrFail($id);
+
+    $validationRules = [
+      'name' => 'required|string|max:255',
+      'email' => 'required|string|email|max:255|unique:admins,email,' . $id,
+      'role' => 'required|in:admin,super_admin',
+    ];
+
+    // パスワードが入力された場合のみバリデーション
+    if ($request->filled('password')) {
+      $validationRules['password'] = 'string|min:8';
+    }
+
+    $request->validate($validationRules);
+
+    $updateData = [
+      'name' => $request->name,
+      'email' => $request->email,
+      'role' => $request->role,
+    ];
+
+    // パスワードが入力された場合のみ更新
+    if ($request->filled('password')) {
+      $updateData['password'] = Hash::make($request->password);
+    }
+
+    $editAdmin->update($updateData);
+
+    \App\Services\OperationLogService::log('backend', 'update_admin', 'admin:' . $admin->id . ' target:' . $editAdmin->id . ' email:' . $editAdmin->email);
+
+    return redirect()->route('admin.admins')->with('success', 'アドミン情報が更新されました。');
+  }
+
+  /**
+   * アドミン削除（スーパーアドミンのみ）
+   */
+  public function deleteAdmin(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isSuperAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    // 自分自身の削除を禁止
+    if ($admin->id == $id) {
+      return redirect()->route('admin.admins')->with('error', '自分自身は削除できません。');
+    }
+
+    $deleteAdmin = Admin::findOrFail($id);
+
+    // 削除理由のバリデーション
+    $request->validate([
+      'reason' => 'required|string|max:500',
+    ]);
+
+    \App\Services\OperationLogService::log('backend', 'delete_admin', 'admin:' . $admin->id . ' target:' . $deleteAdmin->id . ' email:' . $deleteAdmin->email . ' reason:' . $request->reason);
+
+    // 物理削除を実行
+    $deleteAdmin->delete();
+
+    return redirect()->route('admin.admins')->with('success', 'アドミンが削除されました。');
   }
 
   /**
@@ -999,34 +1328,431 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * サポート会話一覧を表示
+   * グループ一覧表示
+   */
+  public function groups(Request $request)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    $query = Group::with(['owner' => function ($q) {
+      $q->select('id', 'name', 'email');
+    }])->withCount('activeMembers as members_count');
+
+    if ($search = $request->get('search')) {
+      $query->where('name', 'LIKE', "%{$search}%")
+        ->orWhereHas('owner', function ($q) use ($search) {
+          $q->where('name', 'LIKE', "%{$search}%")
+            ->orWhere('email', 'LIKE', "%{$search}%");
+        });
+    }
+
+    $groups = $query->orderBy('created_at', 'desc')->paginate(20);
+    $groups->appends($request->query());
+
+    \App\Services\OperationLogService::log('backend', 'view_groups', 'admin:' . $admin->id);
+
+    return view('admin.groups.index', compact('admin', 'groups'));
+  }
+
+  /**
+   * グループ詳細表示
+   */
+  public function showGroup($id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::with(['owner', 'activeMembers.user', 'groupMembers.user', 'groupMembers.removedByAdmin'])->findOrFail($id);
+
+      \App\Services\OperationLogService::log('backend', 'view_group_detail', 'admin:' . $admin->id . ' group:' . $id);
+
+      return view('admin.groups.show', compact('admin', 'group'));
+    } catch (\Exception $e) {
+      return redirect()->route('admin.groups')
+        ->with('error', 'グループが見つかりません。');
+    }
+  }
+
+  /**
+   * グループ編集画面
+   */
+  public function editGroup($id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::with(['owner', 'activeMembers.user'])->findOrFail($id);
+
+      return view('admin.groups.edit', compact('admin', 'group'));
+    } catch (\Exception $e) {
+      return redirect()->route('admin.groups')
+        ->with('error', 'グループが見つかりません。');
+    }
+  }
+
+  /**
+   * グループ情報更新
+   */
+  public function updateGroup(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($id);
+
+      $currentMemberCount = $group->getMembersCount();
+
+      $request->validate([
+        'name' => 'required|string|max:255',
+        'description' => 'nullable|string|max:1000',
+        'max_members' => "required|integer|min:{$currentMemberCount}|max:100",
+        'chat_styles' => 'required|array',
+        'chat_styles.*' => 'in:group,group_member',
+      ]);
+
+      // 既存のチャットスタイルが削除されていないかチェック
+      $oldChatStyles = $group->chat_styles ?? [];
+      $newChatStyles = $request->chat_styles;
+
+      foreach ($oldChatStyles as $oldStyle) {
+        if (!in_array($oldStyle, $newChatStyles)) {
+          return redirect()->back()
+            ->with('error', 'チャットスタイルの削除はできません。既存のスタイルは保持する必要があります。')
+            ->withInput();
+        }
+      }
+
+      $group->update([
+        'name' => $request->name,
+        'description' => $request->description,
+        'max_members' => $request->max_members,
+        'chat_styles' => $request->chat_styles,
+      ]);
+
+      \App\Services\OperationLogService::log('backend', 'update_group', 'admin:' . $admin->id . ' group:' . $group->id);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'グループ情報を更新しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'グループの更新に失敗しました。')
+        ->withInput();
+    }
+  }
+
+  /**
+   * グループメンバー削除
+   */
+  public function removeMember(Request $request, $groupId, $memberId)
+  {
+    \Log::info('removeMember called', [
+      'groupId' => $groupId,
+      'memberId' => $memberId,
+      'request_data' => $request->all(),
+      'method' => $request->method(),
+      'url' => $request->url()
+    ]);
+
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      \Log::warning('Access denied: Admin check failed', ['admin_id' => $admin->id ?? 'null']);
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      \Log::info('Group found', ['group_id' => $group->id, 'group_name' => $group->name]);
+
+      $member = $group->groupMembers()->where('user_id', $memberId)->first();
+      \Log::info('Member lookup result', [
+        'member_found' => $member ? true : false,
+        'member_data' => $member ? $member->toArray() : null
+      ]);
+
+      if (!$member) {
+        \Log::warning('Member not found', ['group_id' => $groupId, 'user_id' => $memberId]);
+        return redirect()->back()
+          ->with('error', 'メンバーが見つかりません。');
+      }
+
+      $request->validate([
+        'reason' => 'nullable|string|max:500',
+        'can_rejoin' => 'boolean',
+      ]);
+
+      // オーナーの削除は禁止
+      if ($member->role === 'owner') {
+        \Log::warning('Attempted to remove owner', ['member_id' => $memberId, 'group_id' => $groupId]);
+        return redirect()->back()
+          ->with('error', 'グループオーナーは削除できません。');
+      }
+
+      $canRejoin = $request->get('can_rejoin', true); // デフォルトで再参加許可
+      \Log::info('Processing member removal', [
+        'can_rejoin' => $canRejoin,
+        'reason' => $request->reason
+      ]);
+
+      // メンバーを退会処理
+      $member->update([
+        'left_at' => now(),
+        'can_rejoin' => $canRejoin,
+        'removal_type' => 'kicked_by_admin',
+        'removed_by_admin_id' => $admin->id,
+      ]);
+
+      $reason = $request->reason ?? '管理者による削除';
+      \App\Services\OperationLogService::log('backend', 'remove_group_member', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId . ' reason:' . $reason);
+
+      \Log::info('Member removed successfully', ['member_id' => $memberId, 'group_id' => $groupId]);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーを削除しました。');
+    } catch (\Exception $e) {
+      \Log::error('Exception in removeMember', [
+        'error' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString()
+      ]);
+      return redirect()->back()
+        ->with('error', 'メンバーの削除に失敗しました。');
+    }
+  }
+
+  /**
+   * グループメンバー追加
+   */
+  public function addMember(Request $request, $groupId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+
+      $request->validate([
+        'user_id' => 'required|exists:users,id',
+        'role' => 'required|in:member,admin',
+      ]);
+
+      $userId = $request->user_id;
+
+      // 既にメンバーかチェック
+      if ($group->hasMember($userId)) {
+        return redirect()->back()
+          ->with('error', 'このユーザーは既にグループのメンバーです。');
+      }
+
+      // メンバー数制限チェック
+      if (!$group->canAddMember()) {
+        return redirect()->back()
+          ->with('error', 'グループのメンバー数が上限に達しています。');
+      }
+
+      // ユーザーが削除・バンされていないかチェック
+      $user = User::where('id', $userId)
+        ->where('is_banned', false)
+        ->whereNull('deleted_at')
+        ->first();
+
+      if (!$user) {
+        return redirect()->back()
+          ->with('error', '指定されたユーザーは存在しないか、削除されています。');
+      }
+
+      // メンバーを追加
+      $group->groupMembers()->create([
+        'user_id' => $userId,
+        'role' => $request->role,
+        'joined_at' => now(),
+      ]);
+
+      \App\Services\OperationLogService::log('backend', 'add_group_member', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $userId . ' role:' . $request->role);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーを追加しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'メンバーの追加に失敗しました。')
+        ->withInput();
+    }
+  }
+
+  /**
+   * グループメンバーの役割変更
+   */
+  public function updateMemberRole(Request $request, $groupId, $memberId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      $member = $group->groupMembers()->where('user_id', $memberId)->firstOrFail();
+
+      $request->validate([
+        'role' => 'required|in:member,admin',
+      ]);
+
+      // オーナーの役割変更は禁止
+      if ($member->role === 'owner') {
+        return redirect()->back()
+          ->with('error', 'グループオーナーの役割は変更できません。');
+      }
+
+      $oldRole = $member->role;
+      $member->update(['role' => $request->role]);
+
+      \App\Services\OperationLogService::log('backend', 'update_member_role', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId . ' old_role:' . $oldRole . ' new_role:' . $request->role);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーの役割を更新しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', '役割の更新に失敗しました。');
+    }
+  }
+
+  /**
+   * グループメンバーの再参加可否を切り替え
+   */
+  public function toggleMemberRejoin(Request $request, $groupId, $memberId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      $member = $group->groupMembers()->where('user_id', $memberId)->first();
+
+      if (!$member) {
+        return redirect()->back()
+          ->with('error', 'メンバーが見つかりません。');
+      }
+
+      $request->validate([
+        'can_rejoin' => 'required|boolean',
+      ]);
+
+      $member->update(['can_rejoin' => $request->can_rejoin]);
+
+      \App\Services\OperationLogService::log('backend', 'toggle_member_rejoin', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId . ' can_rejoin:' . ($request->can_rejoin ? 'true' : 'false'));
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', '再参加設定を更新しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', '再参加設定の更新に失敗しました。');
+    }
+  }
+
+  /**
+   * 削除済みメンバーを復活
+   */
+  public function restoreMember(Request $request, $groupId, $memberId)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($groupId);
+      $member = $group->groupMembers()->where('user_id', $memberId)->first();
+
+      if (!$member) {
+        return redirect()->back()
+          ->with('error', 'メンバーが見つかりません。');
+      }
+
+      // 削除されていないメンバーかチェック
+      if ($member->left_at === null) {
+        return redirect()->back()
+          ->with('error', '削除されて存在しないメンバーです。');
+      }
+
+      // メンバー数制限チェック
+      if (!$group->canAddMember()) {
+        return redirect()->back()
+          ->with('error', 'グループのメンバー数が上限に達しています。');
+      }
+
+      // メンバーを復活
+      $member->update([
+        'left_at' => null,
+        'joined_at' => now(),
+        'can_rejoin' => true,
+      ]);
+
+      \App\Services\OperationLogService::log('backend', 'restore_group_member', 'admin:' . $admin->id . ' group:' . $group->id . ' user:' . $memberId);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'メンバーを復活しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'メンバー復活に失敗しました。');
+    }
+  }
+
+  /**
+   * サポートチャット一覧を表示
    */
   public function supportConversations(Request $request)
   {
     $admin = Auth::guard('admin')->user();
 
-    // サポート会話を取得
-    $query = Conversation::where('type', 'support')
-      ->with(['conversationParticipants.user', 'latestMessage.sender'])
+    // サポートチャットを取得（新しいChatRoomモデルを使用）
+    $query = ChatRoom::where('type', 'support_chat')
+      ->with(['participant1', 'participant2', 'latestMessage.sender', 'latestMessage.chatRoom.group.groupMembers'])
       ->orderBy('updated_at', 'desc');
 
     // 検索機能
     if ($search = $request->get('search')) {
-      $query->whereHas('conversationParticipants.user', function ($q) use ($search) {
-        $q->where('name', 'LIKE', '%' . $search . '%')
-          ->orWhere('email', 'LIKE', '%' . $search . '%');
+      $query->where(function ($subQuery) use ($search) {
+        $subQuery->whereHas('participant1', function ($q) use ($search) {
+          $q->where('name', 'LIKE', '%' . $search . '%')
+            ->orWhere('email', 'LIKE', '%' . $search . '%');
+        })->orWhereHas('participant2', function ($q) use ($search) {
+          $q->where('name', 'LIKE', '%' . $search . '%')
+            ->orWhere('email', 'LIKE', '%' . $search . '%');
+        });
       });
     }
 
     $conversations = $query->paginate(20);
     $conversations->appends($request->query());
 
-    // 各会話の未読メッセージ数を取得
+    // 各チャットの未読メッセージ数を取得（AdminConversationReadモデル削除のため一時的に0を設定）
     $conversationsWithUnread = $conversations->through(function ($conversation) use ($admin) {
-      $conversation->unread_count = \App\Models\AdminConversationRead::getConversationUnreadCount(
-        $admin->id,
-        $conversation->id
-      );
+      $conversation->unread_count = 0; // TODO: 新しい未読管理システムに置き換え
       return $conversation;
     });
 
@@ -1034,33 +1760,33 @@ class AdminDashboardController extends Controller
   }
 
   /**
-   * サポート会話詳細を表示
+   * サポートチャット詳細を表示
    */
   public function supportConversationDetail($conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::with(['conversationParticipants.user', 'messages.sender'])
-      ->where('type', 'support')
+    $conversation = ChatRoom::with(['participant1', 'participant2', 'messages.sender'])
+      ->where('type', 'support_chat')
       ->findOrFail($conversationId);
 
     $messages = $conversation->messages()
-      ->with(['sender'])
+      ->with(['sender', 'chatRoom.group.groupMembers'])
       ->orderBy('sent_at', 'asc')
       ->get();
 
-    // 会話詳細を表示する際に自動的に既読にする
-    \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // チャット詳細を表示する際に自動的に既読にする（AdminConversationReadモデル削除のため無効化）
+    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
     return view('admin.support.detail', compact('admin', 'conversation', 'messages'));
   }
 
   /**
-   * サポート会話に返信
+   * サポートチャットに返信
    */
   public function replyToSupport(Request $request, $conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::where('type', 'support')->findOrFail($conversationId);
+    $conversation = ChatRoom::where('type', 'support_chat')->findOrFail($conversationId);
 
     $request->validate([
       'message' => 'required|string|max:1000',
@@ -1068,7 +1794,7 @@ class AdminDashboardController extends Controller
 
     // 管理者メッセージとして作成
     $message = Message::create([
-      'conversation_id' => $conversation->id,
+      'chat_room_id' => $conversation->id,
       'sender_id' => null,  // ユーザーではないのでnull
       'admin_sender_id' => $admin->id,  // 管理者IDを設定
       'text_content' => $request->message,
@@ -1076,10 +1802,10 @@ class AdminDashboardController extends Controller
     ]);
     \App\Services\OperationLogService::log('backend', 'reply_support', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
-    // 管理者が返信したので、この会話を既読にする
-    \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // 管理者が返信したので、このチャットを既読にする（AdminConversationReadモデル削除のため無効化）
+    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
-    // 会話の更新日時を更新
+    // チャットの更新日時を更新
     $conversation->touch();
 
     return redirect()->back()->with('success', '返信を送信しました。');
@@ -1092,20 +1818,22 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
 
-    $unreadCount = \App\Models\AdminConversationRead::getUnreadCount($admin->id);
+    // AdminConversationReadモデル削除のため一時的に0を返す
+    $unreadCount = 0; // TODO: 新しい未読管理システムに置き換え
 
     return response()->json(['unread_count' => $unreadCount]);
   }
 
   /**
-   * サポート会話を既読にする
+   * サポートチャットを既読にする
    */
   public function markSupportAsRead($conversationId)
   {
     $admin = Auth::guard('admin')->user();
-    $conversation = Conversation::where('type', 'support')->findOrFail($conversationId);
+    $conversation = ChatRoom::where('type', 'support_chat')->findOrFail($conversationId);
 
-    \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // AdminConversationReadモデル削除のため無効化
+    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
 
     return response()->json(['success' => true]);
   }

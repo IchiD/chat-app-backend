@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
       'admin' => \App\Http\Middleware\AdminMiddleware::class,
       'check.user.status' => \App\Http\Middleware\CheckUserStatus::class,
       'security.headers' => \App\Http\Middleware\SecurityHeaders::class,
+      'premium-required' => \App\Http\Middleware\RequirePremiumPlan::class,
     ]);
 
     // 既存のCSRFミドルウェアをカスタムCSRFミドルウェアに置き換え

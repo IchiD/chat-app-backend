@@ -11,6 +11,7 @@ use App\Http\Requests\ResetPasswordRequest;
 use App\Http\Requests\VerifyEmailRequest;
 use App\Mail\PreRegistrationEmail;
 use App\Services\AuthService;
+use App\Services\StripeService;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -23,10 +24,12 @@ use Illuminate\Support\Facades\Log;
 class AuthController extends Controller
 {
   protected $authService;
+  protected $stripeService;
 
-  public function __construct(AuthService $authService)
+  public function __construct(AuthService $authService, StripeService $stripeService)
   {
     $this->authService = $authService;
+    $this->stripeService = $stripeService;
   }
   /**
    * 仮登録処理
@@ -219,6 +222,10 @@ class AuthController extends Controller
       'google_id' => $user->google_id,
       'avatar' => $user->avatar,
       'social_type' => $user->social_type,
+      'plan' => $user->plan,
+      'subscription_status' => $user->subscription_status,
+      'should_suggest_name_change' => $user->shouldSuggestNameChange(),
+      'previous_name' => $user->previous_name,
     ]);
   }
 
@@ -264,6 +271,78 @@ class AuthController extends Controller
         'error' => $e->getMessage(),
       ]);
       return response()->json(['message' => 'ユーザー名の更新中にエラーが発生しました。'], 500);
+    }
+  }
+
+  /**
+   * 名前変更提案に対する応答処理
+   *
+   * @param Request $request
+   * @return \Illuminate\Http\JsonResponse
+   */
+  public function handleNameChangeSuggestion(Request $request)
+  {
+    $user = $request->user();
+
+    $validator = Validator::make($request->all(), [
+      'action' => 'required|in:accept,decline',
+    ]);
+
+    if ($validator->fails()) {
+      return response()->json(['errors' => $validator->errors()], 422);
+    }
+
+    $action = $request->input('action');
+
+    try {
+      if ($action === 'accept') {
+        // 以前の名前に変更
+        $previousName = $user->previous_name;
+        if (!$previousName) {
+          return response()->json(['message' => '提案する名前が見つかりません。'], 400);
+        }
+
+        $user->name = $previousName;
+        $user->save();
+
+        Log::info('名前変更提案が受け入れられました', [
+          'user_id' => $user->id,
+          'new_name' => $previousName,
+          'previous_name' => $user->previous_name
+        ]);
+
+        $message = "名前を「{$previousName}」に変更しました。";
+      } else {
+        // decline の場合
+        Log::info('名前変更提案が拒否されました', [
+          'user_id' => $user->id,
+          'current_name' => $user->name,
+          'previous_name' => $user->previous_name
+        ]);
+
+        $message = '現在の名前を維持します。';
+      }
+
+      // いずれの場合も提案完了フラグを設定
+      $user->markNameSuggestionComplete();
+
+      return response()->json([
+        'message' => $message,
+        'user' => [
+          'id' => $user->id,
+          'friend_id' => $user->friend_id,
+          'name' => $user->name,
+          'email' => $user->email,
+          'should_suggest_name_change' => false,
+          'previous_name' => null,
+        ]
+      ], 200);
+    } catch (\Exception $e) {
+      Log::error('名前変更提案処理中にエラーが発生しました', [
+        'user_id' => $user->id,
+        'error' => $e->getMessage(),
+      ]);
+      return response()->json(['message' => '名前変更提案処理中にエラーが発生しました。'], 500);
     }
   }
 
@@ -499,6 +578,149 @@ class AuthController extends Controller
       return response()->json([
         'status' => 'error',
         'message' => '確認メールの送信中にエラーが発生しました。しばらくしてから再度お試しください。'
+      ], 500);
+    }
+  }
+
+  /**
+   * ユーザー自身によるアカウント削除
+   */
+  public function deleteAccount(Request $request)
+  {
+    $user = $request->user();
+
+    Log::info('ユーザー自身によるアカウント削除の試行を開始しました', [
+      'user_id' => $user->id,
+      'email' => $user->email,
+      'social_type' => $user->social_type,
+      'ip' => $request->ip(),
+    ]);
+
+    // Google認証ユーザーとパスワード認証ユーザーで分岐
+    if ($user->social_type === 'google') {
+      // Google認証ユーザーはパスワード確認不要
+      $validator = Validator::make($request->all(), [
+        'reason' => 'nullable|string|max:500',
+      ]);
+
+      if ($validator->fails()) {
+        return response()->json([
+          'message' => 'バリデーションエラーが発生しました。',
+          'errors' => $validator->errors()
+        ], 422);
+      }
+
+      Log::info('Google認証ユーザーのアカウント削除（パスワード確認スキップ）', [
+        'user_id' => $user->id,
+        'email' => $user->email,
+      ]);
+    } else {
+      // パスワード認証ユーザーはパスワード確認が必要
+      $validator = Validator::make($request->all(), [
+        'password' => 'required|string',
+        'reason' => 'nullable|string|max:500',
+      ]);
+
+      if ($validator->fails()) {
+        return response()->json([
+          'message' => 'バリデーションエラーが発生しました。',
+          'errors' => $validator->errors()
+        ], 422);
+      }
+
+      // パスワード確認
+      if (!Hash::check($request->password, $user->password)) {
+        Log::warning('アカウント削除試行時のパスワード不正確', [
+          'user_id' => $user->id,
+          'email' => $user->email,
+          'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+          'message' => 'パスワードが正しくありません。',
+          'error_type' => 'invalid_password'
+        ], 401);
+      }
+    }
+
+    try {
+      $subscriptionCanceled = false;
+      $subscriptionMessage = '';
+
+      // サブスクリプションのキャンセル処理
+      $subscription = $user->activeSubscription();
+      if ($subscription && $subscription->isActive()) {
+        Log::info('アカウント削除に伴い、Stripeサブスクリプションをキャンセルします', [
+          'user_id' => $user->id,
+          'subscription_id' => $subscription->stripe_subscription_id,
+          'plan' => $subscription->plan,
+          'current_status' => $subscription->status,
+        ]);
+
+        // 退会処理時は専用のキャンセル処理を実行
+        $cancelResult = $this->stripeService->cancelSubscriptionForAccountDeletion($user);
+
+        if ($cancelResult['status'] === 'success') {
+          $subscriptionCanceled = true;
+          $currentPeriodEnd = $subscription->fresh()->current_period_end;
+          $endDate = $currentPeriodEnd ? $currentPeriodEnd->format('Y年m月d日') : '現在の請求期間終了時';
+          $subscriptionMessage = "\n\nサブスクリプションは{$endDate}に自動的にキャンセルされます。それまでは引き続きサービスをご利用いただけます。";
+
+          Log::info('サブスクリプションキャンセルが完了しました', [
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->stripe_subscription_id,
+            'cancel_at_period_end' => true,
+            'current_period_end' => $currentPeriodEnd,
+          ]);
+        } else {
+          Log::warning('サブスクリプションキャンセルが失敗しました', [
+            'user_id' => $user->id,
+            'error' => $cancelResult['message'] ?? '不明なエラー',
+          ]);
+          // キャンセル失敗でもアカウント削除は続行するが、警告メッセージを含める
+          $subscriptionMessage = "\n\n注意：サブスクリプションのキャンセル処理でエラーが発生しました。カスタマーサポートにお問い合わせください。";
+        }
+      }
+
+      // ユーザー自身による削除を実行
+      $result = $user->deleteBySelf($request->reason);
+
+      if ($result) {
+        // 現在のアクセストークンを削除（ログアウト）
+        $user->currentAccessToken()->delete();
+
+        Log::info('ユーザー自身によるアカウント削除が完了しました', [
+          'user_id' => $user->id,
+          'email' => $user->email,
+          'reason' => $request->reason,
+          'subscription_canceled' => $subscriptionCanceled,
+          'ip' => $request->ip(),
+        ]);
+
+        // レスポンスメッセージの構築
+        $message = 'アカウントを削除しました。同じメールアドレスで再度登録することができます。';
+        $message .= $subscriptionMessage;
+
+        return response()->json([
+          'message' => $message,
+          'status' => 'success',
+          'subscription_canceled' => $subscriptionCanceled,
+        ], 200);
+      } else {
+        throw new \Exception('アカウント削除に失敗しました。');
+      }
+    } catch (\Exception $e) {
+      Log::error('ユーザー自身によるアカウント削除でエラーが発生しました', [
+        'user_id' => $user->id,
+        'email' => $user->email,
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString(),
+        'ip' => $request->ip(),
+      ]);
+
+      return response()->json([
+        'message' => 'アカウント削除中にエラーが発生しました。時間をおいて再度お試しください。',
+        'error_type' => 'delete_error'
       ], 500);
     }
   }

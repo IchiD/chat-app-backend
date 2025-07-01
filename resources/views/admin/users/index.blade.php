@@ -52,6 +52,8 @@
                 <option value="created_at_asc" {{ request('sort') == 'created_at_asc' ? 'selected' : '' }}>登録日（古い順）</option>
                 <option value="name_asc" {{ request('sort') == 'name_asc' ? 'selected' : '' }}>名前（昇順）</option>
                 <option value="name_desc" {{ request('sort') == 'name_desc' ? 'selected' : '' }}>名前（降順）</option>
+                <option value="plan_asc" {{ request('sort') == 'plan_asc' ? 'selected' : '' }}>プラン（昇順）</option>
+                <option value="plan_desc" {{ request('sort') == 'plan_desc' ? 'selected' : '' }}>プラン（降順）</option>
               </select>
             </div>
             <div class="col-md-3 d-flex align-items-end">
@@ -88,6 +90,7 @@
                 <th>プロフィール</th>
                 <th>メールアドレス</th>
                 <th>認証状態</th>
+                <th>プラン</th>
                 <th>フレンドID</th>
                 <th>登録日</th>
                 <th>削除情報</th>
@@ -113,20 +116,33 @@
                 </td>
                 <td>
                   @if($user->is_verified)
-                  <span class="badge bg-success">
+                  <span class="badge badge-verified">
                     <i class="fas fa-check-circle me-1"></i>認証済み
                   </span>
                   @else
-                  <span class="badge bg-warning">
+                  <span class="badge badge-unverified">
                     <i class="fas fa-exclamation-circle me-1"></i>未認証
                   </span>
                   @endif
 
                   @if($user->isBanned())
-                  <br><span class="badge bg-danger mt-1">
+                  <br><span class="badge badge-banned mt-1">
                     <i class="fas fa-ban me-1"></i>バン済み
                   </span>
                   @endif
+                </td>
+                <td>
+                  @php
+                    $planClass = match($user->plan) {
+                      'free' => 'bg-secondary',
+                      'standard' => 'bg-warning',
+                      'premium' => 'bg-danger',
+                      default => 'bg-secondary'
+                    };
+                  @endphp
+                  <span class="badge {{ $planClass }}">
+                    {{ $user->plan_display }}
+                  </span>
                 </td>
                 <td>
                   <code class="bg-light p-1 rounded">{{ $user->friend_id }}</code>
@@ -137,8 +153,15 @@
                 </td>
                 <td>
                   @if($user->isDeleted())
-                  <div class="text-danger">
-                    <i class="fas fa-trash me-1"></i><strong>管理側で削除</strong>
+                  <div class="{{ $user->isDeletedBySelf() ? 'text-warning' : 'text-danger' }}">
+                    <i class="fas fa-trash me-1"></i>
+                    <strong>
+                      @if($user->isDeletedBySelf())
+                      ユーザー自身で削除
+                      @else
+                      管理側で削除
+                      @endif
+                    </strong>
                   </div>
                   <small class="text-muted">
                     {{ $user->deleted_at->format('Y/m/d H:i') }}
@@ -171,7 +194,7 @@
                       </li>
                       <li>
                         <a class="dropdown-item" href="{{ route('admin.users.conversations', $user->id) }}">
-                          <i class="fas fa-comments me-2"></i>会話管理
+                          <i class="fas fa-comments me-2"></i>チャット管理
                         </a>
                       </li>
                       <li>
@@ -184,6 +207,19 @@
                         </a>
                       </li>
                       @else
+                      <li>
+                        <a class="dropdown-item" href="{{ route('admin.users.edit', $user->id) }}">
+                          <i class="fas fa-edit me-2"></i>編集
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" href="{{ route('admin.users.conversations', $user->id) }}">
+                          <i class="fas fa-comments me-2"></i>チャット管理
+                        </a>
+                      </li>
+                      <li>
+                        <hr class="dropdown-divider">
+                      </li>
                       <li>
                         <form method="POST" action="{{ route('admin.users.restore', $user->id) }}" class="d-inline">
                           @csrf
@@ -236,10 +272,10 @@
         @csrf
         @method('DELETE')
         <div class="modal-body">
-          <div class="alert alert-warning">
-            <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>警告:</strong> この操作により、ユーザー「<span id="deleteUserName"></span>」が論理削除され、
-            同じメールアドレスでの再登録ができなくなります。
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>確認:</strong> ユーザー「<span id="deleteUserName"></span>」を削除します。<br>
+            <small class="text-muted">※ 論理削除のため、後から復元することができます。削除後は同じメールアドレスでの再登録ができなくなります。</small>
           </div>
           <div class="mb-3">
             <label for="deleteReason" class="form-label">削除理由</label>

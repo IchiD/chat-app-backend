@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\BillingController;
 
 Route::get('/', function () {
   return view('welcome');
@@ -19,6 +20,8 @@ Route::get('/check-ip', function (Illuminate\Http\Request $request) {
     'user_agent' => $request->userAgent(),
   ]);
 });
+
+
 
 // Admin Routes
 Route::prefix('admin')->name('admin.')->group(function () {
@@ -38,6 +41,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::put('users/{id}', [AdminDashboardController::class, 'updateUser'])->name('users.update');
     Route::delete('users/{id}', [AdminDashboardController::class, 'deleteUser'])->name('users.delete');
     Route::post('users/{id}/restore', [AdminDashboardController::class, 'restoreUser'])->name('users.restore');
+    Route::post('users/{id}/toggle-re-registration', [AdminDashboardController::class, 'toggleReRegistration'])->name('users.toggle-re-registration');
 
     // User Conversations Management
     Route::get('users/{id}/conversations', [AdminDashboardController::class, 'userConversations'])->name('users.conversations');
@@ -55,6 +59,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::put('users/{userId}/conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'updateMessage'])->name('users.messages.update');
     Route::delete('users/{userId}/conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'deleteMessage'])->name('users.messages.delete');
 
+    // Direct Message Management (for conversations page)
+    Route::put('conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'updateMessageDirect'])->name('conversations.messages.update');
+    Route::delete('conversations/{conversationId}/messages/{messageId}', [AdminDashboardController::class, 'deleteMessageDirect'])->name('conversations.messages.delete');
+
     // Support Management Routes
     Route::get('support', [AdminDashboardController::class, 'supportConversations'])->name('support');
     Route::get('support/{conversationId}', [AdminDashboardController::class, 'supportConversationDetail'])->name('support.detail');
@@ -70,8 +78,41 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::delete('friendships/{id}', [AdminDashboardController::class, 'deleteFriendship'])->name('friendships.delete');
     Route::post('friendships/{id}/restore', [AdminDashboardController::class, 'restoreFriendship'])->name('friendships.restore');
 
+    // Group Management Routes
+    Route::get('groups', [AdminDashboardController::class, 'groups'])->name('groups');
+    Route::get('groups/{id}', [AdminDashboardController::class, 'showGroup'])->name('groups.show');
+    Route::get('groups/{id}/edit', [AdminDashboardController::class, 'editGroup'])->name('groups.edit');
+    Route::put('groups/{id}', [AdminDashboardController::class, 'updateGroup'])->name('groups.update');
+    Route::post('groups/{groupId}/members', [AdminDashboardController::class, 'addMember'])->name('groups.members.add');
+    Route::delete('groups/{groupId}/members/{memberId}', [AdminDashboardController::class, 'removeMember'])->name('groups.members.remove');
+    Route::put('groups/{groupId}/members/{memberId}/role', [AdminDashboardController::class, 'updateMemberRole'])->name('groups.members.role');
+    Route::patch('groups/{groupId}/members/{memberId}/rejoin', [AdminDashboardController::class, 'toggleMemberRejoin'])->name('groups.members.rejoin');
+    Route::post('groups/{groupId}/members/{memberId}/restore', [AdminDashboardController::class, 'restoreMember'])->name('groups.members.restore');
+
     // Super Admin Only Routes
     Route::get('admins', [AdminDashboardController::class, 'admins'])->name('admins');
     Route::post('admins', [AdminDashboardController::class, 'createAdmin'])->name('admins.create')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
+    Route::get('admins/{id}/edit', [AdminDashboardController::class, 'editAdmin'])->name('admins.edit');
+    Route::put('admins/{id}', [AdminDashboardController::class, 'updateAdmin'])->name('admins.update');
+    Route::delete('admins/{id}', [AdminDashboardController::class, 'deleteAdmin'])->name('admins.delete');
+
+    // Billing Management Routes
+    Route::prefix('billing')->name('billing.')->group(function () {
+      Route::get('/', [BillingController::class, 'dashboard'])->name('dashboard');
+      Route::get('subscriptions', [BillingController::class, 'index'])->name('subscriptions.index');
+      Route::get('subscriptions/{id}', [BillingController::class, 'show'])->name('subscriptions.show');
+      Route::post('subscriptions/{id}/cancel', [BillingController::class, 'cancelSubscription'])->name('subscriptions.cancel');
+      Route::post('subscriptions/{id}/resume', [BillingController::class, 'resumeSubscription'])->name('subscriptions.resume');
+
+      Route::get('payments', [BillingController::class, 'payments'])->name('payments.index');
+      Route::get('payments/export', [BillingController::class, 'exportPayments'])->name('payments.export');
+      Route::get('payments/{id}', [BillingController::class, 'showPayment'])->name('payments.show');
+
+      Route::get('webhooks', [BillingController::class, 'webhooks'])->name('webhooks.index');
+      Route::get('webhooks/{id}', [BillingController::class, 'showWebhook'])->name('webhooks.show');
+
+      Route::get('analytics', [BillingController::class, 'analytics'])->name('analytics.index');
+      Route::get('analytics/export', [BillingController::class, 'exportAnalytics'])->name('analytics.export');
+    });
   });
 });
