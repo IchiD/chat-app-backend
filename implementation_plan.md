@@ -8,7 +8,7 @@
 
 - フロントエンド: Nuxt 3, Vue 3, TypeScript, Tailwind CSS, Pinia
 - バックエンド: 独自 API（Laravel 想定）
-- 認証: JWT (独自実装)
+- 認証: Laravel Sanctum
 - 決済: Stripe
 - リアルタイム通信: 要検討（WebSocket/Pusher/Firebase 等）
 
