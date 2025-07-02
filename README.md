@@ -39,6 +39,11 @@ php artisan support:create-chat-rooms
 - サポートチャット
 - 管理画面
 
+### 認証方式
+API には Laravel Sanctum を使用したトークン認証を採用しています。
+ログインや登録が完了するとアクセストークンが発行され、
+フロントエンドは `Authorization: Bearer <token>` ヘッダを付与して API を呼び出します。
+
 ### セットアップ
 1. 依存関係をインストール
 2. 環境変数を設定
