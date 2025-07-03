@@ -45,4 +45,17 @@ abstract class BaseService
       'message' => $message,
     ], $data);
   }
+
+  /**
+   * 例外を処理してエラーレスポンスを返す共通メソッド
+   */
+  protected function handleException(string $context, \Exception $e, string $errorType = 'internal_error', string $message = '処理中にエラーが発生しました'): array
+  {
+    \Illuminate\Support\Facades\Log::error($context . ': ' . $e->getMessage(), [
+      'line' => $e->getLine(),
+      'file' => $e->getFile(),
+    ]);
+
+    return $this->errorResponse($errorType, $message);
+  }
 }

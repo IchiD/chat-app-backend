@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Services\StripeService;
+use App\Jobs\ProcessStripeWebhook;
 use Symfony\Component\HttpFoundation\Response;
 use Stripe\Webhook;
 
@@ -171,8 +172,10 @@ class StripeController extends Controller
         $signature,
         config('services.stripe.webhook_secret')
       );
-      $this->service->handleWebhook($event->toArray());
-      return response('success', 200);
+      ProcessStripeWebhook::dispatch($event->toArray())
+        ->onQueue('webhooks')
+        ->delay(now()->addSeconds(2));
+      return response('accepted', 200);
     } catch (\UnexpectedValueException $e) {
       Log::error('Invalid payload');
       return response('invalid payload', 400);
