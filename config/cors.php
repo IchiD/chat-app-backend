@@ -19,11 +19,11 @@ return [
 
   'allowed_methods' => ['*'],
 
-  'allowed_origins' => [
+  'allowed_origins' => array_filter([
     env('FRONTEND_URL', 'http://localhost:3000'),
-    'https://chat-app-frontend-git-main-ichids-projects.vercel.app',
-    'https://chat-app-frontend-sigma-puce.vercel.app',
-  ],
+    env('FRONTEND_URL_PRODUCTION'),
+    env('FRONTEND_URL_STAGING'),
+  ]),
 
   'allowed_origins_patterns' => [],
 
