@@ -42,7 +42,7 @@ Phase 5: API 連携ログイン (Backend → Frontend)
 
 ### Backend (Laravel 10)
 
-- **認証方式**: 既存カスタム JWT (sessionStorage 使用)
+- **認証方式**: Laravel Sanctum トークン認証
 - **データベース**: MySQL
 - **決済**: Stripe API
 - **テスト**: PHPUnit

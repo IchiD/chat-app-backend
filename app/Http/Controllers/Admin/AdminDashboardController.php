@@ -1747,12 +1747,26 @@ class AdminDashboardController extends Controller
       });
     }
 
+    // 新着メッセージフィルタ（真の既読状態ベース）
+    if ($request->get('filter') === 'unread') {
+      $unreadChatRoomIds = \App\Models\AdminChatRead::getChatRoomsWithUnreadMessages($admin->id);
+      if (!empty($unreadChatRoomIds)) {
+        $query->whereIn('id', $unreadChatRoomIds);
+      } else {
+        // 未読メッセージがない場合は空の結果を返す
+        $query->whereRaw('1 = 0');
+      }
+    }
+
     $conversations = $query->paginate(20);
     $conversations->appends($request->query());
 
-    // 各チャットの未読メッセージ数を取得（AdminConversationReadモデル削除のため一時的に0を設定）
-    $conversationsWithUnread = $conversations->through(function ($conversation) use ($admin) {
-      $conversation->unread_count = 0; // TODO: 新しい未読管理システムに置き換え
+    // 各チャットの真の未読メッセージ数を取得
+    $chatRoomIds = $conversations->pluck('id')->toArray();
+    $unreadCounts = \App\Models\AdminChatRead::getUnreadCountsForChatRooms($admin->id, $chatRoomIds);
+    
+    $conversationsWithUnread = $conversations->through(function ($conversation) use ($unreadCounts) {
+      $conversation->unread_count = $unreadCounts[$conversation->id] ?? 0;
       return $conversation;
     });
 
@@ -1774,10 +1788,13 @@ class AdminDashboardController extends Controller
       ->orderBy('sent_at', 'asc')
       ->get();
 
-    // チャット詳細を表示する際に自動的に既読にする（AdminConversationReadモデル削除のため無効化）
-    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // 自動既読は無効化：管理者が明示的に既読ボタンを押した時のみ既読にする
+    // \App\Models\AdminChatRead::updateLastRead($admin->id, $conversation->id);
 
-    return view('admin.support.detail', compact('admin', 'conversation', 'messages'));
+    // 現在の未読メッセージ数を取得
+    $unreadCount = \App\Models\AdminChatRead::getUnreadCount($admin->id, $conversation->id);
+
+    return view('admin.support.detail', compact('admin', 'conversation', 'messages', 'unreadCount'));
   }
 
   /**
@@ -1802,8 +1819,8 @@ class AdminDashboardController extends Controller
     ]);
     \App\Services\OperationLogService::log('backend', 'reply_support', 'admin:' . $admin->id . ' conversation:' . $conversation->id);
 
-    // 管理者が返信したので、このチャットを既読にする（AdminConversationReadモデル削除のため無効化）
-    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // 管理者が返信したので、このチャットを既読にする
+    \App\Models\AdminChatRead::updateLastRead($admin->id, $conversation->id);
 
     // チャットの更新日時を更新
     $conversation->touch();
@@ -1818,8 +1835,8 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
 
-    // AdminConversationReadモデル削除のため一時的に0を返す
-    $unreadCount = 0; // TODO: 新しい未読管理システムに置き換え
+    // 真の未読メッセージ数を取得
+    $unreadCount = \App\Models\AdminChatRead::getTotalUnreadCount($admin->id);
 
     return response()->json(['unread_count' => $unreadCount]);
   }
@@ -1832,8 +1849,8 @@ class AdminDashboardController extends Controller
     $admin = Auth::guard('admin')->user();
     $conversation = ChatRoom::where('type', 'support_chat')->findOrFail($conversationId);
 
-    // AdminConversationReadモデル削除のため無効化
-    // \App\Models\AdminConversationRead::updateLastRead($admin->id, $conversation->id);
+    // チャットを既読にする
+    \App\Models\AdminChatRead::updateLastRead($admin->id, $conversation->id);
 
     return response()->json(['success' => true]);
   }
