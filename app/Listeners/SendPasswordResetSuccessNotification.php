@@ -20,7 +20,7 @@ class SendPasswordResetSuccessNotification
     $user = $event->user;
 
     try {
-      Mail::to($user->email)->send(new PasswordResetSuccess($user));
+      Mail::to($user->email)->queue(new PasswordResetSuccess($user));
       Log::info('パスワードリセット完了通知メールを送信しました', [
         'email' => $user->email,
       ]);
