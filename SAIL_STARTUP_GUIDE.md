@@ -1,22 +1,22 @@
 # Laravel Sail 起動ガイド
 
-## 問題の永続的解決
+## 標準的な起動方法
 
-Sail 起動時のエラーを防ぐための設定が完了しました。
+`.env.example`の問題は解決済みです。通常の Laravel Sail コマンドで問題なく起動できます。
 
-### 1. 自動起動スクリプトの使用
+### 1. 基本的な起動・停止コマンド
 
 ```bash
-# Sailを起動する際は以下のコマンドを使用
-./sail-startup.sh
+# Sailを起動
+./vendor/bin/sail up -d
+
+# Sailを停止
+./vendor/bin/sail down
+
+# 完全にクリーンアップして再起動
+./vendor/bin/sail down -v
+./vendor/bin/sail up -d
 ```
-
-このスクリプトは以下を自動的に実行します：
-
--   MySQL が完全に起動するまで待機
--   すべてのキャッシュをクリア
--   設定を再読み込み
--   マイグレーションを実行
 
 ### 2. エイリアスの設定（推奨）
 
@@ -25,8 +25,9 @@ Sail 起動時のエラーを防ぐための設定が完了しました。
 ```bash
 # Laravel Sail エイリアス
 alias sail='[ -f sail ] && sh sail || sh vendor/bin/sail'
-alias sail-start='cd /Users/ichikawadaishi/Desktop/chat-app_nuxt/backend && ./sail-startup.sh'
-alias sail-clean='sail down && sail up -d && sleep 30 && sail artisan optimize:clear && sail artisan config:cache'
+alias sail-up='sail up -d'
+alias sail-down='sail down'
+alias sail-clean='sail down -v && sail up -d && sleep 30 && sail artisan optimize:clear && sail artisan config:cache'
 ```
 
 設定後、ターミナルを再起動するか以下を実行：
@@ -55,7 +56,10 @@ source ~/.zshrc
 docker system prune -a
 
 # 3. 再起動
-./sail-startup.sh
+./vendor/bin/sail up -d
+
+# 4. 必要に応じてマイグレーション実行
+./vendor/bin/sail artisan migrate
 ```
 
 #### よくある問題と解決策
@@ -85,10 +89,10 @@ docker system prune -a
 
 ```bash
 # 開始（エイリアス設定済みの場合）
-sail-start
+sail-up
 
 # 停止
-sail down
+sail-down
 
 # 再起動（問題がある場合）
 sail-clean
@@ -102,4 +106,4 @@ sail-clean
 -   `APP_KEY`が設定されている
 -   `DB_*`の設定が正しい
 
-これらの設定により、Sail 起動時のエラーが大幅に減少します。
+これらの設定により、Sail は標準的なコマンドで問題なく起動します。
