@@ -66,28 +66,28 @@
 
 ```bash
 # 包括的なテストデータを作成
-php artisan seed:comprehensive
+sail artisan seed:comprehensive
 
 # データベースをリフレッシュしてから作成
-php artisan seed:comprehensive --fresh
+sail artisan seed:comprehensive --fresh
 
 # 個別のseederを実行
-php artisan db:seed --class=UserSeeder
-php artisan db:seed --class=FriendshipSeeder
-php artisan db:seed --class=ChatRoomSeeder
-php artisan db:seed --class=MessageSeeder
-php artisan db:seed --class=LargeGroupSeeder
+sail artisan db:seed --class=UserSeeder
+sail artisan db:seed --class=FriendshipSeeder
+sail artisan db:seed --class=ChatRoomSeeder
+sail artisan db:seed --class=MessageSeeder
+sail artisan db:seed --class=LargeGroupSeeder
 ```
 
 ### 標準の DatabaseSeeder を使用
 
 ```bash
 # 基本的なテストデータ（軽量）
-php artisan db:seed
+sail artisan db:seed
 
 # 包括的なテストデータ（DatabaseSeeder.phpを編集して有効化）
 # $this->call(ComprehensiveSeeder::class); のコメントアウトを解除
-php artisan db:seed
+sail artisan db:seed
 ```
 
 ## 🧪 テスト用アカウント
