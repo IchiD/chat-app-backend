@@ -30,3 +30,6 @@ yarn-error.log
 .env.working-*
 *.backup
 
+# .envバックアップディレクトリ
+env-backups/
+
