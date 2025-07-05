@@ -135,14 +135,21 @@
             <div class="mb-3">
               <label class="form-label text-muted">参加者</label>
               <div>
-                @if($chatRoom->type === 'group_chat' && $chatRoom->group)
+                @if($chatRoom->type === 'group_chat')
+                @if($chatRoom->group)
                 <strong>{{ $chatRoom->group->name }}</strong>
+                @if($chatRoom->group->trashed())
+                <span class="badge bg-danger ms-1">削除済み</span>
+                @endif
                 <div class="mt-1">
                   <small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
                   @if($chatRoom->group && $chatRoom->group->activeMembers)
                   <br><small class="text-muted">{{ $chatRoom->group->activeMembers->count() }}人参加</small>
                   @endif
                 </div>
+                @else
+                <span class="text-muted">削除されたグループ</span>
+                @endif
                 @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
                 @php
                 $participant1 = $chatRoom->participant1;

@@ -165,13 +165,20 @@ class AdminDashboardController extends Controller
       ->with([
         'latestMessage.sender',
         'latestMessage.chatRoom.group.groupMembers',
-        'group',
+        'group' => function ($query) {
+          $query->withTrashed(); // 削除されたグループも含めて取得
+        },
+        'group.activeMembers.user',
+        'group.owner' => function ($query) {
+          $query->withTrashed(); // 削除されたグループオーナーも含めて取得
+        },
         'participant1' => function ($query) {
           $query->withTrashed(); // 削除されたユーザーも含めて取得
         },
         'participant2' => function ($query) {
           $query->withTrashed(); // 削除されたユーザーも含めて取得
         },
+        'messages',
         'deletedByAdmin' // 削除を実行した管理者情報も取得
       ])
       ->orderBy('updated_at', 'desc')
@@ -345,8 +352,13 @@ class AdminDashboardController extends Controller
       ->with([
         'latestMessage.sender',
         'latestMessage.chatRoom.group.groupMembers',
+        'group' => function ($query) {
+          $query->withTrashed(); // 削除されたグループも含めて取得
+        },
         'group.activeMembers.user',
-        'group.owner',
+        'group.owner' => function ($query) {
+          $query->withTrashed(); // 削除されたグループオーナーも含めて取得
+        },
         'participant1' => function ($query) {
           $query->withTrashed(); // 削除されたユーザーも含めて取得
         },
@@ -430,8 +442,13 @@ class AdminDashboardController extends Controller
       ->where('type', '!=', 'support_chat')
       ->withCount('messages')
       ->with([
+        'group' => function ($query) {
+          $query->withTrashed(); // 削除されたグループも含めて取得
+        },
         'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
-        'group.owner', // グループオーナー情報も読み込み
+        'group.owner' => function ($query) {
+          $query->withTrashed(); // 削除されたグループオーナーも含めて取得
+        },
         'participant1' => function ($query) {
           $query->withTrashed(); // 削除されたユーザーも含めて取得
         },
@@ -518,8 +535,13 @@ class AdminDashboardController extends Controller
   {
     $admin = Auth::guard('admin')->user();
     $chatRoom = ChatRoom::withTrashed()->with([
+      'group' => function ($query) {
+        $query->withTrashed(); // 削除されたグループも含めて取得
+      },
       'group.activeMembers.user', // グループメンバーとユーザー情報も読み込み
-      'group.owner', // グループオーナー情報も読み込み
+      'group.owner' => function ($query) {
+        $query->withTrashed(); // 削除されたグループオーナーも含めて取得
+      },
       'participant1' => function ($query) {
         $query->withTrashed()->select('id', 'name', 'friend_id', 'deleted_at', 'is_banned'); // 削除されたユーザーも含めて取得
       },

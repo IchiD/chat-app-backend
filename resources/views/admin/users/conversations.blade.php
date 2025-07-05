@@ -112,9 +112,13 @@
                   @endswitch
                 </td>
                 <td>
-                  @if($chatRoom->type === 'group_chat' && $chatRoom->group)
+                  @if($chatRoom->type === 'group_chat')
+                  @if($chatRoom->group)
                   <div class="d-flex align-items-center">
                     <strong>{{ $chatRoom->group->name }}</strong>
+                    @if($chatRoom->group->trashed())
+                    <span class="badge bg-danger ms-1">削除済み</span>
+                    @endif
                   </div>
                   <small class="text-muted">
                     グループID: {{ $chatRoom->group->id }}
@@ -122,6 +126,9 @@
                     | {{ $chatRoom->group->activeMembers->count() }}人参加
                     @endif
                   </small>
+                  @else
+                  <span class="text-muted">削除されたグループ</span>
+                  @endif
                   @elseif($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat')
                   @php
                   $participant1 = $chatRoom->participant1;

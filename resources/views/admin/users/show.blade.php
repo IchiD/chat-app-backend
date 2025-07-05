@@ -288,9 +288,16 @@
                   @endswitch
                 </td>
                 <td>
-                  @if($chatRoom->type === 'group_chat' && $chatRoom->group)
+                  @if($chatRoom->type === 'group_chat')
+                  @if($chatRoom->group)
                   <strong>{{ $chatRoom->group->name }}</strong>
+                  @if($chatRoom->group->trashed())
+                  <span class="badge bg-danger ms-1">削除済み</span>
+                  @endif
                   <br><small class="text-muted">グループID: {{ $chatRoom->group->id }}</small>
+                  @else
+                  <span class="text-muted">削除されたグループ</span>
+                  @endif
                   @elseif(in_array($chatRoom->type, ['friend_chat', 'member_chat']))
                   @php
                   $otherParticipant = $chatRoom->participant1_id === $user->id ? $chatRoom->participant2 : $chatRoom->participant1;
