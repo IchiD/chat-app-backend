@@ -338,8 +338,9 @@ class User extends Authenticatable
         'user:' . $this->id . ' friend:' . $userId
       );
 
-      // 友達関係復活時でも、削除された友達チャットは復活させない
-      // 必要に応じて新しいチャットが作成される
+      // 友達関係復活時に、友達関係解除で削除されたチャットルームを復活させる
+      // （管理者による削除は除く）
+      ChatRoom::restoreFriendChatByFriendshipRestore($this->id, $userId);
     }
 
     return $saved;

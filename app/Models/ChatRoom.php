@@ -254,7 +254,7 @@ class ChatRoom extends Model
     return $this->update([
       'deleted_at' => now(),
       'deleted_reason' => $reason,
-      'deleted_by' => $userId,
+      'deleted_by' => null, // 友達関係削除の場合は管理者IDではないためnull
     ]);
   }
 
@@ -268,6 +268,29 @@ class ChatRoom extends Model
       'deleted_reason' => null,
       'deleted_by' => null,
     ]);
+  }
+
+  /**
+   * 友達関係復活に伴うチャットルーム復活
+   * 友達関係解除で削除されたチャットルームのみを復活（管理者削除は除く）
+   */
+  public static function restoreFriendChatByFriendshipRestore(int $userId1, int $userId2): bool
+  {
+    $friendChat = static::getFriendChat($userId1, $userId2);
+
+    if (!$friendChat || !$friendChat->trashed()) {
+      return false; // チャットルームが存在しないか削除されていない
+    }
+
+    // 友達関係解除による削除で、管理者による削除ではない場合のみ復活
+    if (
+      $friendChat->deleted_by === null &&
+      strpos($friendChat->deleted_reason, '友達関係の解除に伴う削除') !== false
+    ) {
+      return $friendChat->restoreByFriendshipRestore();
+    }
+
+    return false; // 復活条件を満たさない
   }
 
   /**
