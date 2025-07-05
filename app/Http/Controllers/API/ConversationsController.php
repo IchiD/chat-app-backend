@@ -711,7 +711,7 @@ class ConversationsController extends Controller
   }
 
   /**
-   * グループを削除
+   * グループを削除（論理削除）
    */
   public function destroyGroup(Group $group)
   {
@@ -721,7 +721,14 @@ class ConversationsController extends Controller
       return response()->json(['message' => __('errors.forbidden')], 403);
     }
 
-    $group->delete();
+    // 既に削除されているかチェック
+    if ($group->isDeleted()) {
+      return response()->json(['message' => 'このグループは既に削除されています'], 422);
+    }
+
+    // オーナーによる削除（論理削除）
+    $group->deleteBySelf('オーナーによる削除');
+
     return response()->json(['message' => 'グループが削除されました']);
   }
 

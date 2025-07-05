@@ -38,7 +38,7 @@
   <div class="col-12">
     <div class="alert alert-danger">
       <i class="fas fa-exclamation-triangle me-2"></i>
-      <strong>このグループは管理者によって削除されています</strong>
+      <strong>このグループは削除されています</strong>
       <div class="mt-2">
         <strong>削除日時:</strong> {{ $group->deleted_at->format('Y年m月d日 H:i') }}<br>
         @if($group->deletedByAdmin)

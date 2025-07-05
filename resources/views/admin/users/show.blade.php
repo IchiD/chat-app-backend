@@ -52,11 +52,7 @@
     <div class="alert alert-danger">
       <i class="fas fa-exclamation-triangle me-2"></i>
       <strong>
-        @if($user->isDeletedBySelf())
-        このユーザーは自身でアカウントを削除しています
-        @else
-        このユーザーは管理者によって削除されています
-        @endif
+        このユーザーは削除されています
       </strong>
       <div class="mt-2">
         <strong>削除日時:</strong> {{ $user->deleted_at->format('Y年m月d日 H:i') }}<br>
