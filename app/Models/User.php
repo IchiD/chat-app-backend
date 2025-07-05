@@ -497,10 +497,15 @@ class User extends Authenticatable
         ->whereNull('left_at')
         ->update([
           'left_at' => now(),
-          'removal_type' => 'kicked_by_admin',
+          'removal_type' => \App\Models\GroupMember::REMOVAL_TYPE_USER_DELETED,
           'removed_by_admin_id' => $adminId,
           'can_rejoin' => false,
         ]);
+
+      // ユーザーがオーナーのグループも自動削除
+      $this->ownedGroups()->whereNull('deleted_at')->each(function ($group) use ($adminId, $reason) {
+        $group->deleteByAdmin($adminId, "オーナー（{$this->name}）の削除に伴う自動削除: " . ($reason ?? '管理者による削除'));
+      });
     }
 
     return $result;
@@ -540,10 +545,16 @@ class User extends Authenticatable
         ->whereNull('left_at')
         ->update([
           'left_at' => now(),
-          'removal_type' => 'self_leave',
+          'removal_type' => \App\Models\GroupMember::REMOVAL_TYPE_USER_SELF_DELETED,
           'removed_by_user_id' => $this->id,
           'can_rejoin' => true, // 自己削除の場合は再参加可能
         ]);
+
+      // ユーザーがオーナーのグループも自動削除
+      $this->ownedGroups()->whereNull('deleted_at')->each(function ($group) use ($reason) {
+        // 自己削除時はグループも自己削除扱いとする
+        $group->deleteBySelf("オーナー（{$this->name}）の自己削除に伴う自動削除: " . ($reason ?? 'ユーザー自身による削除'));
+      });
     }
 
     return $result;
@@ -582,6 +593,28 @@ class User extends Authenticatable
 
       // ユーザーの自己削除が原因で削除された友達関係を復元
       $this->restoreFriendshipsBySelf();
+
+      // ユーザーの自己削除が原因で削除されたグループを復元
+      Group::onlyTrashed()
+        ->where('owner_user_id', $this->id)
+        ->where('deleted_reason', 'LIKE', "%オーナー（{$this->name}）の自己削除に伴う自動削除%")
+        ->each(function ($group) {
+          $group->restoreByAdmin();
+        });
+
+      // このユーザーがオーナーのグループで、ユーザー自己削除が原因で削除済みメンバーになっている場合は復元
+      \App\Models\GroupMember::whereHas('group', function ($query) {
+        $query->where('owner_user_id', $this->id);
+      })
+        ->where('user_id', $this->id)
+        ->where('removal_type', \App\Models\GroupMember::REMOVAL_TYPE_USER_SELF_DELETED)
+        ->whereNotNull('left_at')
+        ->update([
+          'left_at' => null,
+          'removal_type' => null,
+          'removed_by_user_id' => null,
+          'can_rejoin' => true,
+        ]);
 
       // グループメンバーの復活は自動で行わない
       // グループオーナーまたは管理画面からの明示的な操作が必要
@@ -719,6 +752,28 @@ class User extends Authenticatable
       // ユーザーの削除が原因で削除された友達関係を復元
       $this->restoreFriendshipsByAdmin();
 
+      // ユーザーの削除が原因で削除されたグループを復元
+      Group::onlyTrashed()
+        ->where('owner_user_id', $this->id)
+        ->where('deleted_reason', 'LIKE', "%オーナー（{$this->name}）の削除に伴う自動削除%")
+        ->each(function ($group) {
+          $group->restoreByAdmin();
+        });
+
+      // このユーザーがオーナーのグループで、ユーザー削除が原因で削除済みメンバーになっている場合は復元
+      \App\Models\GroupMember::whereHas('group', function ($query) {
+        $query->where('owner_user_id', $this->id);
+      })
+        ->where('user_id', $this->id)
+        ->where('removal_type', \App\Models\GroupMember::REMOVAL_TYPE_USER_DELETED)
+        ->whereNotNull('left_at')
+        ->update([
+          'left_at' => null,
+          'removal_type' => null,
+          'removed_by_admin_id' => null,
+          'can_rejoin' => true,
+        ]);
+
       // グループメンバーの復活は自動で行わない
       // グループオーナーまたは管理画面からの明示的な操作が必要
     }
@@ -819,7 +874,7 @@ class User extends Authenticatable
    */
   public function ownedGroups(): HasMany
   {
-    return $this->hasMany(Group::class, 'owner_id');
+    return $this->hasMany(Group::class, 'owner_user_id');
   }
 
   /**

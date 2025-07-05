@@ -14,11 +14,23 @@
     <div class="d-flex justify-content-between align-items-center">
       <h1 class="h3 mb-0">
         <i class="fas fa-users-gear me-2"></i>{{ $group->name }}
+        @if($group->isDeleted())
+        <span class="badge bg-danger ms-2">削除済み</span>
+        @endif
       </h1>
       <div>
-        <a href="{{ route('admin.groups.edit', $group->id) }}" class="btn btn-outline-primary">
+        @if(!$group->isDeleted())
+        <a href="{{ route('admin.groups.edit', $group->id) }}" class="btn btn-outline-primary me-2">
           <i class="fas fa-edit me-1"></i>編集
         </a>
+        <button class="btn btn-outline-danger" onclick="showDeleteGroupModal()">
+          <i class="fas fa-trash me-1"></i>グループ削除
+        </button>
+        @else
+        <button class="btn btn-outline-success" onclick="showRestoreGroupModal()">
+          <i class="fas fa-undo me-1"></i>グループ復活
+        </button>
+        @endif
       </div>
     </div>
   </div>
@@ -34,7 +46,16 @@
           <dd class="col-sm-8">#{{ $group->id }}</dd>
 
           <dt class="col-sm-4">オーナー</dt>
-          <dd class="col-sm-8">{{ $group->owner->name ?? '-' }}</dd>
+          <dd class="col-sm-8">
+            @if($group->owner)
+            {{ $group->owner->name }}
+            @if($group->owner->deleted_at)
+            <span class="badge bg-danger ms-1">削除済み</span>
+            @endif
+            @else
+            <span class="text-muted">-</span>
+            @endif
+          </dd>
 
           <dt class="col-sm-4">メンバー上限</dt>
           <dd class="col-sm-8">{{ $group->max_members }}</dd>
@@ -46,6 +67,18 @@
 
           <dt class="col-sm-4">説明</dt>
           <dd class="col-sm-8">{!! nl2br(e($group->description)) !!}</dd>
+
+          @if($group->isDeleted())
+          <dt class="col-sm-4">削除情報</dt>
+          <dd class="col-sm-8">
+            <div class="text-danger">
+              <i class="fas fa-exclamation-triangle me-1"></i>
+              削除日: {{ $group->deleted_at ? $group->deleted_at->format('Y/m/d H:i') : '-' }}<br>
+              削除者: {{ $group->deletedByAdmin->name ?? '不明' }}<br>
+              削除理由: {{ $group->deleted_reason ?? '理由なし' }}
+            </div>
+          </dd>
+          @endif
         </dl>
       </div>
     </div>
@@ -56,9 +89,11 @@
         <div>
           <span>メンバー ({{ $group->getMembersCount() }}名)</span>
         </div>
+        @if(!$group->isDeleted())
         <button type="button" class="btn btn-sm btn-outline-success" onclick="showAddMemberModal()">
           <i class="fas fa-plus me-1"></i>メンバー追加
         </button>
+        @endif
       </div>
       <div class="card-body p-0">
         <table class="table mb-0">
@@ -76,7 +111,12 @@
             @foreach($group->activeMembers as $member)
             <tr>
               <td>#{{ $member->user_id }}</td>
-              <td>{{ $member->user->name ?? '-' }}</td>
+              <td>
+                {{ $member->user->name ?? '-' }}
+                @if($member->user && $member->user->deleted_at)
+                <span class="badge bg-danger ms-1">削除済み</span>
+                @endif
+              </td>
               <td>
                 @if($member->role === 'owner')
                 <span class="badge bg-warning">オーナー</span>
@@ -88,7 +128,7 @@
               </td>
               <td>{{ optional($member->joined_at)->format('Y/m/d') }}</td>
               <td>
-                @if($member->role !== 'owner')
+                @if($member->role !== 'owner' && !$group->isDeleted())
                 <div class="btn-group" role="group">
                   <button type="button" class="btn btn-sm btn-outline-warning" onclick="showRoleModal({{ $member->user_id }}, '{{ $member->role }}', '{{ addslashes($member->user->name ?? 'ユーザー') }}')">
                     <i class="fas fa-user-cog"></i>
@@ -140,9 +180,20 @@
             @foreach($deletedMembers as $member)
             <tr class="table-secondary">
               <td>#{{ $member->user_id }}</td>
-              <td>{{ $member->user->name ?? '-' }}</td>
+              <td>
+                {{ $member->user->name ?? '-' }}
+                @if($member->user && $member->user->deleted_at)
+                <span class="badge bg-danger ms-1">ユーザー削除済み</span>
+                @endif
+              </td>
               <td>{{ optional($member->left_at)->format('Y/m/d H:i') }}</td>
-              <td>{{ $member->removedByAdmin->name ?? '不明' }}</td>
+              <td>
+                @if($member->removal_type === \App\Models\GroupMember::REMOVAL_TYPE_KICKED_BY_ADMIN && $member->removedByAdmin)
+                {{ $member->removedByAdmin->name }}
+                @else
+                <span class="text-muted">{{ $member->removal_type_display }}</span>
+                @endif
+              </td>
               <td>
                 @if($member->can_rejoin)
                 <span class="badge bg-success">許可</span>
@@ -151,6 +202,7 @@
                 @endif
               </td>
               <td>
+                @if(!$group->isDeleted())
                 <div class="btn-group" role="group">
                   <button type="button" class="btn btn-sm btn-outline-primary" onclick="showToggleRejoinModal({{ $member->user_id }}, {{ $member->can_rejoin ? 'true' : 'false' }}, '{{ addslashes($member->user->name ?? 'ユーザー') }}')">
                     <i class="fas fa-toggle-on"></i>
@@ -159,6 +211,9 @@
                     <i class="fas fa-undo"></i>
                   </button>
                 </div>
+                @else
+                <span class="text-muted">-</span>
+                @endif
               </td>
             </tr>
             @endforeach
@@ -343,6 +398,63 @@
   </div>
 </div>
 
+<!-- グループ削除モーダル -->
+<div class="modal fade" id="deleteGroupModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">グループ削除確認</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('admin.groups.delete', $group->id) }}">
+        @csrf
+        @method('DELETE')
+        <div class="modal-body">
+          <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>警告:</strong> この操作により、グループが論理削除されます。
+          </div>
+          <p>「{{ $group->name }}」を削除しますか？</p>
+          <div class="mb-3">
+            <label for="deleteReason" class="form-label">削除理由</label>
+            <textarea class="form-control" id="deleteReason" name="reason" rows="3" placeholder="削除理由を入力してください"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-danger">削除する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- グループ復活モーダル -->
+<div class="modal fade" id="restoreGroupModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">グループ復活確認</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('admin.groups.restore', $group->id) }}">
+        @csrf
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>注意:</strong> この操作により、削除済みグループが復活します。
+          </div>
+          <p>「{{ $group->name }}」を復活させますか？</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-success">復活する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
   function showAddMemberModal() {
     new bootstrap.Modal(document.getElementById('addMemberModal')).show();
@@ -415,6 +527,16 @@
     form.action = `{{ route('admin.groups.members.restore', ['groupId' => $group->id, 'memberId' => '__USER_ID__']) }}`.replace('__USER_ID__', userId);
     message.textContent = `「${userName}」を復活させますか？`;
 
+    new bootstrap.Modal(modal).show();
+  }
+
+  function showDeleteGroupModal() {
+    const modal = document.getElementById('deleteGroupModal');
+    new bootstrap.Modal(modal).show();
+  }
+
+  function showRestoreGroupModal() {
+    const modal = document.getElementById('restoreGroupModal');
     new bootstrap.Modal(modal).show();
   }
 

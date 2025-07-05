@@ -1338,14 +1338,14 @@ class AdminDashboardController extends Controller
       abort(403, 'アクセス権限がありません。');
     }
 
-    $query = Group::with(['owner' => function ($q) {
-      $q->select('id', 'name', 'email');
-    }])->withCount('activeMembers as members_count');
+    $query = Group::withTrashed()->with(['owner' => function ($q) {
+      $q->withTrashed()->select('id', 'name', 'email', 'deleted_at');
+    }, 'deletedByAdmin'])->withCount('activeMembers as members_count');
 
     if ($search = $request->get('search')) {
       $query->where('name', 'LIKE', "%{$search}%")
         ->orWhereHas('owner', function ($q) use ($search) {
-          $q->where('name', 'LIKE', "%{$search}%")
+          $q->withTrashed()->where('name', 'LIKE', "%{$search}%")
             ->orWhere('email', 'LIKE', "%{$search}%");
         });
     }
@@ -1370,7 +1370,19 @@ class AdminDashboardController extends Controller
     }
 
     try {
-      $group = Group::with(['owner', 'activeMembers.user', 'groupMembers.user', 'groupMembers.removedByAdmin'])->findOrFail($id);
+      $group = Group::withTrashed()->with([
+        'owner' => function ($query) {
+          $query->withTrashed(); // 削除されたオーナーも含む
+        },
+        'activeMembers.user' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含む
+        },
+        'groupMembers.user' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含む
+        },
+        'groupMembers.removedByAdmin',
+        'deletedByAdmin' // 削除を実行した管理者
+      ])->findOrFail($id);
 
       \App\Services\OperationLogService::log('backend', 'view_group_detail', 'admin:' . $admin->id . ' group:' . $id);
 
@@ -1514,7 +1526,7 @@ class AdminDashboardController extends Controller
       $member->update([
         'left_at' => now(),
         'can_rejoin' => $canRejoin,
-        'removal_type' => 'kicked_by_admin',
+        'removal_type' => \App\Models\GroupMember::REMOVAL_TYPE_KICKED_BY_ADMIN,
         'removed_by_admin_id' => $admin->id,
       ]);
 
@@ -1723,6 +1735,73 @@ class AdminDashboardController extends Controller
   }
 
   /**
+   * グループ削除（論理削除）
+   */
+  public function deleteGroup(Request $request, $id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::findOrFail($id);
+
+      if ($group->isDeleted()) {
+        return redirect()->back()
+          ->with('error', 'このグループは既に削除されています。');
+      }
+
+      $request->validate([
+        'reason' => 'nullable|string|max:500',
+      ]);
+
+      $reason = $request->reason ?? '管理者による削除';
+      $group->deleteByAdmin($admin->id, $reason);
+
+      \App\Services\OperationLogService::log('backend', 'delete_group', 'admin:' . $admin->id . ' group:' . $group->id . ' reason:' . $reason);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'グループを削除しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'グループの削除に失敗しました。');
+    }
+  }
+
+  /**
+   * グループ復活
+   */
+  public function restoreGroup($id)
+  {
+    $admin = Auth::guard('admin')->user();
+
+    if (!$admin->isAdmin()) {
+      abort(403, 'アクセス権限がありません。');
+    }
+
+    try {
+      $group = Group::withTrashed()->findOrFail($id);
+
+      if (!$group->isDeleted()) {
+        return redirect()->back()
+          ->with('error', 'このグループは削除されていません。');
+      }
+
+      $group->restoreByAdmin();
+
+      \App\Services\OperationLogService::log('backend', 'restore_group', 'admin:' . $admin->id . ' group:' . $group->id);
+
+      return redirect()->route('admin.groups.show', $group->id)
+        ->with('success', 'グループを復活しました。');
+    } catch (\Exception $e) {
+      return redirect()->back()
+        ->with('error', 'グループの復活に失敗しました。');
+    }
+  }
+
+  /**
    * サポートチャット一覧を表示
    */
   public function supportConversations(Request $request)
@@ -1764,7 +1843,7 @@ class AdminDashboardController extends Controller
     // 各チャットの真の未読メッセージ数を取得
     $chatRoomIds = $conversations->pluck('id')->toArray();
     $unreadCounts = \App\Models\AdminChatRead::getUnreadCountsForChatRooms($admin->id, $chatRoomIds);
-    
+
     $conversationsWithUnread = $conversations->through(function ($conversation) use ($unreadCounts) {
       $conversation->unread_count = $unreadCounts[$conversation->id] ?? 0;
       return $conversation;

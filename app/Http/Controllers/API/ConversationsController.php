@@ -1147,7 +1147,7 @@ class ConversationsController extends Controller
             'role' => $groupMember->role,
             'joined_at' => $groupMember->joined_at,
             'left_at' => $groupMember->left_at,
-            'can_rejoin' => $groupMember->removal_type === 'user_leave' ? true : $groupMember->can_rejoin,
+            'can_rejoin' => $groupMember->removal_type === \App\Models\GroupMember::REMOVAL_TYPE_SELF_LEAVE ? true : $groupMember->can_rejoin,
             'removal_type' => $groupMember->removal_type,
             'removed_by_user' => $groupMember->removedByUser ? [
               'id' => $groupMember->removedByUser->id,
@@ -1169,7 +1169,7 @@ class ConversationsController extends Controller
           'role' => $groupMember->role,
           'joined_at' => $groupMember->joined_at,
           'left_at' => $groupMember->left_at,
-          'can_rejoin' => $groupMember->removal_type === 'user_leave' ? true : $groupMember->can_rejoin,
+          'can_rejoin' => $groupMember->removal_type === \App\Models\GroupMember::REMOVAL_TYPE_SELF_LEAVE ? true : $groupMember->can_rejoin,
           'removal_type' => $groupMember->removal_type,
           'removed_by_user' => $groupMember->removedByUser ? [
             'id' => $groupMember->removedByUser->id,

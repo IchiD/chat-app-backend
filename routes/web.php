@@ -83,6 +83,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('groups/{id}', [AdminDashboardController::class, 'showGroup'])->name('groups.show');
     Route::get('groups/{id}/edit', [AdminDashboardController::class, 'editGroup'])->name('groups.edit');
     Route::put('groups/{id}', [AdminDashboardController::class, 'updateGroup'])->name('groups.update');
+    Route::delete('groups/{id}', [AdminDashboardController::class, 'deleteGroup'])->name('groups.delete');
+    Route::post('groups/{id}/restore', [AdminDashboardController::class, 'restoreGroup'])->name('groups.restore');
     Route::post('groups/{groupId}/members', [AdminDashboardController::class, 'addMember'])->name('groups.members.add');
     Route::delete('groups/{groupId}/members/{memberId}', [AdminDashboardController::class, 'removeMember'])->name('groups.members.remove');
     Route::put('groups/{groupId}/members/{memberId}/role', [AdminDashboardController::class, 'updateMemberRole'])->name('groups.members.role');

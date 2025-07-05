@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class Group extends Model
 {
-  use HasFactory;
+  use HasFactory, SoftDeletes;
 
   protected $fillable = [
     'name',
@@ -19,10 +20,14 @@ class Group extends Model
     'chat_styles',
     'owner_user_id',
     'qr_code_token',
+    'deleted_at',
+    'deleted_by',
+    'deleted_reason',
   ];
 
   protected $casts = [
     'chat_styles' => 'array',
+    'deleted_at' => 'datetime',
   ];
 
   /**
@@ -41,11 +46,11 @@ class Group extends Model
   }
 
   /**
-   * グループオーナー
+   * グループオーナー（削除されたユーザーも含む）
    */
   public function owner(): BelongsTo
   {
-    return $this->belongsTo(User::class, 'owner_user_id');
+    return $this->belongsTo(User::class, 'owner_user_id')->withTrashed();
   }
 
   /**
@@ -146,5 +151,75 @@ class Group extends Model
   public function canAddMember(): bool
   {
     return $this->getMembersCount() < $this->max_members;
+  }
+
+  /**
+   * グループが削除されているかチェック
+   */
+  public function isDeleted(): bool
+  {
+    return !is_null($this->deleted_at);
+  }
+
+  /**
+   * 削除を実行した管理者
+   */
+  public function deletedByAdmin(): BelongsTo
+  {
+    return $this->belongsTo(\App\Models\Admin::class, 'deleted_by');
+  }
+
+  /**
+   * 管理者によるグループ削除
+   */
+  public function deleteByAdmin(int $adminId, string $reason = null): bool
+  {
+    $result = $this->update([
+      'deleted_at' => now(),
+      'deleted_by' => $adminId,
+      'deleted_reason' => $reason,
+    ]);
+
+    if ($result) {
+      // グループに関連するチャットルームも削除
+      $this->chatRooms()->whereNull('deleted_at')->each(function ($chatRoom) use ($adminId, $reason) {
+        $chatRoom->deleteByAdmin($adminId, "グループ削除に伴う自動削除: " . ($reason ?? '管理者による削除'));
+      });
+    }
+
+    return $result;
+  }
+
+  /**
+   * ユーザー自身による削除（オーナーのアカウント削除時）
+   */
+  public function deleteBySelf(string $reason = null): bool
+  {
+    $result = $this->update([
+      'deleted_at' => now(),
+      'deleted_by' => null, // ユーザー自身による削除の場合は管理者IDは null
+      'deleted_reason' => $reason,
+    ]);
+
+    if ($result) {
+      // グループに関連するチャットルームも削除
+      $this->chatRooms()->whereNull('deleted_at')->each(function ($chatRoom) use ($reason) {
+        $chatRoom->deleteBySelfRemoval("グループ削除に伴う自動削除: " . ($reason ?? 'オーナーによる削除'));
+      });
+    }
+
+    return $result;
+  }
+
+  /**
+   * 管理者によるグループ復活
+   */
+  public function restoreByAdmin(): bool
+  {
+    return $this->update([
+      'deleted_at' => null,
+      'deleted_by' => null,
+      'deleted_reason' => null,
+    ]);
   }
 }

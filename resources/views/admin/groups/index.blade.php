@@ -61,10 +61,24 @@
             </thead>
             <tbody>
               @foreach($groups as $group)
-              <tr>
+              <tr class="{{ $group->isDeleted() ? 'table-secondary' : '' }}">
                 <td class="id-badge">#{{ $group->id }}</td>
-                <td>{{ $group->name }}</td>
-                <td>{{ $group->owner->name ?? '-' }}</td>
+                <td>
+                  {{ $group->name }}
+                  @if($group->isDeleted())
+                  <span class="badge bg-danger ms-1">削除済み</span>
+                  @endif
+                </td>
+                <td>
+                  @if($group->owner)
+                  {{ $group->owner->name }}
+                  @if($group->owner->deleted_at)
+                  <span class="badge bg-danger ms-1">削除済み</span>
+                  @endif
+                  @else
+                  <span class="text-muted">-</span>
+                  @endif
+                </td>
                 <td>{{ $group->members_count }}</td>
                 <td>{{ $group->created_at->format('Y/m/d') }}</td>
                 <td>
@@ -80,11 +94,13 @@
                           <i class="fas fa-eye me-2"></i>詳細を見る
                         </a>
                       </li>
+                      @if(!$group->isDeleted())
                       <li>
                         <a class="dropdown-item" href="{{ route('admin.groups.edit', $group->id) }}">
                           <i class="fas fa-edit me-2"></i>編集
                         </a>
                       </li>
+                      @endif
                     </ul>
                   </div>
                 </td>
