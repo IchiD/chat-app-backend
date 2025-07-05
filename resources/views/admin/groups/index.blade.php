@@ -61,7 +61,7 @@
             </thead>
             <tbody>
               @foreach($groups as $group)
-              <tr class="{{ $group->isDeleted() ? 'table-secondary' : '' }}">
+              <tr class="{{ $group->isDeleted() ? 'table-danger' : '' }}">
                 <td class="id-badge">#{{ $group->id }}</td>
                 <td>
                   {{ $group->name }}

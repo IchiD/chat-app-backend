@@ -31,7 +31,7 @@
 @if($user->isDeleted())
 <div class="row mb-4">
   <div class="col-12">
-    <div class="alert alert-warning">
+    <div class="alert alert-danger">
       <i class="fas fa-exclamation-triangle me-2"></i>
       <strong>注意:</strong> このユーザーは削除されています。削除を取り消してから編集してください。
     </div>

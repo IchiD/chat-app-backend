@@ -99,7 +99,7 @@
             </thead>
             <tbody>
               @foreach($users as $user)
-              <tr class="{{ $user->isDeleted() ? 'table-warning' : '' }}">
+              <tr class="{{ $user->isDeleted() ? 'table-danger' : '' }}">
                 <td>
                   <span class="fw-bold text-primary">#{{ $user->id }}</span>
                 </td>
@@ -133,12 +133,12 @@
                 </td>
                 <td>
                   @php
-                    $planClass = match($user->plan) {
-                      'free' => 'bg-secondary',
-                      'standard' => 'bg-warning',
-                      'premium' => 'bg-danger',
-                      default => 'bg-secondary'
-                    };
+                  $planClass = match($user->plan) {
+                  'free' => 'bg-secondary',
+                  'standard' => 'bg-warning',
+                  'premium' => 'bg-danger',
+                  default => 'bg-secondary'
+                  };
                   @endphp
                   <span class="badge {{ $planClass }}">
                     {{ $user->plan_display }}
@@ -153,7 +153,7 @@
                 </td>
                 <td>
                   @if($user->isDeleted())
-                  <div class="{{ $user->isDeletedBySelf() ? 'text-warning' : 'text-danger' }}">
+                  <div class="text-danger">
                     <i class="fas fa-trash me-1"></i>
                     <strong>
                       @if($user->isDeletedBySelf())

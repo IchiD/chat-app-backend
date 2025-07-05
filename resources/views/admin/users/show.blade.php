@@ -49,7 +49,7 @@
 @if($user->isDeleted())
 <div class="row mb-4">
   <div class="col-12">
-    <div class="alert {{ $user->isDeletedBySelf() ? 'alert-warning' : 'alert-danger' }}">
+    <div class="alert alert-danger">
       <i class="fas fa-exclamation-triangle me-2"></i>
       <strong>
         @if($user->isDeletedBySelf())
@@ -397,7 +397,7 @@
                   @if($message->isAdminDeleted())
                   <span class="badge bg-danger">管理者削除</span>
                   @elseif($message->deleted_at)
-                  <span class="badge bg-warning">ユーザー削除</span>
+                  <span class="badge bg-danger">ユーザー削除</span>
                   @elseif($message->edited_at)
                   <span class="badge bg-info">編集済み</span>
                   @else

@@ -95,7 +95,7 @@
                   <strong>{{ $payment->user->name }}</strong><br>
                   <small class="text-muted">{{ $payment->user->email }}</small>
                   @if($payment->user->isDeleted())
-                  <br><span class="badge bg-warning text-dark">削除済みユーザー</span>
+                  <br><span class="badge bg-danger">削除済みユーザー</span>
                   @endif
                   @else
                   <strong class="text-muted">削除されたユーザー</strong><br>

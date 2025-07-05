@@ -178,7 +178,7 @@
           </thead>
           <tbody>
             @foreach($deletedMembers as $member)
-            <tr class="table-secondary">
+            <tr class="table-danger">
               <td>#{{ $member->user_id }}</td>
               <td>
                 {{ $member->user->name ?? '-' }}

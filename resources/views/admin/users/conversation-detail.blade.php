@@ -187,7 +187,7 @@
         @if($messages->count() > 0)
         <div class="messages-container">
           @foreach($messages as $message)
-          <div class="message-item mb-3 p-3 border rounded {{ $message->isAdminDeleted() ? 'border-danger bg-light' : ($message->deleted_at ? 'border-warning bg-light' : '') }}">
+          <div class="message-item mb-3 p-3 border rounded {{ $message->isAdminDeleted() ? 'border-danger bg-light' : ($message->deleted_at ? 'border-danger bg-light' : '') }}">
             <div class="d-flex justify-content-between align-items-start">
               <div class="flex-grow-1">
                 <div class="d-flex align-items-center mb-2">
@@ -227,7 +227,7 @@
                   元のメッセージ: "{{ $message->text_content }}"
                 </div>
                 @elseif($message->deleted_at)
-                <div class="alert alert-warning mb-2">
+                <div class="alert alert-danger mb-2">
                   <i class="fas fa-exclamation-triangle me-1"></i>
                   <strong>ユーザーにより削除されました</strong>
                   <small class="d-block">削除日時: {{ $message->deleted_at->format('Y/m/d H:i') }}</small>

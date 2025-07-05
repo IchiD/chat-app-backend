@@ -31,7 +31,7 @@
 <!-- ユーザー情報カード -->
 <div class="row mb-4">
   <div class="col-12">
-    <div class="card {{ $user->isDeleted() ? 'border-warning' : '' }}">
+    <div class="card {{ $user->isDeleted() ? 'border-danger' : '' }}">
       <div class="card-body">
         <div class="d-flex align-items-center">
           <div class="flex-grow-1">
