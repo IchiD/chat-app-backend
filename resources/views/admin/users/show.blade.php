@@ -170,7 +170,11 @@
             <div class="mb-3">
               <label class="form-label text-muted">アカウント状態</label>
               <div>
-                @if($user->isBanned())
+                @if($user->isDeleted())
+                <span class="badge bg-danger">
+                  <i class="fas fa-trash me-1"></i>削除済み
+                </span>
+                @elseif($user->isBanned())
                 <span class="badge badge-banned">
                   <i class="fas fa-ban me-1"></i>バン済み
                 </span>

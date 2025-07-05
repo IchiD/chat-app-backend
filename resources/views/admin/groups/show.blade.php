@@ -14,9 +14,6 @@
     <div class="d-flex justify-content-between align-items-center">
       <h1 class="h3 mb-0">
         <i class="fas fa-users-gear me-2"></i>{{ $group->name }}
-        @if($group->isDeleted())
-        <span class="badge bg-danger ms-2">削除済み</span>
-        @endif
       </h1>
       <div>
         @if(!$group->isDeleted())
@@ -27,14 +24,34 @@
           <i class="fas fa-trash me-1"></i>グループ削除
         </button>
         @else
-        <button class="btn btn-outline-success" onclick="showRestoreGroupModal()">
-          <i class="fas fa-undo me-1"></i>グループ復活
+        <button class="btn btn-success" onclick="showRestoreGroupModal()">
+          <i class="fas fa-undo me-1"></i>削除取り消し
         </button>
         @endif
       </div>
     </div>
   </div>
 </div>
+
+@if($group->isDeleted())
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="alert alert-danger">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong>このグループは管理者によって削除されています</strong>
+      <div class="mt-2">
+        <strong>削除日時:</strong> {{ $group->deleted_at->format('Y年m月d日 H:i') }}<br>
+        @if($group->deletedByAdmin)
+        <strong>削除者:</strong> {{ $group->deletedByAdmin->name }}<br>
+        @endif
+        @if($group->deleted_reason)
+        <strong>削除理由:</strong> {{ $group->deleted_reason }}
+        @endif
+      </div>
+    </div>
+  </div>
+</div>
+@endif
 
 <div class="row mb-4">
   <div class="col-md-6">
@@ -67,18 +84,6 @@
 
           <dt class="col-sm-4">説明</dt>
           <dd class="col-sm-8">{!! nl2br(e($group->description)) !!}</dd>
-
-          @if($group->isDeleted())
-          <dt class="col-sm-4">削除情報</dt>
-          <dd class="col-sm-8">
-            <div class="text-danger">
-              <i class="fas fa-exclamation-triangle me-1"></i>
-              削除日: {{ $group->deleted_at ? $group->deleted_at->format('Y/m/d H:i') : '-' }}<br>
-              削除者: {{ $group->deletedByAdmin->name ?? '不明' }}<br>
-              削除理由: {{ $group->deleted_reason ?? '理由なし' }}
-            </div>
-          </dd>
-          @endif
         </dl>
       </div>
     </div>
@@ -398,6 +403,7 @@
   </div>
 </div>
 
+@if(!$group->isDeleted())
 <!-- グループ削除モーダル -->
 <div class="modal fade" id="deleteGroupModal" tabindex="-1">
   <div class="modal-dialog">
@@ -428,13 +434,14 @@
     </div>
   </div>
 </div>
+@endif
 
 <!-- グループ復活モーダル -->
 <div class="modal fade" id="restoreGroupModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">グループ復活確認</h5>
+        <h5 class="modal-title">グループ削除取り消し確認</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST" action="{{ route('admin.groups.restore', $group->id) }}">

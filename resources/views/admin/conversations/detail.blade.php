@@ -9,6 +9,9 @@
       <div>
         <h1 class="h3 mb-0">
           <i class="fas fa-comment-dots me-2"></i>チャットルーム詳細
+          @if($chatRoom->trashed())
+          <span class="badge bg-danger ms-2">削除済み</span>
+          @endif
         </h1>
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb">
@@ -25,6 +28,28 @@
         </nav>
       </div>
       <div>
+        @if($chatRoom->trashed())
+        @if($from === 'user' && $user)
+        <form method="POST" action="{{ route('admin.users.conversations.restore', [$user->id, $chatRoom->id]) }}" class="d-inline me-2">
+          @csrf
+          <button type="submit" class="btn btn-success"
+            onclick="return confirm('このチャットルームの削除を取り消しますか？')">
+            <i class="fas fa-undo me-1"></i>削除を取り消し
+          </button>
+        </form>
+        @else
+        <form method="POST" action="{{ route('admin.conversations.restore', $chatRoom->id) }}" class="d-inline me-2">
+          @csrf
+          <button type="submit" class="btn btn-success" onclick="return confirm('このチャットの削除を取り消しますか？')">
+            <i class="fas fa-undo me-1"></i>削除を取り消し
+          </button>
+        </form>
+        @endif
+        @else
+        <button type="button" class="btn btn-outline-danger me-2" onclick="showDeleteConversationModal()">
+          <i class="fas fa-trash me-1"></i>チャットルームを削除
+        </button>
+        @endif
         @if($from === 'user' && $user)
         <a href="{{ route('admin.users.conversations', $user->id) }}" class="btn btn-outline-secondary">
           <i class="fas fa-arrow-left me-1"></i>チャットルーム一覧に戻る
@@ -39,70 +64,36 @@
   </div>
 </div>
 
+@if($chatRoom->trashed())
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="alert alert-danger">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong>このチャットルームは削除されています</strong>
+      <div class="mt-2">
+        <strong>削除日時:</strong> {{ $chatRoom->deleted_at->format('Y年m月d日 H:i') }}<br>
+        @if($chatRoom->deletedByAdmin)
+        <strong>削除実行者:</strong> {{ $chatRoom->deletedByAdmin->name }} (管理者)<br>
+        @endif
+        @if($chatRoom->deleted_reason)
+        <strong>削除理由:</strong> {{ $chatRoom->deleted_reason }}
+        @endif
+      </div>
+    </div>
+  </div>
+</div>
+@endif
+
 <!-- チャットルーム情報カード -->
 <div class="row mb-4">
   <div class="col-12">
-    <div class="card {{ $chatRoom->trashed() ? 'border-danger' : '' }}">
-      <div class="card-header {{ $chatRoom->trashed() ? 'bg-danger text-white' : '' }}">
+    <div class="card">
+      <div class="card-header">
         <h5 class="card-title mb-0">
           <i class="fas fa-info-circle me-2"></i>チャットルーム情報
-          @if($chatRoom->trashed())
-          <span class="badge bg-light text-danger ms-2">
-            <i class="fas fa-trash me-1"></i>削除済み
-          </span>
-          @endif
         </h5>
-        <div class="mt-2">
-          @if($chatRoom->trashed())
-          @if($from === 'user' && $user)
-          <form method="POST" action="{{ route('admin.users.conversations.restore', [$user->id, $chatRoom->id]) }}" class="d-inline">
-            @csrf
-            <button type="submit"
-              class="btn btn-sm btn-outline-light"
-              onclick="return confirm('このチャットルームの削除を取り消しますか？')">
-              <i class="fas fa-undo me-1"></i>削除を取り消し
-            </button>
-          </form>
-          @else
-          <form method="POST" action="{{ route('admin.conversations.restore', $chatRoom->id) }}" class="d-inline">
-            @csrf
-            <button type="submit" class="btn btn-sm btn-outline-light" onclick="return confirm('このチャットの削除を取り消しますか？')">
-              <i class="fas fa-undo me-1"></i>削除を取り消し
-            </button>
-          </form>
-          @endif
-          @else
-          <button type="button" class="btn btn-sm btn-outline-danger" onclick="showDeleteConversationModal()">
-            <i class="fas fa-trash me-1"></i>チャットルームを削除
-          </button>
-          @endif
-        </div>
       </div>
       <div class="card-body">
-        @if($chatRoom->trashed())
-        <div class="alert alert-danger mb-3">
-          <h6 class="alert-heading">
-            <i class="fas fa-exclamation-triangle me-2"></i>このチャットルームは削除されています
-          </h6>
-          <hr>
-          <div class="row">
-            <div class="col-md-6">
-              <strong>削除日時:</strong> {{ $chatRoom->deleted_at->format('Y年m月d日 H:i') }}
-            </div>
-            @if($chatRoom->deletedByAdmin)
-            <div class="col-md-6">
-              <strong>削除実行者:</strong> {{ $chatRoom->deletedByAdmin->name }} (管理者)
-            </div>
-            @endif
-          </div>
-          @if($chatRoom->deleted_reason)
-          <div class="mt-2">
-            <strong>削除理由:</strong><br>
-            <div class="bg-light p-2 rounded mt-1">{{ $chatRoom->deleted_reason }}</div>
-          </div>
-          @endif
-        </div>
-        @endif
 
         <div class="row">
           <div class="col-md-6">
@@ -338,6 +329,7 @@
   </div>
 </div>
 
+@if(!$chatRoom->trashed())
 <!-- チャット削除確認モーダル -->
 <div class="modal fade" id="deleteConversationModal" tabindex="-1">
   <div class="modal-dialog">
@@ -368,6 +360,7 @@
     </div>
   </div>
 </div>
+@endif
 
 <!-- メッセージ削除確認モーダル -->
 <div class="modal fade" id="deleteMessageModal" tabindex="-1">
