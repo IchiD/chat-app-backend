@@ -564,13 +564,34 @@ class FriendshipController extends Controller
       $existingFriendChat = \App\Models\ChatRoom::getFriendChat($userId1, $userId2);
 
       if ($existingFriendChat) {
-        // 既存のfriend_chatがある場合は何もしない（復活はしない）
-        Log::info('既存のfriend_chatが見つかりました（復活はしません）', [
-          'chat_room_id' => $existingFriendChat->id,
-          'user_id1' => $userId1,
-          'user_id2' => $userId2,
-          'is_deleted' => $existingFriendChat->trashed()
-        ]);
+        // 削除されている場合は復活させる
+        if ($existingFriendChat->trashed()) {
+          // 友達関係に関連する削除の場合のみ復活
+          $isFriendshipRelated = strpos($existingFriendChat->deleted_reason, '友達関係') !== false;
+
+          if ($isFriendshipRelated) {
+            $existingFriendChat->restoreByAdmin();
+            Log::info('削除されていたfriend_chatを復活させました', [
+              'chat_room_id' => $existingFriendChat->id,
+              'user_id1' => $userId1,
+              'user_id2' => $userId2,
+              'deleted_reason' => $existingFriendChat->deleted_reason
+            ]);
+          } else {
+            Log::info('friend_chatは管理者により直接削除されているため復活しません', [
+              'chat_room_id' => $existingFriendChat->id,
+              'user_id1' => $userId1,
+              'user_id2' => $userId2,
+              'deleted_reason' => $existingFriendChat->deleted_reason
+            ]);
+          }
+        } else {
+          Log::info('既存のアクティブなfriend_chatが見つかりました', [
+            'chat_room_id' => $existingFriendChat->id,
+            'user_id1' => $userId1,
+            'user_id2' => $userId2
+          ]);
+        }
       } else {
         // friend_chatを新規作成
         \Illuminate\Support\Facades\DB::transaction(function () use ($userId1, $userId2) {

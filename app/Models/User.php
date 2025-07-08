@@ -289,6 +289,22 @@ class User extends Authenticatable
           'friendship_id' => $deletedFriendship->id
         ]);
 
+        // 削除されたチャットルームも復活させる
+        $friendChat = ChatRoom::getFriendChat($this->id, $friendId);
+        if ($friendChat && $friendChat->trashed()) {
+          // 友達関係に関連する削除の場合のみ復活
+          $isFriendshipRelated = strpos($friendChat->deleted_reason, '友達関係') !== false;
+
+          if ($isFriendshipRelated) {
+            $friendChat->restoreByAdmin();
+            Log::info('友達関係復活に伴いfriend_chatも復活', [
+              'chat_room_id' => $friendChat->id,
+              'user_id' => $this->id,
+              'friend_id' => $friendId
+            ]);
+          }
+        }
+
         return $deletedFriendship;
       }
 
@@ -381,14 +397,15 @@ class User extends Authenticatable
       return false;
     }
 
-    // 友達関係の論理削除を実行
-    $friendshipDeleted = $friendship->deleteByAdmin(null, 'ユーザーによる友達解除');
+    // 友達関係の論理削除を実行（ユーザーによる削除の場合はdeleted_byをnullにする）
+    $friendshipDeleted = $friendship->deleteBySelfRemoval('ユーザーによる友達解除');
 
     // 対応する友達チャットも論理削除
     if ($friendshipDeleted) {
       $friendChat = ChatRoom::getFriendChat($this->id, $friendId);
       if ($friendChat && !$friendChat->trashed()) {
-        $friendChat->deleteByFriendshipRemoval($this->id, '友達関係の解除に伴う削除');
+        // 統一的な削除理由を使用
+        $friendChat->deleteByFriendshipRemoval($this->id, '友達関係削除に伴う自動削除: ユーザーによる友達解除');
       }
     }
 

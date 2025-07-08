@@ -190,7 +190,45 @@ class AdminDashboardController extends Controller
       $query->orderBy('sent_at', 'desc')->take(10);
     }]);
 
-    return view('admin.users.show', compact('admin', 'user', 'stats', 'chatRooms'));
+    // 友達関係を取得（削除されたものも含む）
+    $friendships = Friendship::withTrashed()
+      ->where(function ($query) use ($user) {
+        $query->where('user_id', $user->id)
+          ->orWhere('friend_id', $user->id);
+      })
+      ->with([
+        'user' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含む
+        },
+        'friend' => function ($query) {
+          $query->withTrashed(); // 削除されたユーザーも含む
+        },
+        'deletedByAdmin'
+      ])
+      ->orderBy('created_at', 'desc')
+      ->get();
+
+    // 各友達関係に対応するチャットルーム情報を追加
+    $friendships->each(function ($friendship) {
+      $userId1 = $friendship->user_id;
+      $userId2 = $friendship->friend_id;
+      $friendChat = ChatRoom::withTrashed()
+        ->where('type', 'friend_chat')
+        ->where(function ($query) use ($userId1, $userId2) {
+          $query->where(function ($q) use ($userId1, $userId2) {
+            $q->where('participant1_id', $userId1)
+              ->where('participant2_id', $userId2);
+          })->orWhere(function ($q) use ($userId1, $userId2) {
+            $q->where('participant1_id', $userId2)
+              ->where('participant2_id', $userId1);
+          });
+        })
+        ->first();
+
+      $friendship->friend_chat = $friendChat;
+    });
+
+    return view('admin.users.show', compact('admin', 'user', 'stats', 'chatRooms', 'friendships'));
   }
 
   /**
@@ -1322,31 +1360,98 @@ class AdminDashboardController extends Controller
     $friendship->deleteByAdmin($admin->id, $reason);
     \App\Services\OperationLogService::log('backend', 'delete_friendship', 'admin:' . $admin->id . ' friendship:' . $friendship->id);
 
-    return redirect()
-      ->route('admin.friendships.show', $friendship->id)
-      ->with('success', '友達関係を削除しました。');
+    // 友達関係削除に伴い、対応するfriend_chatも削除
+    $userId1 = $friendship->user_id;
+    $userId2 = $friendship->friend_id;
+    $friendChat = ChatRoom::getFriendChat($userId1, $userId2);
+
+    if ($friendChat && !$friendChat->trashed()) {
+      $friendChat->deleteByAdmin($admin->id, "友達関係削除に伴う自動削除: " . $reason);
+      \App\Services\OperationLogService::log('backend', 'delete_friend_chat', 'admin:' . $admin->id . ' chat_room:' . $friendChat->id . ' friendship:' . $friendship->id);
+    }
+
+    // ユーザーIDがリクエストに含まれている場合はユーザー詳細ページに戻る
+    if ($request->has('user_id')) {
+      return redirect()
+        ->route('admin.users.show', $request->user_id)
+        ->with('success', '友達関係を削除しました。');
+    }
+
+    // リファラーを確認してユーザー詳細ページからの操作かどうか判断
+    $referer = $request->headers->get('referer');
+    if ($referer && preg_match('/\/admin\/users\/(\d+)/', $referer, $matches)) {
+      $userId = $matches[1];
+      return redirect()
+        ->route('admin.users.show', $userId)
+        ->with('success', '友達関係を削除しました。');
+    }
+
+    // デフォルトは友達関係一覧ページ（存在する場合）または元のページに戻る
+    return redirect()->back()->with('success', '友達関係を削除しました。');
   }
 
   /**
    * 友達関係の復活
    */
-  public function restoreFriendship($id)
+  public function restoreFriendship(Request $request, $id)
   {
     $admin = Auth::guard('admin')->user();
     $friendship = Friendship::withTrashed()->findOrFail($id);
 
     if (!$friendship->isDeleted()) {
-      return redirect()
-        ->route('admin.friendships.show', $friendship->id)
-        ->with('error', 'この友達関係は削除されていません。');
+      return redirect()->back()->with('error', 'この友達関係は削除されていません。');
     }
 
     $friendship->restoreByAdmin();
     \App\Services\OperationLogService::log('backend', 'restore_friendship', 'admin:' . $admin->id . ' friendship:' . $friendship->id);
 
-    return redirect()
-      ->route('admin.friendships.show', $friendship->id)
-      ->with('success', '友達関係を復活しました。');
+    // 友達関係復活に伴い、対応するfriend_chatも復活（管理者による削除でない場合のみ）
+    $userId1 = $friendship->user_id;
+    $userId2 = $friendship->friend_id;
+    $friendChat = ChatRoom::withTrashed()->where('type', 'friend_chat')
+      ->where(function ($query) use ($userId1, $userId2) {
+        $query->where(function ($q) use ($userId1, $userId2) {
+          $q->where('participant1_id', $userId1)
+            ->where('participant2_id', $userId2);
+        })->orWhere(function ($q) use ($userId1, $userId2) {
+          $q->where('participant1_id', $userId2)
+            ->where('participant2_id', $userId1);
+        });
+      })
+      ->first();
+
+    if ($friendChat && $friendChat->trashed()) {
+      // 友達関係に関連する削除の場合のみ復活
+      // 削除理由に「友達関係」が含まれており、管理者による直接的なチャット削除でない場合
+      $isFriendshipRelated = strpos($friendChat->deleted_reason, '友達関係') !== false;
+      $isNotDirectAdminDelete = !($friendChat->deleted_by !== null &&
+        $friendChat->deleted_by !== $admin->id &&
+        strpos($friendChat->deleted_reason, '友達関係') === false);
+
+      if ($isFriendshipRelated && $isNotDirectAdminDelete) {
+        $friendChat->restoreByAdmin();
+        \App\Services\OperationLogService::log('backend', 'restore_friend_chat', 'admin:' . $admin->id . ' chat_room:' . $friendChat->id . ' friendship:' . $friendship->id);
+      }
+    }
+
+    // ユーザーIDがリクエストに含まれている場合はユーザー詳細ページに戻る
+    if ($request->has('user_id')) {
+      return redirect()
+        ->route('admin.users.show', $request->user_id)
+        ->with('success', '友達関係を復活しました。');
+    }
+
+    // リファラーを確認してユーザー詳細ページからの操作かどうか判断
+    $referer = $request->headers->get('referer');
+    if ($referer && preg_match('/\/admin\/users\/(\d+)/', $referer, $matches)) {
+      $userId = $matches[1];
+      return redirect()
+        ->route('admin.users.show', $userId)
+        ->with('success', '友達関係を復活しました。');
+    }
+
+    // デフォルトは元のページに戻る
+    return redirect()->back()->with('success', '友達関係を復活しました。');
   }
 
   /**

@@ -347,6 +347,189 @@
   </div>
 </div>
 
+<!-- 友達関係 -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">
+          <i class="fas fa-user-friends me-2"></i>友達関係
+          <span class="badge bg-secondary ms-2">{{ $friendships->count() }}件</span>
+        </h5>
+      </div>
+      <div class="card-body">
+        @if($friendships->count() > 0)
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>相手ユーザー</th>
+                <th>申請方向</th>
+                <th>ステータス</th>
+                <th>チャットルーム</th>
+                <th>申請メッセージ</th>
+                <th>作成日時</th>
+                <th>削除情報</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              @foreach($friendships as $friendship)
+              @php
+              $isUserSender = $friendship->user_id === $user->id;
+              $otherUser = $isUserSender ? $friendship->friend : $friendship->user;
+              @endphp
+              <tr class="{{ $friendship->isDeleted() ? 'table-danger' : '' }}">
+                <td>
+                  <span class="text-primary">#{{ $friendship->id }}</span>
+                </td>
+                <td>
+                  @if($otherUser)
+                  <div>
+                    <strong>{{ $otherUser->name }}</strong>
+                    @if($otherUser->isDeleted())
+                    <span class="badge bg-warning text-dark ms-1">削除済みユーザー</span>
+                    @elseif($otherUser->isBanned())
+                    <span class="badge bg-danger ms-1">バン済みユーザー</span>
+                    @endif
+                  </div>
+                  <small class="text-muted">
+                    {{ $otherUser->email }}<br>
+                    フレンドID: <code>{{ $otherUser->friend_id }}</code>
+                  </small>
+                  @else
+                  <span class="text-muted">削除されたユーザー</span>
+                  @endif
+                </td>
+                <td>
+                  @if($isUserSender)
+                  <span class="badge bg-info">
+                    <i class="fas fa-arrow-right me-1"></i>申請した
+                  </span>
+                  @else
+                  <span class="badge bg-primary">
+                    <i class="fas fa-arrow-left me-1"></i>申請された
+                  </span>
+                  @endif
+                </td>
+                <td>
+                  @switch($friendship->status)
+                  @case(\App\Models\Friendship::STATUS_PENDING)
+                  <span class="badge bg-warning text-dark">
+                    <i class="fas fa-clock me-1"></i>申請中
+                  </span>
+                  @break
+                  @case(\App\Models\Friendship::STATUS_ACCEPTED)
+                  <span class="badge bg-success">
+                    <i class="fas fa-check me-1"></i>承認済み
+                  </span>
+                  @break
+                  @case(\App\Models\Friendship::STATUS_REJECTED)
+                  <span class="badge bg-danger">
+                    <i class="fas fa-times me-1"></i>拒否
+                  </span>
+                  @break
+                  @default
+                  <span class="badge bg-secondary">不明</span>
+                  @endswitch
+                </td>
+                <td>
+                  @if($friendship->friend_chat)
+                  <div>
+                    <span class="text-primary">#{{ $friendship->friend_chat->id }}</span>
+                    @if($friendship->friend_chat->trashed())
+                    <span class="badge bg-danger ms-1">削除済み</span>
+                    @else
+                    <span class="badge badge-friend-chat ms-1">アクティブ</span>
+                    @endif
+                  </div>
+                  <small class="text-muted">{{ $friendship->friend_chat->room_token }}</small>
+                  @else
+                  <span class="text-muted">なし</span>
+                  @endif
+                </td>
+                <td>
+                  @if($friendship->message)
+                  <div class="text-truncate" style="max-width: 200px;" title="{{ $friendship->message }}">
+                    {{ $friendship->message }}
+                  </div>
+                  @else
+                  <span class="text-muted">-</span>
+                  @endif
+                </td>
+                <td>
+                  <div>{{ $friendship->created_at->format('Y/m/d') }}</div>
+                  <small class="text-muted">{{ $friendship->created_at->format('H:i') }}</small>
+                </td>
+                <td>
+                  @if($friendship->isDeleted())
+                  <div class="text-danger">
+                    <i class="fas fa-trash me-1"></i>
+                    <strong>削除済み</strong>
+                  </div>
+                  <small class="text-muted">
+                    {{ $friendship->deleted_at->format('Y/m/d H:i') }}
+                    @if($friendship->deletedByAdmin)
+                    <br>削除者: {{ $friendship->deletedByAdmin->name }}
+                    @else
+                    <br>ユーザーによる削除
+                    @endif
+                    @if($friendship->deleted_reason)
+                    <br>理由: {{ $friendship->deleted_reason }}
+                    @endif
+                  </small>
+                  @else
+                  <span class="text-muted">-</span>
+                  @endif
+                </td>
+                <td>
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                      type="button"
+                      data-bs-toggle="dropdown">
+                      <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                      @if($friendship->isDeleted())
+                      <li>
+                        <form method="POST" action="{{ route('admin.friendships.restore', $friendship->id) }}" class="d-inline">
+                          @csrf
+                          <input type="hidden" name="user_id" value="{{ $user->id }}">
+                          <button type="submit" class="dropdown-item text-success"
+                            onclick="return confirm('この友達関係を復活しますか？')">
+                            <i class="fas fa-undo me-2"></i>復活
+                          </button>
+                        </form>
+                      </li>
+                      @else
+                      <li>
+                        <a class="dropdown-item text-danger" href="#"
+                          onclick="showDeleteFriendshipModal({{ $friendship->id }}, '{{ $otherUser ? $otherUser->name : '不明なユーザー' }}', {{ $user->id }})">
+                          <i class="fas fa-trash me-2"></i>削除
+                        </a>
+                      </li>
+                      @endif
+                    </ul>
+                  </div>
+                </td>
+              </tr>
+              @endforeach
+            </tbody>
+          </table>
+        </div>
+        @else
+        <div class="text-center py-5">
+          <i class="fas fa-user-friends fa-3x text-muted mb-3"></i>
+          <h5 class="text-muted">友達関係がありません</h5>
+          <p class="text-muted">このユーザーはまだ友達申請を送信または受信していません</p>
+        </div>
+        @endif
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 最近のメッセージ -->
 <div class="row">
   <div class="col-12">
@@ -426,4 +609,50 @@
     </div>
   </div>
 </div>
+
+<!-- 友達関係削除確認モーダル -->
+<div class="modal fade" id="deleteFriendshipModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">友達関係削除確認</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="deleteFriendshipForm" method="POST">
+        @csrf
+        @method('DELETE')
+        <input type="hidden" id="deleteFriendshipUserId" name="user_id" value="">
+        <div class="modal-body">
+          <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>確認:</strong> 「<span id="deleteFriendshipUserName"></span>」との友達関係を削除します。<br>
+            <small class="text-muted">
+              ※ 論理削除のため、後から復元することができます。<br>
+              ※ 対応するチャットルームも同時に削除されます。
+            </small>
+          </div>
+          <div class="mb-3">
+            <label for="deleteFriendshipReason" class="form-label">削除理由</label>
+            <textarea class="form-control" id="deleteFriendshipReason" name="reason" rows="3"
+              placeholder="削除理由を入力してください（任意）"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-danger">削除する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showDeleteFriendshipModal(friendshipId, userName, userId) {
+    document.getElementById('deleteFriendshipUserName').textContent = userName;
+    document.getElementById('deleteFriendshipForm').action = `/admin/friendships/${friendshipId}`;
+    document.getElementById('deleteFriendshipUserId').value = userId;
+    document.getElementById('deleteFriendshipReason').value = '';
+    new bootstrap.Modal(document.getElementById('deleteFriendshipModal')).show();
+  }
+</script>
 @endsection
