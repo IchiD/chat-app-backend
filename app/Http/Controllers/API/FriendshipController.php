@@ -9,7 +9,7 @@ use App\Models\Friendship;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use App\Http\Controllers\API\NotificationController;
+use App\Notifications\PushNotification;
 use Illuminate\Http\JsonResponse;
 
 class FriendshipController extends Controller
@@ -302,11 +302,25 @@ class FriendshipController extends Controller
           $existingFriendship->message = $message;
           $existingFriendship->save();
 
-          // 再申請の通知を送信
+          // 再申請の通知を送信（非同期）
           if ($friendUser) {
             try {
-              $notificationController = new NotificationController();
-              $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+              $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
+
+              // 非同期通知として送信（キューに追加される）
+              $friendUser->notify(new PushNotification(
+                'フレンド申請',
+                $currentUser->name . 'さんからフレンド申請が届きました',
+                [
+                  'url' => $frontendUrl . '/friends',
+                  'type' => 'friend_request',
+                  'timestamp' => now()->timestamp
+                ],
+                [
+                  'tag' => 'friend-request',
+                  'requireInteraction' => true
+                ]
+              ));
             } catch (\Exception $e) {
               Log::warning('友達申請再送信通知の送信に失敗', [
                 'friend_user_id' => $friendUser->id,
@@ -334,11 +348,25 @@ class FriendshipController extends Controller
       // 新しい友達申請を作成
       $friendship = $currentUser->sendFriendRequest($friendId, $message);
 
-      // 友達申請の通知を送信（エラーが発生しても友達申請自体は成功させる）
+      // 友達申請の通知を送信（非同期・エラーが発生しても友達申請自体は成功させる）
       if ($friendUser) {
         try {
-          $notificationController = new NotificationController();
-          $notificationController->sendFriendRequestNotification($friendUser, $currentUser->name);
+          $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
+
+          // 非同期通知として送信（キューに追加される）
+          $friendUser->notify(new PushNotification(
+            'フレンド申請',
+            $currentUser->name . 'さんからフレンド申請が届きました',
+            [
+              'url' => $frontendUrl . '/friends',
+              'type' => 'friend_request',
+              'timestamp' => now()->timestamp
+            ],
+            [
+              'tag' => 'friend-request',
+              'requireInteraction' => true
+            ]
+          ));
         } catch (\Exception $e) {
           Log::warning('友達申請通知の送信に失敗', [
             'friend_user_id' => $friendUser->id,

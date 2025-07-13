@@ -15,8 +15,10 @@ use App\Services\BaseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use App\Notifications\PushNotification;
 
 class ConversationsController extends Controller
 {
@@ -1447,6 +1449,65 @@ class ConversationsController extends Controller
         ];
       }
     });
+
+    // プッシュ通知の送信（非同期・トランザクション外で実行）
+    if (!empty($sentMessages)) {
+      // メッセージプレビュー（長い場合は短縮する）
+      $messagePreview = mb_substr($textContent, 0, 50);
+      if (mb_strlen($textContent) > 50) {
+        $messagePreview .= '...';
+      }
+
+      $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
+
+      Log::info('一斉送信非同期通知開始', [
+        'user_id' => $user->id,
+        'group_id' => $group->id,
+        'sent_count' => count($sentMessages)
+      ]);
+
+      foreach ($sentMessages as $sentMessage) {
+        $targetUser = User::find($sentMessage['target_user_id']);
+        if ($targetUser && !$targetUser->isDeleted()) {
+          try {
+            // チャットルームのroom_tokenを取得
+            $roomToken = ChatRoom::find($sentMessage['chat_room_id'])->room_token ?? '';
+
+            // 非同期通知として送信（キューに追加される）
+            $targetUser->notify(new \App\Notifications\PushNotification(
+              $user->name . 'からのメッセージ',
+              $messagePreview,
+              [
+                'url' => $frontendUrl . '/chat',
+                'type' => 'new_message',
+                'room_id' => $sentMessage['chat_room_id'],
+                'room_token' => $roomToken,
+                'timestamp' => now()->timestamp
+              ],
+              [
+                'tag' => 'chat-' . $sentMessage['chat_room_id'],
+                'requireInteraction' => true
+              ]
+            ));
+          } catch (\Exception $e) {
+            Log::warning('一斉送信メッセージ通知の送信に失敗しました', [
+              'recipient_user_id' => $targetUser->id,
+              'sender_user_id' => $user->id,
+              'chat_room_id' => $sentMessage['chat_room_id'],
+              'message_id' => $sentMessage['message_id'],
+              'error' => $e->getMessage()
+            ]);
+            // 通知エラーは無視して処理を続行
+          }
+        }
+      }
+
+      Log::info('一斉送信非同期通知キューへの追加完了', [
+        'user_id' => $user->id,
+        'group_id' => $group->id,
+        'sent_count' => count($sentMessages)
+      ]);
+    }
 
     return response()->json([
       'message' => '一斉送信が完了しました',

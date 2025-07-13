@@ -8,9 +8,9 @@ use App\Models\Message;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
-use App\Http\Controllers\API\NotificationController;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
+use App\Notifications\PushNotification;
 
 class MessagesController extends Controller
 {
@@ -283,7 +283,7 @@ class MessagesController extends Controller
 
       Log::info('メッセージリレーション読み込み完了');
 
-      // プッシュ通知の送信
+      // プッシュ通知の送信（非同期）
       // 同じチャットルームの参加者全員（自分以外）に通知を送信する
       $participants = $chatRoom->getParticipants()->reject(function ($user_id) use ($user) {
         return $user_id === $user->id;
@@ -298,22 +298,31 @@ class MessagesController extends Controller
           $messagePreview .= '...';
         }
 
-        Log::info('通知送信開始');
+        $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
 
-        $notificationController = new NotificationController();
+        Log::info('非同期通知送信開始');
 
         foreach ($participants as $participantUserId) {
-          // 各参加者にプッシュ通知を送信
+          // 各参加者にプッシュ通知を送信（非同期）
           $participantUser = User::find($participantUserId);
           if ($participantUser && !$participantUser->isDeleted()) {
             try {
-              $notificationController->sendNewMessageNotification(
-                $participantUser,
-                $user->name,
+              // 非同期通知として送信（キューに追加される）
+              $participantUser->notify(new \App\Notifications\PushNotification(
+                $user->name . 'からのメッセージ',
                 $messagePreview,
-                $chatRoom->id,
-                $chatRoom->room_token
-              );
+                [
+                  'url' => $frontendUrl . '/chat',
+                  'type' => 'new_message',
+                  'room_id' => $chatRoom->id,
+                  'room_token' => $chatRoom->room_token,
+                  'timestamp' => now()->timestamp
+                ],
+                [
+                  'tag' => 'chat-' . $chatRoom->id,
+                  'requireInteraction' => true
+                ]
+              ));
             } catch (\Exception $e) {
               Log::warning('新しいメッセージ通知の送信に失敗しました', [
                 'recipient_user_id' => $participantUser->id,
@@ -326,7 +335,7 @@ class MessagesController extends Controller
           }
         }
 
-        Log::info('通知送信完了');
+        Log::info('非同期通知キューへの追加完了');
       }
 
       Log::info('メッセージ送信処理完了', ['message_id' => $message->id]);
