@@ -204,7 +204,7 @@
     <div class="card">
       <div class="card-header">
         <h5 class="card-title mb-0">
-          <i class="fas fa-chart-bar me-2"></i>統計情報
+          <i class="fas fa-chart-bar me-2"></i>利用情報
         </h5>
       </div>
       <div class="card-body">
@@ -226,6 +226,54 @@
             <div class="text-muted">最終ログイン</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- プッシュ通知購読状態 -->
+    <div class="card mt-3">
+      <div class="card-header">
+        <h5 class="card-title mb-0">
+          <i class="fas fa-bell me-2"></i>プッシュ通知購読状態
+        </h5>
+      </div>
+      <div class="card-body">
+        @if($pushSubscriptions->count() > 0)
+        <div class="mb-2">
+          <span class="badge bg-success">
+            <i class="fas fa-check-circle me-1"></i>プッシュ通知有効
+          </span>
+          <small class="text-muted ms-2">{{ $pushSubscriptions->count() }}件のデバイス</small>
+        </div>
+        <div class="mt-3">
+          <h6 class="text-muted mb-2">購読中のデバイス:</h6>
+          @foreach($pushSubscriptions as $subscription)
+          <div class="mb-2 p-2 bg-light rounded">
+            <div class="d-flex justify-content-between align-items-start">
+              <div style="word-break: break-all;">
+                <small class="text-muted">エンドポイント:</small><br>
+                <code class="small">{{ Str::limit($subscription->endpoint, 60, '...') }}</code>
+              </div>
+            </div>
+            <div class="mt-1">
+              <small class="text-muted">
+                登録日時: {{ $subscription->created_at->format('Y/m/d H:i') }}
+              </small>
+              @if($subscription->updated_at != $subscription->created_at)
+              <br>
+              <small class="text-muted">
+                更新日時: {{ $subscription->updated_at->format('Y/m/d H:i') }}
+              </small>
+              @endif
+            </div>
+          </div>
+          @endforeach
+        </div>
+        @else
+        <div class="text-center py-3">
+          <i class="fas fa-bell-slash fa-2x text-muted mb-2"></i>
+          <div class="text-muted">プッシュ通知は購読されていません</div>
+        </div>
+        @endif
       </div>
     </div>
 

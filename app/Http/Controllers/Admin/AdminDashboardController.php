@@ -228,7 +228,10 @@ class AdminDashboardController extends Controller
       $friendship->friend_chat = $friendChat;
     });
 
-    return view('admin.users.show', compact('admin', 'user', 'stats', 'chatRooms', 'friendships'));
+    // プッシュ通知の購読情報を取得
+    $pushSubscriptions = $user->pushSubscriptions()->get();
+
+    return view('admin.users.show', compact('admin', 'user', 'stats', 'chatRooms', 'friendships', 'pushSubscriptions'));
   }
 
   /**
