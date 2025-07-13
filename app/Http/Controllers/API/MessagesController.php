@@ -252,6 +252,9 @@ class MessagesController extends Controller
         'sent_at' => now(),
       ]);
 
+      // チャットルームの更新日時を更新して、最近のチャットルーム一覧で正しい順序で表示されるようにする
+      $chatRoom->touch();
+
       Log::info('メッセージ作成完了', ['message_id' => $message->id]);
 
       $message->load(['sender' => function ($query) {

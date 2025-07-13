@@ -1437,6 +1437,9 @@ class ConversationsController extends Controller
           'sent_at' => now(),
         ]);
 
+        // チャットルームの更新日時を更新
+        $chatRoom->touch();
+
         $sentMessages[] = [
           'chat_room_id' => $chatRoom->id,
           'target_user_id' => $targetUserId,
