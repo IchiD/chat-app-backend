@@ -11,6 +11,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use App\Notifications\PushNotification;
+use App\Models\ChatRoomRead;
+use App\Models\MessageRead;
 
 class MessagesController extends Controller
 {
@@ -21,62 +23,34 @@ class MessagesController extends Controller
   {
     $user = Auth::user();
 
-    // 削除されたユーザーはアクセス不可
-    if ($user->isDeleted()) {
-      return response()->json(['message' => 'アカウントが削除されています。'], 403);
-    }
-
     // ユーザーがこのチャットルームの参加者であることを確認
     if (!$chatRoom->hasParticipant($user->id)) {
       return response()->json(['message' => 'アクセス権がありません。'], 403);
     }
 
-    // グループチャットの場合、グループメンバーかどうかを確認
-    if ($chatRoom->isGroupChat()) {
-      if ($chatRoom->group_id) {
-        $group = $chatRoom->group;
-        if ($group) {
-          // ユーザーがグループメンバーかチェック - 新アーキテクチャでは、グループチャットの場合はhasParticipantで十分
-          if (!$chatRoom->hasParticipant($user->id)) {
-            return response()->json([
-              'message' => 'グループメンバーではないため、このチャットにアクセスできません。',
-            ], 403);
-          }
-        } else {
-          return response()->json([
-            'message' => 'グループが見つかりません。',
-          ], 404);
-        }
-      } else {
-        return response()->json([
-          'message' => 'グループIDが見つかりません。',
-        ], 404);
-      }
+    // 削除されたユーザーはアクセス不可
+    if ($user->isDeleted()) {
+      return response()->json(['message' => 'アカウントが削除されています。'], 403);
     }
 
-    // メンバーチャットの場合、グループメンバーかどうかを確認
-    if ($chatRoom->isMemberChat()) {
-      // グループが存在し、両方のユーザーがそのグループのメンバーであることを確認
-      if ($chatRoom->group_id) {
-        $group = $chatRoom->group;
-        if ($group) {
-          // 両方のユーザーがグループメンバーかチェック
-          $otherUserId = $chatRoom->participant1_id === $user->id
-            ? $chatRoom->participant2_id
-            : $chatRoom->participant1_id;
+    // friend_chatまたはmember_chatの場合の追加チェック
+    if ($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat') {
+      // グループに所属していることを確認（member_chatの場合）
+      if ($chatRoom->type === 'member_chat' && $chatRoom->group) {
+        $isMember = $chatRoom->group->activeMembers()
+          ->where('user_id', $user->id)
+          ->exists();
 
-          if (!$group->hasMember($user->id) || !$group->hasMember($otherUserId)) {
-            return response()->json([
-              'message' => 'グループメンバーではないため、このチャットにアクセスできません。',
-            ], 403);
-          }
-        } else {
+        if (!$isMember) {
           return response()->json([
-            'message' => 'グループが見つかりません。',
-          ], 404);
+            'message' => 'このグループのメンバーではないため、チャットにアクセスできません。',
+            'membership_status' => 'not_member'
+          ], 403);
         }
-      } else {
-        // グループに関連しないメンバーチャットの場合は友達関係を確認
+      }
+
+      // 友達関係を確認（friend_chatの場合）
+      if ($chatRoom->type === 'friend_chat') {
         $otherUserId = $chatRoom->participant1_id === $user->id
           ? $chatRoom->participant2_id
           : $chatRoom->participant1_id;
@@ -100,6 +74,8 @@ class MessagesController extends Controller
         $query->select('id', 'name', 'friend_id'); // 送信者の基本情報を選択
       }, 'adminSender' => function ($query) {
         $query->select('id', 'name'); // 管理者送信者の基本情報を選択
+      }, 'messageReads' => function ($query) {
+        $query->select('message_id', 'user_id', 'read_at'); // 既読情報を選択
       }])
       ->orderBy('sent_at', 'desc') // 最新のメッセージから表示
       ->paginate(20); // ページネーション
@@ -126,9 +102,54 @@ class MessagesController extends Controller
       }
     }
 
+    // 各メッセージに既読状態を追加
+    foreach ($messages as $message) {
+      // 1対1チャットの場合（friend_chat, support_chat, member_chat）
+      if ($chatRoom->type === 'friend_chat' || $chatRoom->type === 'support_chat' || $chatRoom->type === 'member_chat') {
+        // デバッグログ
+        \Log::info('既読処理デバッグ', [
+          'chat_room_type' => $chatRoom->type,
+          'message_id' => $message->id,
+          'message_sender_id' => $message->sender_id,
+          'current_user_id' => $user->id,
+          'is_my_message' => $message->sender_id === $user->id
+        ]);
+
+        // 自分が送信したメッセージの場合、相手が既読したかチェック
+        if ($message->sender_id === $user->id) {
+          $message->is_read = $message->isReadByOtherParticipant($user->id);
+          \Log::info('既読状態', [
+            'message_id' => $message->id,
+            'is_read' => $message->is_read
+          ]);
+        } else {
+          // 相手が送信したメッセージの場合、自分が既読したかチェック（通常は不要だが念のため）
+          $message->is_read = $message->isReadByUser($user->id);
+        }
+      }
+      // グループチャットの場合
+      else if ($chatRoom->isGroupChat()) {
+        $message->read_count = $message->getReadCount();
+        // 既読したユーザーリストも含める場合（オプション）
+        // $message->read_by = $message->getReadUsersList();
+      }
+    }
+
     // メッセージを取得後、このチャットルームを既読にする
     if ($messages->isNotEmpty()) {
-      \App\Models\ChatRoomRead::updateLastRead($user->id, $chatRoom->id);
+      // チャットルーム単位の既読更新（既存処理）
+      ChatRoomRead::updateLastRead($user->id, $chatRoom->id);
+
+      // 個別メッセージの既読記録（新規処理）
+      $unreadMessageIds = $messages->filter(function ($message) use ($user) {
+        // 自分が送信したメッセージと管理者メッセージは除外
+        return $message->sender_id !== $user->id
+          && !$message->isReadByUser($user->id);
+      })->pluck('id')->toArray();
+
+      if (!empty($unreadMessageIds)) {
+        MessageRead::markMultipleAsRead($unreadMessageIds, $user->id);
+      }
     }
 
     return response()->json($messages);
@@ -355,6 +376,49 @@ class MessagesController extends Controller
         'message' => 'メッセージの送信に失敗しました。'
       ], 500);
     }
+  }
+
+  /**
+   * メッセージの既読状態を取得する（軽量版）
+   */
+  public function getReadStatus(ChatRoom $chatRoom, Request $request)
+  {
+    $user = Auth::user();
+
+    // アクセス権限チェック
+    if (!$chatRoom->hasParticipant($user->id)) {
+      return response()->json(['message' => 'アクセス権がありません。'], 403);
+    }
+
+    // 自分が送信したメッセージのIDを取得
+    $messageIds = $chatRoom->messages()
+      ->where('sender_id', $user->id)
+      ->whereNull('admin_deleted_at')
+      ->pluck('id');
+
+    $readStatuses = [];
+
+    foreach ($messageIds as $messageId) {
+      $message = Message::find($messageId);
+      if (!$message) continue;
+
+      $readStatus = [
+        'id' => $messageId,
+      ];
+
+      // チャットタイプによって既読情報を変更
+      if ($chatRoom->type === 'friend_chat' || $chatRoom->type === 'support_chat' || $chatRoom->type === 'member_chat') {
+        // 1対1チャットの場合
+        $readStatus['is_read'] = $message->isReadByOtherParticipant($user->id);
+      } else if ($chatRoom->isGroupChat()) {
+        // グループチャットの場合
+        $readStatus['read_count'] = $message->getReadCount();
+      }
+
+      $readStatuses[] = $readStatus;
+    }
+
+    return response()->json($readStatuses);
   }
 
   /**

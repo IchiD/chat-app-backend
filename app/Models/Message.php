@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Message extends Model
 {
@@ -55,6 +56,14 @@ class Message extends Model
   public function adminDeletedBy(): BelongsTo
   {
     return $this->belongsTo(Admin::class, 'admin_deleted_by');
+  }
+
+  /**
+   * このメッセージの既読記録
+   */
+  public function messageReads(): HasMany
+  {
+    return $this->hasMany(MessageRead::class);
   }
 
   /**
@@ -143,5 +152,84 @@ class Message extends Model
     }
 
     return 'ユーザー';
+  }
+
+  /**
+   * 相手が既読したかチェック（1対1チャット用）
+   */
+  public function isReadByOtherParticipant(int $currentUserId): bool
+  {
+    if (!$this->chatRoom) {
+      return false;
+    }
+
+    // 自分以外の参加者を取得
+    $otherParticipantId = $this->chatRoom->participant1_id === $currentUserId
+      ? $this->chatRoom->participant2_id
+      : $this->chatRoom->participant1_id;
+
+    \Log::info('既読チェックデバッグ', [
+      'message_id' => $this->id,
+      'current_user_id' => $currentUserId,
+      'participant1_id' => $this->chatRoom->participant1_id,
+      'participant2_id' => $this->chatRoom->participant2_id,
+      'other_participant_id' => $otherParticipantId,
+      'chat_room_type' => $this->chatRoom->type
+    ]);
+
+    if (!$otherParticipantId) {
+      return false;
+    }
+
+    $isRead = $this->messageReads()
+      ->where('user_id', $otherParticipantId)
+      ->exists();
+
+    \Log::info('既読チェック結果', [
+      'message_id' => $this->id,
+      'other_participant_id' => $otherParticipantId,
+      'is_read' => $isRead
+    ]);
+
+    return $isRead;
+  }
+
+  /**
+   * グループチャット用：既読したユーザー数を取得
+   */
+  public function getReadCount(): int
+  {
+    // 自分の既読は除外
+    return $this->messageReads()
+      ->where('user_id', '!=', $this->sender_id)
+      ->count();
+  }
+
+  /**
+   * 既読したユーザーのリストを取得
+   */
+  public function getReadUsersList(): array
+  {
+    return $this->messageReads()
+      ->with('user:id,name')
+      ->get()
+      ->map(function ($read) {
+        return [
+          'user_id' => $read->user_id,
+          'user_name' => $read->user->name ?? '不明',
+          'read_at' => $read->read_at,
+        ];
+      })
+      ->toArray();
+  }
+
+  /**
+   * 指定ユーザーがこのメッセージを既読したかチェック
+   */
+  public function isReadByUser(int $userId): bool
+  {
+    return $this->messageReads()
+      ->where('user_id', $userId)
+      ->exists();
   }
 }

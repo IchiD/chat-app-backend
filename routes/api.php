@@ -119,6 +119,7 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::prefix('room/{chatRoom:room_token}/messages')->controller(MessagesController::class)->group(function () {
       Route::get('/', 'index'); // メッセージ一覧
       Route::post('/', 'store')->middleware('throttle:10,1'); // メッセージ送信
+      Route::get('/read-status', 'getReadStatus'); // 既読状態取得
     });
   });
 
