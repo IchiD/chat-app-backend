@@ -72,6 +72,11 @@
               <small><i class="fas fa-exclamation-triangle me-1"></i>一度設定されたチャットスタイルは削除できません。新しいスタイルのみ追加可能です。</small>
             </div>
             <div class="border rounded p-3">
+              {{-- 既存のチャットスタイルを隠しフィールドで送信 --}}
+              @foreach($group->chat_styles ?? [] as $style)
+                <input type="hidden" name="chat_styles[]" value="{{ $style }}">
+              @endforeach
+              
               <div class="form-check">
                 <input class="form-check-input @error('chat_styles') is-invalid @enderror"
                   type="checkbox" value="group" id="chat_style_group" name="chat_styles[]"
