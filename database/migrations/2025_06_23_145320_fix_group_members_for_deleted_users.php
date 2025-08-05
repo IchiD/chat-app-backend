@@ -12,6 +12,19 @@ return new class extends Migration
    */
   public function up(): void
   {
+    // テスト環境または非MySQL環境では実行をスキップ
+    if (app()->environment('testing') || DB::getDriverName() !== 'mysql') {
+      return;
+    }
+    
+    // 必要なカラムの存在チェックを行う
+    if (!Schema::hasColumn('users', 'deleted_at') || 
+        !Schema::hasColumn('users', 'is_banned') || 
+        !Schema::hasColumn('users', 'deleted_by_self') ||
+        !Schema::hasColumn('users', 'deleted_by')) {
+      return;
+    }
+
     // 削除されたユーザーのGroupMemberレコードを更新
     DB::table('group_members')
       ->join('users', 'group_members.user_id', '=', 'users.id')

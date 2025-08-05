@@ -21,4 +21,14 @@ class AdminFactory extends Factory
             'remember_token' => Str::random(10),
         ];
     }
+
+    /**
+     * スーパー管理者の状態
+     */
+    public function superAdmin(): static
+    {
+        return $this->state(fn(array $attributes) => [
+            'role' => 'super_admin',
+        ]);
+    }
 }

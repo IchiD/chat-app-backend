@@ -12,7 +12,12 @@ return new class extends Migration
    */
   public function up(): void
   {
-    // MySQLのENUM型を更新するには、カラムを再定義する必要があります
+    // テスト環境または非MySQL環境では実行をスキップ
+    if (app()->environment('testing') || DB::getDriverName() !== 'mysql') {
+      return;
+    }
+    
+    // MySQL専用のENUM型更新
     DB::statement("ALTER TABLE group_members MODIFY removal_type ENUM('self_leave', 'kicked_by_owner', 'kicked_by_admin', 'user_deleted', 'user_self_deleted') COMMENT '削除理由（self_leave=自主退会, kicked_by_owner=オーナーによる削除, kicked_by_admin=管理者による削除, user_deleted=ユーザー削除による自動削除, user_self_deleted=ユーザー自己削除による自動削除）'");
   }
 
@@ -21,7 +26,12 @@ return new class extends Migration
    */
   public function down(): void
   {
-    // ロールバック時は元のenum定義に戻す
+    // テスト環境または非MySQL環境では実行をスキップ
+    if (app()->environment('testing') || DB::getDriverName() !== 'mysql') {
+      return;
+    }
+    
+    // MySQL専用のENUM型のロールバック
     DB::statement("ALTER TABLE group_members MODIFY removal_type ENUM('self_leave', 'kicked_by_owner', 'kicked_by_admin') COMMENT '削除理由（self_leave=自主退会, kicked_by_owner=オーナーによる削除, kicked_by_admin=管理者による削除）'");
   }
 };

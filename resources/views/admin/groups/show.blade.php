@@ -65,7 +65,7 @@
           <dt class="col-sm-4">オーナー</dt>
           <dd class="col-sm-8">
             @if($group->owner)
-            {{ $group->owner->name }}
+            {{ $group->owner->name }} ({{ $group->owner->friend_id }})
             @if($group->owner->deleted_at)
             <span class="badge bg-danger ms-1">削除済み</span>
             @endif
@@ -117,7 +117,11 @@
             <tr>
               <td>#{{ $member->user_id }}</td>
               <td>
-                {{ $member->user->name ?? '-' }}
+                @if($member->user)
+                  {{ $member->user->name }} ({{ $member->user->friend_id }})
+                @else
+                  -
+                @endif
                 @if($member->user && $member->user->deleted_at)
                 <span class="badge bg-danger ms-1">削除済み</span>
                 @endif
@@ -186,7 +190,11 @@
             <tr class="table-danger">
               <td>#{{ $member->user_id }}</td>
               <td>
-                {{ $member->user->name ?? '-' }}
+                @if($member->user)
+                  {{ $member->user->name }} ({{ $member->user->friend_id }})
+                @else
+                  -
+                @endif
                 @if($member->user && $member->user->deleted_at)
                 <span class="badge bg-danger ms-1">ユーザー削除済み</span>
                 @endif

@@ -49,14 +49,28 @@ class UserSeeder extends Seeder
     ]);
 
     // 5. 削除されたユーザー (2人)
-    $deletedUsers = User::factory(2)->create([
-      'is_verified' => true,
-      'email_verified_at' => now(),
-      'is_banned' => false,
-      'deleted_at' => now(),
-      'deleted_reason' => '管理者による削除',
-      'deleted_by' => 1, // 管理者ID（AdminSeederで作成されていることを想定）
-    ]);
+    // 管理者を取得（存在する場合のみ削除済みユーザーを作成）
+    $admin = \App\Models\Admin::first();
+    if ($admin) {
+      $deletedUsers = User::factory(2)->create([
+        'is_verified' => true,
+        'email_verified_at' => now(),
+        'is_banned' => false,
+        'deleted_at' => now(),
+        'deleted_reason' => '管理者による削除',
+        'deleted_by' => $admin->id,
+      ]);
+    } else {
+      // 管理者が存在しない場合は、deleted_byをnullで作成
+      $deletedUsers = User::factory(2)->create([
+        'is_verified' => true,
+        'email_verified_at' => now(),
+        'is_banned' => false,
+        'deleted_at' => now(),
+        'deleted_reason' => 'システムによる削除',
+        'deleted_by' => null,
+      ]);
+    }
 
     // 6. 特定のテストユーザー
     $testUsers = [

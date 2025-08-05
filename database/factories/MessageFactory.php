@@ -4,7 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Message;
 use App\Models\User;
-use App\Models\Conversation;
+use App\Models\ChatRoom;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class MessageFactory extends Factory
@@ -14,7 +14,7 @@ class MessageFactory extends Factory
     public function definition(): array
     {
         return [
-            'conversation_id' => Conversation::factory(),
+            'chat_room_id' => ChatRoom::factory(),
             'sender_id' => User::factory(),
             'admin_sender_id' => null,
             'content_type' => 'text',

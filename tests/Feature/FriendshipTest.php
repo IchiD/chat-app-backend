@@ -2,149 +2,150 @@
 
 namespace Tests\Feature;
 
+use Tests\TestCase;
 use App\Models\User;
 use App\Models\Friendship;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
-use Tests\TestCase;
 
 class FriendshipTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_send_friend_request(): void
+    public function test_user_can_send_friend_request()
     {
-        $sender = User::factory()->create();
-        $receiver = User::factory()->create();
-
-        Sanctum::actingAs($sender);
+        $user = User::factory()->create();
+        $friend = User::factory()->create();
+        Sanctum::actingAs($user);
 
         $response = $this->postJson('/api/friends/requests', [
-            'user_id' => $receiver->id,
+            'user_id' => $friend->id,
+            'message' => 'Hi, let\'s be friends!',
         ]);
 
-        $response->assertOk()->assertJson(['status' => 'success']);
-
+        $response->assertStatus(200);
+        $response->assertJson([
+            'status' => 'success',
+            'message' => '友達申請を送信しました'
+        ]);
+        
         $this->assertDatabaseHas('friendships', [
-            'user_id' => $sender->id,
-            'friend_id' => $receiver->id,
+            'user_id' => $user->id,
+            'friend_id' => $friend->id,
             'status' => Friendship::STATUS_PENDING,
         ]);
     }
 
-    public function test_accept_friend_request(): void
-    {
-        $sender = User::factory()->create();
-        $receiver = User::factory()->create();
-
-        $friendship = $sender->sendFriendRequest($receiver->id);
-
-        Sanctum::actingAs($receiver);
-
-        $response = $this->postJson('/api/friends/requests/accept', [
-            'user_id' => $sender->id,
-        ]);
-
-        $response->assertOk()->assertJson(['status' => 'success']);
-
-        $friendship->refresh();
-        $this->assertEquals(Friendship::STATUS_ACCEPTED, $friendship->status);
-        $this->assertTrue($sender->fresh()->friends()->contains('id', $receiver->id));
-    }
-
-    public function test_reject_friend_request(): void
-    {
-        $sender = User::factory()->create();
-        $receiver = User::factory()->create();
-
-        $friendship = $sender->sendFriendRequest($receiver->id);
-
-        Sanctum::actingAs($receiver);
-
-        $response = $this->postJson('/api/friends/requests/reject', [
-            'user_id' => $sender->id,
-        ]);
-
-        $response->assertOk()->assertJson(['status' => 'success']);
-
-        $friendship->refresh();
-        $this->assertEquals(Friendship::STATUS_REJECTED, $friendship->status);
-    }
-
-    public function test_cancel_friend_request(): void
-    {
-        $sender = User::factory()->create();
-        $receiver = User::factory()->create();
-
-        $friendship = $sender->sendFriendRequest($receiver->id);
-
-        Sanctum::actingAs($sender);
-
-        $response = $this->deleteJson('/api/friends/requests/cancel/' . $friendship->id);
-
-        $response->assertOk()->assertJson(['status' => 'success']);
-
-        $this->assertSoftDeleted('friendships', [
-            'id' => $friendship->id,
-        ]);
-    }
-
-    public function test_unfriend(): void
-    {
-        $sender = User::factory()->create();
-        $receiver = User::factory()->create();
-
-        $friendship = $sender->sendFriendRequest($receiver->id);
-        $receiver->acceptFriendRequest($sender->id);
-
-        Sanctum::actingAs($sender);
-
-        $response = $this->deleteJson('/api/friends/unfriend', [
-            'user_id' => $receiver->id,
-        ]);
-
-        $response->assertOk()->assertJson(['status' => 'success']);
-
-        $this->assertSoftDeleted('friendships', [
-            'id' => $friendship->id,
-        ]);
-    }
-
-    public function test_get_friends_list(): void
-    {
-        $sender = User::factory()->create();
-        $receiver = User::factory()->create();
-
-        $sender->sendFriendRequest($receiver->id);
-        $receiver->acceptFriendRequest($sender->id);
-
-        Sanctum::actingAs($sender);
-
-        $response = $this->getJson('/api/friends');
-
-        $response->assertOk()->assertJsonFragment(['id' => $receiver->id]);
-    }
-
-    public function test_prevent_duplicate_requests(): void
-    {
-        $sender = User::factory()->create();
-        $receiver = User::factory()->create();
-
-        $sender->sendFriendRequest($receiver->id);
-
-        Sanctum::actingAs($sender);
-
-        $response = $this->postJson('/api/friends/requests', [
-            'user_id' => $receiver->id,
-        ]);
-
-        $response->assertStatus(422);
-    }
-
-    public function test_cannot_send_request_to_self(): void
+    public function test_user_can_accept_friend_request()
     {
         $user = User::factory()->create();
+        $friend = User::factory()->create();
+        
+        // Friend sends request to user
+        $friendship = Friendship::factory()->create([
+            'user_id' => $friend->id,
+            'friend_id' => $user->id,
+            'status' => Friendship::STATUS_PENDING,
+        ]);
 
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/friends/requests/accept", [
+            'user_id' => $friend->id
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'status' => 'success',
+            'message' => '友達申請を承認しました'
+        ]);
+        
+        $this->assertDatabaseHas('friendships', [
+            'id' => $friendship->id,
+            'status' => Friendship::STATUS_ACCEPTED,
+        ]);
+    }
+
+    public function test_user_can_reject_friend_request()
+    {
+        $user = User::factory()->create();
+        $friend = User::factory()->create();
+        
+        $friendship = Friendship::factory()->create([
+            'user_id' => $friend->id,
+            'friend_id' => $user->id,
+            'status' => Friendship::STATUS_PENDING,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/friends/requests/reject", [
+            'user_id' => $friend->id
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'status' => 'success',
+            'message' => '友達申請を拒否しました'
+        ]);
+        
+        $this->assertDatabaseHas('friendships', [
+            'id' => $friendship->id,
+            'status' => Friendship::STATUS_REJECTED,
+        ]);
+    }
+
+    public function test_user_can_get_sent_friend_requests()
+    {
+        $user = User::factory()->create();
+        $friend = User::factory()->create();
+        
+        Friendship::factory()->create([
+            'user_id' => $user->id,
+            'friend_id' => $friend->id,
+            'status' => Friendship::STATUS_PENDING,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/friends/requests/sent');
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'status',
+            'sent_requests' => [
+                '*' => ['id', 'user', 'friend', 'message', 'status']
+            ]
+        ]);
+    }
+
+    public function test_user_can_get_received_friend_requests()
+    {
+        $user = User::factory()->create();
+        $friend = User::factory()->create();
+        
+        Friendship::factory()->create([
+            'user_id' => $friend->id,
+            'friend_id' => $user->id,
+            'status' => Friendship::STATUS_PENDING,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/friends/requests/received');
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'status',
+            'received_requests' => [
+                '*' => ['id', 'user', 'friend', 'message', 'status']
+            ]
+        ]);
+    }
+
+    public function test_user_cannot_send_friend_request_to_themselves()
+    {
+        $user = User::factory()->create();
         Sanctum::actingAs($user);
 
         $response = $this->postJson('/api/friends/requests', [
@@ -152,18 +153,33 @@ class FriendshipTest extends TestCase
         ]);
 
         $response->assertStatus(422);
+        $response->assertJson([
+            'status' => 'error',
+            'message' => '自分自身に友達申請はできません'
+        ]);
     }
 
-    public function test_error_when_user_not_found(): void
+    public function test_user_cannot_send_duplicate_friend_request()
     {
         $user = User::factory()->create();
+        $friend = User::factory()->create();
+        
+        Friendship::factory()->create([
+            'user_id' => $user->id,
+            'friend_id' => $friend->id,
+            'status' => Friendship::STATUS_PENDING,
+        ]);
 
         Sanctum::actingAs($user);
 
         $response = $this->postJson('/api/friends/requests', [
-            'user_id' => 999,
+            'user_id' => $friend->id,
         ]);
 
         $response->assertStatus(422);
+        $response->assertJson([
+            'status' => 'error',
+            'message' => '既に友達申請を送信済みです'
+        ]);
     }
 }

@@ -19,6 +19,7 @@ class GroupFactory extends Factory
             'description' => $this->faker->sentence(),
             'max_members' => 50,
             'qr_code_token' => Str::random(32),
+            'chat_styles' => ['group', 'group_member'],
         ];
     }
 }

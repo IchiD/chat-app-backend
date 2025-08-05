@@ -224,10 +224,10 @@ class Group extends Model
 
     if ($result) {
       // グループ削除に伴って自動削除されたチャットルームを復活
+      // deleted_byの有無に関わらず、削除理由が「グループ削除に伴う自動削除」のものを復元
       ChatRoom::onlyTrashed()
         ->where('group_id', $this->id)
         ->where('deleted_reason', 'LIKE', '%グループ削除に伴う自動削除%')
-        ->whereNull('deleted_by') // 自動削除（管理者による直接削除ではない）
         ->each(function ($chatRoom) {
           $chatRoom->restoreByAdmin();
         });
