@@ -33,38 +33,63 @@ class ChatRoomService extends BaseService
      */
     private function buildChatRoomPayload(ChatRoom $chatRoom, User $currentUser, bool $existing): array
     {
-        $chatRoom->load([
-            'participant1' => fn($q) => $q->select('id', 'name', 'friend_id', 'deleted_at'),
-            'participant2' => fn($q) => $q->select('id', 'name', 'friend_id', 'deleted_at'),
-            'latestMessage' => function ($q) {
-                $q->with([
-                    'sender' => fn($s) => $s->select('id', 'name'),
-                    'adminSender' => fn($a) => $a->select('id', 'name'),
-                ]);
-            },
-        ]);
+        try {
+            $chatRoom->load([
+                'participant1' => fn($q) => $q->select('id', 'name', 'friend_id', 'deleted_at'),
+                'participant2' => fn($q) => $q->select('id', 'name', 'friend_id', 'deleted_at'),
+                'latestMessage' => function ($q) {
+                    $q->with([
+                        'sender' => fn($s) => $s->select('id', 'name'),
+                        'adminSender' => fn($a) => $a->select('id', 'name'),
+                    ]);
+                },
+            ]);
 
-        $other = $this->getOtherParticipant($chatRoom, $currentUser);
+            $other = $this->getOtherParticipant($chatRoom, $currentUser);
 
-        return [
-            'id' => $chatRoom->id,
-            'type' => $chatRoom->type,
-            'room_token' => $chatRoom->room_token,
-            'group_id' => $chatRoom->group_id,
-            'participant1_id' => $chatRoom->participant1_id,
-            'participant2_id' => $chatRoom->participant2_id,
-            'created_at' => $chatRoom->created_at,
-            'updated_at' => $chatRoom->updated_at,
-            'other_participant' => $other ? [
-                'id' => $other->id,
-                'name' => $other->name,
-                'friend_id' => $other->friend_id,
-            ] : null,
-            'latest_message' => $chatRoom->latestMessage,
-            'unread_messages_count' => $existing
-                ? ChatRoomRead::getUnreadCount($currentUser->id, $chatRoom->id)
-                : 0,
-        ];
+            return [
+                'id' => $chatRoom->id,
+                'type' => $chatRoom->type,
+                'room_token' => $chatRoom->room_token,
+                'group_id' => $chatRoom->group_id,
+                'participant1_id' => $chatRoom->participant1_id,
+                'participant2_id' => $chatRoom->participant2_id,
+                'created_at' => $chatRoom->created_at,
+                'updated_at' => $chatRoom->updated_at,
+                'other_participant' => $other ? [
+                    'id' => $other->id,
+                    'name' => $other->name,
+                    'friend_id' => $other->friend_id,
+                ] : null,
+                'latest_message' => $chatRoom->latestMessage,
+                'unread_messages_count' => $existing
+                    ? ChatRoomRead::getUnreadCount($currentUser->id, $chatRoom->id)
+                    : 0,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('ChatRoomService::buildChatRoomPayload error', [
+                'chat_room_id' => $chatRoom->id,
+                'current_user_id' => $currentUser->id,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            // 最小限のデータを返す
+            return [
+                'id' => $chatRoom->id,
+                'type' => $chatRoom->type,
+                'room_token' => $chatRoom->room_token,
+                'group_id' => $chatRoom->group_id,
+                'participant1_id' => $chatRoom->participant1_id,
+                'participant2_id' => $chatRoom->participant2_id,
+                'created_at' => $chatRoom->created_at,
+                'updated_at' => $chatRoom->updated_at,
+                'other_participant' => null,
+                'latest_message' => null,
+                'unread_messages_count' => 0,
+            ];
+        }
     }
 
     public function getUserChatRoomsList(User $user, int $page = 1, int $perPage = 15): array
@@ -229,41 +254,53 @@ class ChatRoomService extends BaseService
 
     public function createFriendChatRoom(User $currentUser, int $recipientId): array
     {
-        $recipient = User::find($recipientId);
-        if (!$recipient) {
-            return $this->errorResponse('not_found', '指定された受信ユーザーが見つかりません。') + ['http_status' => 404];
-        }
-        if ($recipient->isDeleted()) {
-            return $this->errorResponse('deleted_user', '指定されたユーザーは削除されています。') + ['http_status' => 403];
-        }
+        try {
+            $recipient = User::find($recipientId);
+            if (!$recipient) {
+                return $this->errorResponse('not_found', '指定された受信ユーザーが見つかりません。') + ['http_status' => 404];
+            }
+            if ($recipient->isDeleted()) {
+                return $this->errorResponse('deleted_user', '指定されたユーザーは削除されています。') + ['http_status' => 403];
+            }
 
-        $friendship = Friendship::getFriendship($currentUser->id, $recipientId);
-        if (!$friendship || $friendship->status !== Friendship::STATUS_ACCEPTED) {
-            return $this->errorResponse('not_friend', '友達関係にないユーザーとはチャットを開始できません。') + ['http_status' => 403];
+            $friendship = Friendship::getFriendship($currentUser->id, $recipientId);
+            if (!$friendship || $friendship->status !== Friendship::STATUS_ACCEPTED) {
+                return $this->errorResponse('not_friend', '友達関係にないユーザーとはチャットを開始できません。') + ['http_status' => 403];
+            }
+
+            $existing = $this->repository->findFriendChatRoom($currentUser, $recipient);
+            if ($existing) {
+                return [
+                    'status' => self::STATUS_SUCCESS,
+                    'http_status' => 200,
+                    'data' => $this->buildChatRoomPayload($existing, $currentUser, true),
+                ];
+            }
+
+            $chatRoom = null;
+            DB::transaction(function () use ($currentUser, $recipient, &$chatRoom) {
+                $chatRoom = $this->repository->createFriendChatRoom($currentUser, $recipient);
+            });
+
+            if ($chatRoom) {
+                return [
+                    'status' => self::STATUS_SUCCESS,
+                    'http_status' => 201,
+                    'data' => $this->buildChatRoomPayload($chatRoom, $currentUser, false),
+                ];
+            }
+
+            return $this->errorResponse('create_failed', 'チャットルームの作成に失敗しました。') + ['http_status' => 500];
+        } catch (\Exception $e) {
+            \Log::error('ChatRoomService::createFriendChatRoom error', [
+                'current_user_id' => $currentUser->id,
+                'recipient_id' => $recipientId,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return $this->errorResponse('internal_error', 'チャットルームの作成中にエラーが発生しました。') + ['http_status' => 500];
         }
-
-        $existing = $this->repository->findFriendChatRoom($currentUser, $recipient);
-        if ($existing) {
-            return [
-                'status' => self::STATUS_SUCCESS,
-                'http_status' => 200,
-                'data' => $this->buildChatRoomPayload($existing, $currentUser, true),
-            ];
-        }
-
-        $chatRoom = null;
-        DB::transaction(function () use ($currentUser, $recipient, &$chatRoom) {
-            $chatRoom = $this->repository->createFriendChatRoom($currentUser, $recipient);
-        });
-
-        if ($chatRoom) {
-            return [
-                'status' => self::STATUS_SUCCESS,
-                'http_status' => 201,
-                'data' => $this->buildChatRoomPayload($chatRoom, $currentUser, false),
-            ];
-        }
-
-        return $this->errorResponse('create_failed', 'チャットルームの作成に失敗しました。') + ['http_status' => 500];
     }
 }
