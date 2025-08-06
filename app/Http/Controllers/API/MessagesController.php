@@ -112,6 +112,7 @@ class MessagesController extends Controller
     }
 
       Log::info('メッセージクエリ開始');
+      
       $messages = $chatRoom->messages()
         ->whereNull('admin_deleted_at') // 管理者によって削除されていないメッセージのみ
         ->with(['sender' => function ($query) {
@@ -123,6 +124,7 @@ class MessagesController extends Controller
         }])
         ->orderBy('sent_at', 'desc') // 最新のメッセージから表示
         ->paginate(20); // ページネーション
+      
       Log::info('メッセージクエリ完了', ['messages_count' => $messages->count()]);
 
     // グループチャットの場合、各メッセージ送信者の退室状態を付加
@@ -364,12 +366,16 @@ class MessagesController extends Controller
 
       Log::info('バリデーション完了');
 
-      $message = $chatRoom->messages()->create([
+      // メッセージ作成
+      $messageData = [
+        'chat_room_id' => $chatRoom->id,
         'sender_id' => $user->id,
         'text_content' => $request->input('text_content'),
         'content_type' => 'text', // MVPではtext固定
         'sent_at' => now(),
-      ]);
+      ];
+
+      $message = $chatRoom->messages()->create($messageData);
 
       // チャットルームの更新日時を更新して、最近のチャットルーム一覧で正しい順序で表示されるようにする
       $chatRoom->touch();

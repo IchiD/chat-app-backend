@@ -118,7 +118,7 @@ class Message extends Model
   }
 
   /**
-   * このメッセージが送信されたチャットルーム（新構造）
+   * このメッセージが送信されたチャットルーム
    */
   public function chatRoom(): BelongsTo
   {
@@ -159,23 +159,14 @@ class Message extends Model
    */
   public function isReadByOtherParticipant(int $currentUserId): bool
   {
-    if (!$this->chatRoom) {
+    $room = $this->chatRoom;
+    if (!$room) {
       return false;
     }
 
-    // 自分以外の参加者を取得
-    $otherParticipantId = $this->chatRoom->participant1_id === $currentUserId
-      ? $this->chatRoom->participant2_id
-      : $this->chatRoom->participant1_id;
-
-    \Log::info('既読チェックデバッグ', [
-      'message_id' => $this->id,
-      'current_user_id' => $currentUserId,
-      'participant1_id' => $this->chatRoom->participant1_id,
-      'participant2_id' => $this->chatRoom->participant2_id,
-      'other_participant_id' => $otherParticipantId,
-      'chat_room_type' => $this->chatRoom->type
-    ]);
+    $otherParticipantId = $room->participant1_id === $currentUserId
+      ? $room->participant2_id
+      : $room->participant1_id;
 
     if (!$otherParticipantId) {
       return false;
@@ -184,12 +175,6 @@ class Message extends Model
     $isRead = $this->messageReads()
       ->where('user_id', $otherParticipantId)
       ->exists();
-
-    \Log::info('既読チェック結果', [
-      'message_id' => $this->id,
-      'other_participant_id' => $otherParticipantId,
-      'is_read' => $isRead
-    ]);
 
     return $isRead;
   }

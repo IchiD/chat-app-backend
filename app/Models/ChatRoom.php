@@ -122,15 +122,16 @@ class ChatRoom extends Model
    */
   public function messages(): HasMany
   {
-    return $this->hasMany(Message::class)->orderBy('sent_at', 'desc');
+    return $this->hasMany(Message::class, 'chat_room_id')->orderBy('sent_at', 'desc');
   }
+
 
   /**
    * 最新メッセージ
    */
   public function latestMessage()
   {
-    return $this->hasOne(Message::class)
+    return $this->hasOne(Message::class, 'chat_room_id')
       ->whereNull('deleted_at')
       ->whereNull('admin_deleted_at')
       ->latest('sent_at');
