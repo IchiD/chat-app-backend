@@ -22,17 +22,32 @@ class MessagesController extends Controller
   public function index(ChatRoom $chatRoom, Request $request)
   {
     try {
+      Log::info('メッセージ一覧取得開始', [
+        'chat_room_id' => $chatRoom->id,
+        'room_token' => $chatRoom->room_token,
+        'type' => $chatRoom->type,
+        'group_id' => $chatRoom->group_id
+      ]);
+
       $user = Auth::user();
+      Log::info('認証ユーザー取得完了', ['user_id' => $user->id]);
 
-    // ユーザーがこのチャットルームの参加者であることを確認
-    if (!$chatRoom->hasParticipant($user->id)) {
-      return response()->json(['message' => 'アクセス権がありません。'], 403);
-    }
+      // ユーザーがこのチャットルームの参加者であることを確認
+      if (!$chatRoom->hasParticipant($user->id)) {
+        Log::warning('アクセス権がありません', [
+          'user_id' => $user->id,
+          'chat_room_id' => $chatRoom->id
+        ]);
+        return response()->json(['message' => 'アクセス権がありません。'], 403);
+      }
+      Log::info('参加者チェック完了');
 
-    // 削除されたユーザーはアクセス不可
-    if ($user->isDeleted()) {
-      return response()->json(['message' => 'アカウントが削除されています。'], 403);
-    }
+      // 削除されたユーザーはアクセス不可
+      if ($user->isDeleted()) {
+        Log::warning('削除されたユーザーのアクセス試行', ['user_id' => $user->id]);
+        return response()->json(['message' => 'アカウントが削除されています。'], 403);
+      }
+      Log::info('ユーザー状態チェック完了');
 
     // friend_chatまたはmember_chatの場合の追加チェック
     if ($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat') {
@@ -96,17 +111,19 @@ class MessagesController extends Controller
       }
     }
 
-    $messages = $chatRoom->messages()
-      ->whereNull('admin_deleted_at') // 管理者によって削除されていないメッセージのみ
-      ->with(['sender' => function ($query) {
-        $query->select('id', 'name', 'friend_id'); // 送信者の基本情報を選択
-      }, 'adminSender' => function ($query) {
-        $query->select('id', 'name'); // 管理者送信者の基本情報を選択
-      }, 'messageReads' => function ($query) {
-        $query->select('message_id', 'user_id', 'read_at'); // 既読情報を選択
-      }])
-      ->orderBy('sent_at', 'desc') // 最新のメッセージから表示
-      ->paginate(20); // ページネーション
+      Log::info('メッセージクエリ開始');
+      $messages = $chatRoom->messages()
+        ->whereNull('admin_deleted_at') // 管理者によって削除されていないメッセージのみ
+        ->with(['sender' => function ($query) {
+          $query->select('id', 'name', 'friend_id'); // 送信者の基本情報を選択
+        }, 'adminSender' => function ($query) {
+          $query->select('id', 'name'); // 管理者送信者の基本情報を選択
+        }, 'messageReads' => function ($query) {
+          $query->select('message_id', 'user_id', 'read_at'); // 既読情報を選択
+        }])
+        ->orderBy('sent_at', 'desc') // 最新のメッセージから表示
+        ->paginate(20); // ページネーション
+      Log::info('メッセージクエリ完了', ['messages_count' => $messages->count()]);
 
     // グループチャットの場合、各メッセージ送信者の退室状態を付加
     if ($chatRoom->isGroupChat() && $chatRoom->group) {
@@ -138,56 +155,74 @@ class MessagesController extends Controller
       }
     }
 
-    // 各メッセージに既読状態を追加
-    foreach ($messages as $message) {
-      // 1対1チャットの場合（friend_chat, support_chat, member_chat）
-      if ($chatRoom->type === 'friend_chat' || $chatRoom->type === 'support_chat' || $chatRoom->type === 'member_chat') {
-        // デバッグログ
-        \Log::info('既読処理デバッグ', [
-          'chat_room_type' => $chatRoom->type,
-          'message_id' => $message->id,
-          'message_sender_id' => $message->sender_id,
-          'current_user_id' => $user->id,
-          'is_my_message' => $message->sender_id === $user->id
-        ]);
-
-        // 自分が送信したメッセージの場合、相手が既読したかチェック
-        if ($message->sender_id === $user->id) {
-          $message->is_read = $message->isReadByOtherParticipant($user->id);
-          \Log::info('既読状態', [
+      Log::info('既読状態処理開始');
+      // 各メッセージに既読状態を追加
+      foreach ($messages as $message) {
+        try {
+          // 1対1チャットの場合（friend_chat, support_chat, member_chat）
+          if ($chatRoom->type === 'friend_chat' || $chatRoom->type === 'support_chat' || $chatRoom->type === 'member_chat') {
+            // 自分が送信したメッセージの場合、相手が既読したかチェック
+            if ($message->sender_id === $user->id) {
+              $message->is_read = $message->isReadByOtherParticipant($user->id);
+            } else {
+              // 相手が送信したメッセージの場合、自分が既読したかチェック（通常は不要だが念のため）
+              $message->is_read = $message->isReadByUser($user->id);
+            }
+          }
+          // グループチャットの場合
+          else if ($chatRoom->isGroupChat()) {
+            $message->read_count = $message->getReadCount();
+            // 既読したユーザーリストも含める場合（オプション）
+            // $message->read_by = $message->getReadUsersList();
+          }
+        } catch (\Exception $e) {
+          Log::error('既読状態処理でエラー', [
             'message_id' => $message->id,
-            'is_read' => $message->is_read
+            'error' => $e->getMessage()
           ]);
-        } else {
-          // 相手が送信したメッセージの場合、自分が既読したかチェック（通常は不要だが念のため）
-          $message->is_read = $message->isReadByUser($user->id);
+          // エラーが発生してもデフォルト値を設定して継続
+          $message->is_read = false;
+          if ($chatRoom->isGroupChat()) {
+            $message->read_count = 0;
+          }
         }
       }
-      // グループチャットの場合
-      else if ($chatRoom->isGroupChat()) {
-        $message->read_count = $message->getReadCount();
-        // 既読したユーザーリストも含める場合（オプション）
-        // $message->read_by = $message->getReadUsersList();
+      Log::info('既読状態処理完了');
+
+      // メッセージを取得後、このチャットルームを既読にする
+      if ($messages->isNotEmpty()) {
+        try {
+          Log::info('既読更新処理開始');
+          // チャットルーム単位の既読更新（既存処理）
+          ChatRoomRead::updateLastRead($user->id, $chatRoom->id);
+
+          // 個別メッセージの既読記録（新規処理）
+          $unreadMessageIds = $messages->filter(function ($message) use ($user) {
+            // 自分が送信したメッセージと管理者メッセージは除外
+            return $message->sender_id !== $user->id
+              && !$message->isReadByUser($user->id);
+          })->pluck('id')->toArray();
+
+          if (!empty($unreadMessageIds)) {
+            MessageRead::markMultipleAsRead($unreadMessageIds, $user->id);
+          }
+          Log::info('既読更新処理完了');
+        } catch (\Exception $e) {
+          Log::error('既読更新処理でエラー', [
+            'chat_room_id' => $chatRoom->id,
+            'user_id' => $user->id,
+            'error' => $e->getMessage()
+          ]);
+          // 既読更新のエラーは処理を停止させない
+        }
       }
-    }
 
-    // メッセージを取得後、このチャットルームを既読にする
-    if ($messages->isNotEmpty()) {
-      // チャットルーム単位の既読更新（既存処理）
-      ChatRoomRead::updateLastRead($user->id, $chatRoom->id);
-
-      // 個別メッセージの既読記録（新規処理）
-      $unreadMessageIds = $messages->filter(function ($message) use ($user) {
-        // 自分が送信したメッセージと管理者メッセージは除外
-        return $message->sender_id !== $user->id
-          && !$message->isReadByUser($user->id);
-      })->pluck('id')->toArray();
-
-      if (!empty($unreadMessageIds)) {
-        MessageRead::markMultipleAsRead($unreadMessageIds, $user->id);
-      }
-    }
-
+      Log::info('メッセージ一覧取得成功', [
+        'chat_room_id' => $chatRoom->id,
+        'user_id' => $user->id,
+        'messages_count' => $messages->count(),
+        'total' => $messages->total()
+      ]);
       return response()->json($messages);
     } catch (\Exception $e) {
       Log::error('MessagesController::index エラー', [

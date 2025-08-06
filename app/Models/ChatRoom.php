@@ -89,21 +89,32 @@ class ChatRoom extends Model
    */
   public function getParticipants()
   {
-    if ($this->isGroupChat() && $this->group) {
-      // グループチャットの場合は、group_membersから取得
-      return $this->group->activeMembers()->pluck('user_id');
-    }
+    try {
+      if ($this->isGroupChat() && $this->group) {
+        // グループチャットの場合は、group_membersから取得
+        return $this->group->activeMembers()->pluck('user_id');
+      }
 
-    // friend_chatやmember_chatの場合
-    $participants = collect();
-    if ($this->participant1_id) {
-      $participants->push($this->participant1_id);
-    }
-    if ($this->participant2_id) {
-      $participants->push($this->participant2_id);
-    }
+      // friend_chatやmember_chatの場合
+      $participants = collect();
+      if ($this->participant1_id) {
+        $participants->push($this->participant1_id);
+      }
+      if ($this->participant2_id) {
+        $participants->push($this->participant2_id);
+      }
 
-    return $participants->filter();
+      return $participants->filter();
+    } catch (\Exception $e) {
+      \Log::error('ChatRoom::getParticipants エラー', [
+        'chat_room_id' => $this->id,
+        'type' => $this->type,
+        'group_id' => $this->group_id,
+        'error' => $e->getMessage()
+      ]);
+      // エラーが発生した場合は空のコレクションを返す
+      return collect();
+    }
   }
 
   /**
@@ -146,15 +157,31 @@ class ChatRoom extends Model
    */
   public function hasParticipant(int $userId): bool
   {
-    if ($this->isGroupChat()) {
-      // グループチャットの場合は、group_membersテーブルをチェック
-      if (!$this->group) {
-        return false;
+    try {
+      if ($this->isGroupChat()) {
+        // グループチャットの場合は、group_membersテーブルをチェック
+        if (!$this->group) {
+          \Log::error('ChatRoom::hasParticipant - グループが見つかりません', [
+            'chat_room_id' => $this->id,
+            'group_id' => $this->group_id,
+            'user_id' => $userId
+          ]);
+          return false;
+        }
+        return $this->group->hasMember($userId);
       }
-      return $this->group->hasMember($userId);
-    }
 
-    return $this->participant1_id === $userId || $this->participant2_id === $userId;
+      return $this->participant1_id === $userId || $this->participant2_id === $userId;
+    } catch (\Exception $e) {
+      \Log::error('ChatRoom::hasParticipant エラー', [
+        'chat_room_id' => $this->id,
+        'user_id' => $userId,
+        'type' => $this->type,
+        'group_id' => $this->group_id,
+        'error' => $e->getMessage()
+      ]);
+      return false;
+    }
   }
 
   /**
