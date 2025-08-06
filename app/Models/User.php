@@ -58,6 +58,7 @@ class User extends Authenticatable
     'social_type',
     'plan',
     'subscription_status',
+    'notification_preferences',
   ];
 
   /**
@@ -87,6 +88,7 @@ class User extends Authenticatable
       'allow_re_registration' => 'boolean',
       'deleted_by_self' => 'boolean',
       'password' => 'hashed',
+      'notification_preferences' => 'array',
     ];
   }
 

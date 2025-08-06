@@ -128,6 +128,8 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
     Route::post('/subscribe', 'subscribe'); // プッシュ通知の購読登録
     Route::post('/unsubscribe', 'unsubscribe'); // プッシュ通知の購読解除
     Route::post('/test', 'sendTestNotification'); // テスト通知の送信（開発用）
+    Route::get('/preferences', 'getPreferences'); // 通知設定取得
+    Route::put('/preferences', 'updatePreferences'); // 通知設定更新
   });
 
 

@@ -446,29 +446,48 @@ class MessagesController extends Controller
             try {
               $chatUrl = $frontendUrl . '/chat?room=' . $chatRoom->room_token;
               
-              // プッシュ通知を送信
-              $participantUser->notify(new \App\Notifications\PushNotification(
-                $user->name . 'からのメッセージ',
-                $messagePreview,
-                [
-                  'url' => $frontendUrl . '/chat',
-                  'type' => 'new_message',
-                  'room_id' => $chatRoom->id,
-                  'room_token' => $chatRoom->room_token,
-                  'timestamp' => now()->timestamp
-                ],
-                [
-                  'tag' => 'chat-' . $chatRoom->id,
-                  'requireInteraction' => true
-                ]
-              ));
+              // ユーザーの通知設定を取得
+              $notificationPrefs = $participantUser->notification_preferences ?? [
+                'email' => ['messages' => true, 'group_messages' => true],
+                'push' => ['messages' => true, 'group_messages' => true],
+              ];
+              
+              // チャットタイプに応じて通知設定を確認
+              $isGroupChat = in_array($chatRoom->type, ['group_chat', 'member_chat']);
+              $shouldSendEmail = $isGroupChat 
+                ? ($notificationPrefs['email']['group_messages'] ?? true)
+                : ($notificationPrefs['email']['messages'] ?? true);
+              $shouldSendPush = $isGroupChat
+                ? ($notificationPrefs['push']['group_messages'] ?? true)
+                : ($notificationPrefs['push']['messages'] ?? true);
+              
+              // プッシュ通知を送信（設定が有効な場合）
+              if ($shouldSendPush) {
+                $participantUser->notify(new \App\Notifications\PushNotification(
+                  $user->name . 'からのメッセージ',
+                  $messagePreview,
+                  [
+                    'url' => $frontendUrl . '/chat',
+                    'type' => 'new_message',
+                    'room_id' => $chatRoom->id,
+                    'room_token' => $chatRoom->room_token,
+                    'timestamp' => now()->timestamp
+                  ],
+                  [
+                    'tag' => 'chat-' . $chatRoom->id,
+                    'requireInteraction' => true
+                  ]
+                ));
+              }
 
-              // メール通知も送信
-              $participantUser->notify(new NewMessageNotification(
-                $user->name,
-                $messagePreview,
-                $chatUrl
-              ));
+              // メール通知も送信（設定が有効な場合）
+              if ($shouldSendEmail) {
+                $participantUser->notify(new NewMessageNotification(
+                  $user->name,
+                  $messagePreview,
+                  $chatUrl
+                ));
+              }
               
             } catch (\Exception $e) {
               Log::warning('新しいメッセージ通知の送信に失敗しました', [

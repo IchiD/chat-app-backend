@@ -168,4 +168,71 @@ class NotificationController extends Controller
 
     $recipient->notify($notification);
   }
+
+  /**
+   * 通知設定を取得
+   *
+   * @return \Illuminate\Http\JsonResponse
+   */
+  public function getPreferences(): JsonResponse
+  {
+    $user = Auth::user();
+    
+    // デフォルト設定
+    $defaultPreferences = [
+      'email' => [
+        'messages' => true,
+        'friend_requests' => true,
+        'group_invites' => true,
+        'group_messages' => true,
+      ],
+      'push' => [
+        'messages' => true,
+        'friend_requests' => true,
+        'group_invites' => true,
+        'group_messages' => true,
+      ],
+    ];
+    
+    // ユーザーの設定が存在しない場合はデフォルトを返す
+    $preferences = $user->notification_preferences ?? $defaultPreferences;
+    
+    return response()->json([
+      'success' => true,
+      'preferences' => $preferences,
+    ]);
+  }
+
+  /**
+   * 通知設定を更新
+   *
+   * @param Request $request
+   * @return \Illuminate\Http\JsonResponse
+   */
+  public function updatePreferences(Request $request): JsonResponse
+  {
+    $request->validate([
+      'preferences' => 'required|array',
+      'preferences.email' => 'required|array',
+      'preferences.email.messages' => 'required|boolean',
+      'preferences.email.friend_requests' => 'required|boolean',
+      'preferences.email.group_invites' => 'required|boolean',
+      'preferences.email.group_messages' => 'required|boolean',
+      'preferences.push' => 'required|array',
+      'preferences.push.messages' => 'required|boolean',
+      'preferences.push.friend_requests' => 'required|boolean',
+      'preferences.push.group_invites' => 'required|boolean',
+      'preferences.push.group_messages' => 'required|boolean',
+    ]);
+    
+    $user = Auth::user();
+    $user->notification_preferences = $request->input('preferences');
+    $user->save();
+    
+    return response()->json([
+      'success' => true,
+      'message' => '通知設定を更新しました',
+      'preferences' => $user->notification_preferences,
+    ]);
+  }
 }

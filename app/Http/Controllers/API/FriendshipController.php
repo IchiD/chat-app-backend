@@ -307,20 +307,28 @@ class FriendshipController extends Controller
             try {
               $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
 
-              // 非同期通知として送信（キューに追加される）
-              $friendUser->notify(new PushNotification(
-                'フレンド申請',
-                $currentUser->name . 'さんからフレンド申請が届きました',
-                [
-                  'url' => $frontendUrl . '/friends',
-                  'type' => 'friend_request',
-                  'timestamp' => now()->timestamp
-                ],
-                [
-                  'tag' => 'friend-request',
-                  'requireInteraction' => true
-                ]
-              ));
+              // ユーザーの通知設定を取得
+              $notificationPrefs = $friendUser->notification_preferences ?? [
+                'push' => ['friend_requests' => true],
+              ];
+              
+              // プッシュ通知を送信（設定が有効な場合）
+              if ($notificationPrefs['push']['friend_requests'] ?? true) {
+                // 非同期通知として送信（キューに追加される）
+                $friendUser->notify(new PushNotification(
+                  'フレンド申請',
+                  $currentUser->name . 'さんからフレンド申請が届きました',
+                  [
+                    'url' => $frontendUrl . '/friends',
+                    'type' => 'friend_request',
+                    'timestamp' => now()->timestamp
+                  ],
+                  [
+                    'tag' => 'friend-request',
+                    'requireInteraction' => true
+                  ]
+                ));
+              }
             } catch (\Exception $e) {
               Log::warning('友達申請再送信通知の送信に失敗', [
                 'friend_user_id' => $friendUser->id,
@@ -353,20 +361,28 @@ class FriendshipController extends Controller
         try {
           $frontendUrl = config('app.frontend_url', 'https://chat-app-frontend-sigma-puce.vercel.app');
 
-          // 非同期通知として送信（キューに追加される）
-          $friendUser->notify(new PushNotification(
-            'フレンド申請',
-            $currentUser->name . 'さんからフレンド申請が届きました',
-            [
-              'url' => $frontendUrl . '/friends',
-              'type' => 'friend_request',
-              'timestamp' => now()->timestamp
-            ],
-            [
-              'tag' => 'friend-request',
-              'requireInteraction' => true
-            ]
-          ));
+          // ユーザーの通知設定を取得
+          $notificationPrefs = $friendUser->notification_preferences ?? [
+            'push' => ['friend_requests' => true],
+          ];
+          
+          // プッシュ通知を送信（設定が有効な場合）
+          if ($notificationPrefs['push']['friend_requests'] ?? true) {
+            // 非同期通知として送信（キューに追加される）
+            $friendUser->notify(new PushNotification(
+              'フレンド申請',
+              $currentUser->name . 'さんからフレンド申請が届きました',
+              [
+                'url' => $frontendUrl . '/friends',
+                'type' => 'friend_request',
+                'timestamp' => now()->timestamp
+              ],
+              [
+                'tag' => 'friend-request',
+                'requireInteraction' => true
+              ]
+            ));
+          }
         } catch (\Exception $e) {
           Log::warning('友達申請通知の送信に失敗', [
             'friend_user_id' => $friendUser->id,
