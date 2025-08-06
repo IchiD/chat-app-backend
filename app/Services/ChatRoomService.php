@@ -69,14 +69,31 @@ class ChatRoomService extends BaseService
 
     public function getUserChatRoomsList(User $user, int $page = 1, int $perPage = 15): array
     {
-        $chatRoomIds = $this->repository->getChatRoomIdsForUser($user);
-        $chatRooms   = $this->repository->fetchChatRoomsForIds($chatRoomIds);
+        try {
+            $chatRoomIds = $this->repository->getChatRoomIdsForUser($user);
+            $chatRooms   = $this->repository->fetchChatRoomsForIds($chatRoomIds);
 
-        $memberGroupIds = \App\Models\GroupMember::where('user_id', $user->id)
-            ->whereNull('left_at')
-            ->pluck('group_id')
-            ->toArray();
-        $friendIds = $user->friends()->pluck('id')->toArray();
+            $memberGroupIds = \App\Models\GroupMember::where('user_id', $user->id)
+                ->whereNull('left_at')
+                ->pluck('group_id')
+                ->toArray();
+            $friendIds = $user->friends()->pluck('id')->toArray();
+        } catch (\Exception $e) {
+            \Log::error('ChatRoomService::getUserChatRoomsList error', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return [
+                'data' => [],
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => 0,
+                'last_page' => 0,
+            ];
+        }
 
         $filtered = $chatRooms->filter(function ($chatRoom) use ($user, $friendIds, $memberGroupIds) {
             if ($chatRoom->type === 'friend_chat') {
@@ -89,14 +106,22 @@ class ChatRoomService extends BaseService
             }
 
             if ($chatRoom->type === 'group_chat') {
-                return !($chatRoom->group && $chatRoom->group->owner_user_id === $user->id);
+                // グループが削除されている場合は除外
+                if (!$chatRoom->group) {
+                    return false;
+                }
+                return !($chatRoom->group->owner_user_id === $user->id);
             }
 
             if ($chatRoom->type === 'member_chat') {
-                if ($chatRoom->group && $chatRoom->group->owner_user_id === $user->id) {
+                // グループが削除されている場合は除外
+                if (!$chatRoom->group) {
                     return false;
                 }
-                if ($chatRoom->group && !in_array($chatRoom->group->id, $memberGroupIds)) {
+                if ($chatRoom->group->owner_user_id === $user->id) {
+                    return false;
+                }
+                if (!in_array($chatRoom->group->id, $memberGroupIds)) {
                     return false;
                 }
                 $other = $this->getOtherParticipant($chatRoom, $user);
@@ -124,30 +149,48 @@ class ChatRoomService extends BaseService
             ];
 
             if ($chatRoom->type === 'group_chat' && $chatRoom->group) {
-                $result['name'] = $chatRoom->group->name;
-                $result['group_name'] = $chatRoom->group->name;
-                $result['participant_count'] = $chatRoom->group->getMembersCount();
-                $result['participants'] = [[
-                    'id' => $chatRoom->group->id,
-                    'name' => $chatRoom->group->name,
-                    'friend_id' => null,
-                ]];
+                try {
+                    $result['name'] = $chatRoom->group->name;
+                    $result['group_name'] = $chatRoom->group->name;
+                    $result['participant_count'] = $chatRoom->group->getMembersCount();
+                    $result['participants'] = [[
+                        'id' => $chatRoom->group->id,
+                        'name' => $chatRoom->group->name,
+                        'friend_id' => null,
+                    ]];
+                } catch (\Exception $e) {
+                    \Log::error('Error processing group_chat', [
+                        'chat_room_id' => $chatRoom->id,
+                        'group_id' => $chatRoom->group_id,
+                        'error' => $e->getMessage()
+                    ]);
+                    return null; // この項目をスキップ
+                }
             } elseif ($chatRoom->type === 'member_chat' && $chatRoom->group) {
-                $groupOwner = User::find($chatRoom->group->owner_user_id);
-                $other = $this->getOtherParticipant($chatRoom, $user);
-                $result['name'] = $chatRoom->group->name;
-                $result['group_name'] = $chatRoom->group->name;
-                $result['group_owner'] = $groupOwner ? [
-                    'id' => $groupOwner->id,
-                    'name' => $groupOwner->name,
-                    'friend_id' => $groupOwner->friend_id,
-                ] : null;
-                $result['other_participant'] = $other;
-                $result['participants'] = $other ? [[
-                    'id' => $other->id,
-                    'name' => $other->name,
-                    'friend_id' => $other->friend_id,
-                ]] : [];
+                try {
+                    $groupOwner = User::find($chatRoom->group->owner_user_id);
+                    $other = $this->getOtherParticipant($chatRoom, $user);
+                    $result['name'] = $chatRoom->group->name;
+                    $result['group_name'] = $chatRoom->group->name;
+                    $result['group_owner'] = $groupOwner ? [
+                        'id' => $groupOwner->id,
+                        'name' => $groupOwner->name,
+                        'friend_id' => $groupOwner->friend_id,
+                    ] : null;
+                    $result['other_participant'] = $other;
+                    $result['participants'] = $other ? [[
+                        'id' => $other->id,
+                        'name' => $other->name,
+                        'friend_id' => $other->friend_id,
+                    ]] : [];
+                } catch (\Exception $e) {
+                    \Log::error('Error processing member_chat', [
+                        'chat_room_id' => $chatRoom->id,
+                        'group_id' => $chatRoom->group_id,
+                        'error' => $e->getMessage()
+                    ]);
+                    return null; // この項目をスキップ
+                }
             } elseif ($chatRoom->type === 'support_chat') {
                 $result['name'] = 'サポート';
                 $result['participants'] = [[
@@ -166,6 +209,8 @@ class ChatRoomService extends BaseService
             }
 
             return $result;
+        })->filter(function ($item) {
+            return $item !== null; // nullの項目を除外
         })->sortByDesc(function ($room) {
             return $room['latest_message'] ? $room['latest_message']->sent_at : $room['created_at'];
         })->values();
