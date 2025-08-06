@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Notifications\PushNotification;
 use App\Models\ChatRoomRead;
 use App\Models\MessageRead;
+use App\Notifications\NewMessageNotification;
 
 class MessagesController extends Controller
 {
@@ -439,11 +440,13 @@ class MessagesController extends Controller
         Log::info('非同期通知送信開始');
 
         foreach ($participants as $participantUserId) {
-          // 各参加者にプッシュ通知を送信（非同期）
+          // 各参加者に通知を送信（非同期）
           $participantUser = User::find($participantUserId);
           if ($participantUser && !$participantUser->isDeleted()) {
             try {
-              // 非同期通知として送信（キューに追加される）
+              $chatUrl = $frontendUrl . '/chat?room=' . $chatRoom->room_token;
+              
+              // プッシュ通知を送信
               $participantUser->notify(new \App\Notifications\PushNotification(
                 $user->name . 'からのメッセージ',
                 $messagePreview,
@@ -459,6 +462,14 @@ class MessagesController extends Controller
                   'requireInteraction' => true
                 ]
               ));
+
+              // メール通知も送信
+              $participantUser->notify(new NewMessageNotification(
+                $user->name,
+                $messagePreview,
+                $chatUrl
+              ));
+              
             } catch (\Exception $e) {
               Log::warning('新しいメッセージ通知の送信に失敗しました', [
                 'recipient_user_id' => $participantUser->id,
