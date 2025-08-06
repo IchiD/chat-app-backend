@@ -21,7 +21,8 @@ class MessagesController extends Controller
    */
   public function index(ChatRoom $chatRoom, Request $request)
   {
-    $user = Auth::user();
+    try {
+      $user = Auth::user();
 
     // ユーザーがこのチャットルームの参加者であることを確認
     if (!$chatRoom->hasParticipant($user->id)) {
@@ -37,15 +38,29 @@ class MessagesController extends Controller
     if ($chatRoom->type === 'friend_chat' || $chatRoom->type === 'member_chat') {
       // グループに所属していることを確認（member_chatの場合）
       if ($chatRoom->type === 'member_chat' && $chatRoom->group) {
-        $isMember = $chatRoom->group->activeMembers()
-          ->where('user_id', $user->id)
-          ->exists();
+        try {
+          $isMember = $chatRoom->group->activeMembers()
+            ->where('user_id', $user->id)
+            ->exists();
 
-        if (!$isMember) {
+          if (!$isMember) {
+            return response()->json([
+              'message' => 'このグループのメンバーではないため、チャットにアクセスできません。',
+              'membership_status' => 'not_member'
+            ], 403);
+          }
+        } catch (\Exception $e) {
+          Log::error('グループメンバーシップの確認でエラー', [
+            'chat_room_id' => $chatRoom->id,
+            'group_id' => $chatRoom->group_id,
+            'user_id' => $user->id,
+            'error' => $e->getMessage()
+          ]);
+          // エラーが発生した場合はアクセスを拒否
           return response()->json([
-            'message' => 'このグループのメンバーではないため、チャットにアクセスできません。',
-            'membership_status' => 'not_member'
-          ], 403);
+            'message' => 'グループメンバーシップを確認できませんでした。',
+            'error' => config('app.debug') ? $e->getMessage() : null
+          ], 500);
         }
       }
 
@@ -56,13 +71,26 @@ class MessagesController extends Controller
           : $chatRoom->participant1_id;
 
         if ($otherUserId) {
-          // 友達関係を確認
-          $currentFriends = $user->friends()->pluck('id')->toArray();
-          if (!in_array($otherUserId, $currentFriends)) {
+          try {
+            // 友達関係を確認
+            $currentFriends = $user->friends()->pluck('id')->toArray();
+            if (!in_array($otherUserId, $currentFriends)) {
+              return response()->json([
+                'message' => '友達関係が解除されたため、このチャットにアクセスできません。',
+                'friendship_status' => 'unfriended'
+              ], 403);
+            }
+          } catch (\Exception $e) {
+            Log::error('友達関係の確認でエラー', [
+              'user_id' => $user->id,
+              'other_user_id' => $otherUserId,
+              'error' => $e->getMessage()
+            ]);
+            // エラーが発生した場合はアクセスを拒否
             return response()->json([
-              'message' => '友達関係が解除されたため、このチャットにアクセスできません。',
-              'friendship_status' => 'unfriended'
-            ], 403);
+              'message' => 'チャットへのアクセス権限を確認できませんでした。',
+              'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
           }
         }
       }
@@ -82,23 +110,31 @@ class MessagesController extends Controller
 
     // グループチャットの場合、各メッセージ送信者の退室状態を付加
     if ($chatRoom->isGroupChat() && $chatRoom->group) {
-      $group = $chatRoom->group;
-      foreach ($messages as $message) {
-        if ($message->sender_id) {
-          // 送信者がグループメンバーかつ退室済みかどうかをチェック
-          $memberInfo = $group->groupMembers()
-            ->where('user_id', $message->sender_id)
-            ->first();
+      try {
+        $group = $chatRoom->group;
+        foreach ($messages as $message) {
+          if ($message->sender_id) {
+            // 送信者がグループメンバーかつ退室済みかどうかをチェック
+            $memberInfo = $group->groupMembers()
+              ->where('user_id', $message->sender_id)
+              ->first();
 
-          if ($memberInfo && $memberInfo->left_at) {
-            // カスタムプロパティとして退室状態を追加
-            $message->sender_has_left = true;
-            $message->sender_left_at = $memberInfo->left_at;
-          } else {
-            $message->sender_has_left = false;
-            $message->sender_left_at = null;
+            if ($memberInfo && $memberInfo->left_at) {
+              // カスタムプロパティとして退室状態を追加
+              $message->sender_has_left = true;
+              $message->sender_left_at = $memberInfo->left_at;
+            } else {
+              $message->sender_has_left = false;
+              $message->sender_left_at = null;
+            }
           }
         }
+      } catch (\Exception $e) {
+        Log::error('グループメンバー状態の取得でエラー', [
+          'chat_room_id' => $chatRoom->id,
+          'error' => $e->getMessage()
+        ]);
+        // エラーが発生しても処理を継続
       }
     }
 
@@ -152,7 +188,21 @@ class MessagesController extends Controller
       }
     }
 
-    return response()->json($messages);
+      return response()->json($messages);
+    } catch (\Exception $e) {
+      Log::error('MessagesController::index エラー', [
+        'chat_room_id' => $chatRoom->id,
+        'user_id' => isset($user) ? $user->id : null,
+        'error' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine()
+      ]);
+
+      return response()->json([
+        'message' => 'メッセージの取得に失敗しました。',
+        'error' => config('app.debug') ? $e->getMessage() : null
+      ], 500);
+    }
   }
 
   /**
@@ -245,13 +295,26 @@ class MessagesController extends Controller
             : $chatRoom->participant1_id;
 
           if ($otherUserId) {
-            // 友達関係を確認
-            $currentFriends = $user->friends()->pluck('id')->toArray();
-            if (!in_array($otherUserId, $currentFriends)) {
+            try {
+              // 友達関係を確認
+              $currentFriends = $user->friends()->pluck('id')->toArray();
+              if (!in_array($otherUserId, $currentFriends)) {
+                return response()->json([
+                  'message' => '友達関係が解除されたため、このチャットにメッセージを送信できません。',
+                  'friendship_status' => 'unfriended'
+                ], 403);
+              }
+            } catch (\Exception $e) {
+              Log::error('友達関係の確認でエラー（送信時）', [
+                'user_id' => $user->id,
+                'other_user_id' => $otherUserId,
+                'error' => $e->getMessage()
+              ]);
+              // エラーが発生した場合は送信を拒否
               return response()->json([
-                'message' => '友達関係が解除されたため、このチャットにメッセージを送信できません。',
-                'friendship_status' => 'unfriended'
-              ], 403);
+                'message' => 'メッセージの送信権限を確認できませんでした。',
+                'error' => config('app.debug') ? $e->getMessage() : null
+              ], 500);
             }
           }
         }
@@ -286,19 +349,30 @@ class MessagesController extends Controller
 
       // グループチャットの場合、送信者の退室状態を付加
       if ($chatRoom->isGroupChat() && $chatRoom->group) {
-        $group = $chatRoom->group;
-        if ($message->sender_id) {
-          $memberInfo = $group->groupMembers()
-            ->where('user_id', $message->sender_id)
-            ->first();
+        try {
+          $group = $chatRoom->group;
+          if ($message->sender_id) {
+            $memberInfo = $group->groupMembers()
+              ->where('user_id', $message->sender_id)
+              ->first();
 
-          if ($memberInfo && $memberInfo->left_at) {
-            $message->sender_has_left = true;
-            $message->sender_left_at = $memberInfo->left_at;
-          } else {
-            $message->sender_has_left = false;
-            $message->sender_left_at = null;
+            if ($memberInfo && $memberInfo->left_at) {
+              $message->sender_has_left = true;
+              $message->sender_left_at = $memberInfo->left_at;
+            } else {
+              $message->sender_has_left = false;
+              $message->sender_left_at = null;
+            }
           }
+        } catch (\Exception $e) {
+          Log::warning('送信者の退室状態取得でエラー', [
+            'chat_room_id' => $chatRoom->id,
+            'message_id' => $message->id,
+            'error' => $e->getMessage()
+          ]);
+          // エラーが発生しても処理を継続
+          $message->sender_has_left = false;
+          $message->sender_left_at = null;
         }
       }
 
