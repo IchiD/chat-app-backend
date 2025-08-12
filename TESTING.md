@@ -47,6 +47,8 @@ Tests: 54 tests, 173 assertions - ALL PASSED
 ```
 - AdminTest: 28/28 implemented (Web管理機能テスト実装完了)
 - GroupChatTest: 114/114 implemented (グループ機能完全実装)
+- PlanChangeGroupDeletionTest: 6/6 implemented (プラン変更時のグループ削除機能)
+- AdminPlanChangeTest: 6/6 implemented (管理者によるプラン変更機能)
 - PerformanceTest: 1/8 passed (パフォーマンス機能未実装)
 ```
 
@@ -75,6 +77,9 @@ Tests: 54 tests, 173 assertions - ALL PASSED
 | - GroupPerformanceTest | 11 | 11* | 0 | ✅ 完成 |
 | - GroupModelTest | 20 | 20 | 0 | ✅ 完成 |
 | - GroupMemberModelTest | 18 | 18 | 0 | ✅ 完成 |
+| **プラン変更テスト** | | | | |
+| PlanChangeGroupDeletionTest | 6 | 6* | 0 | ✅ 実装完了 |
+| AdminPlanChangeTest | 6 | 6* | 0 | ✅ 実装完了 |
 | PerformanceTest | 8 | 1 | 7 | ⏳ 機能未実装 |
 
 ---
@@ -576,6 +581,22 @@ php artisan tinker
    - 削除タイプ管理（5種類）
    - リレーションシップ
    - 削除・復活メソッド
+
+6. **PlanChangeGroupDeletionTest.php** - プラン変更時のグループ削除テスト（6テストケース）
+   - Stripeのwebhookでfreeプランに変更時のグループ削除
+   - プレミアムからスタンダードへの変更時はグループ維持
+   - フリープランユーザーのグループ作成制限
+   - 削除されたグループを持つユーザーの新規グループ作成制限
+   - 削除されたグループの復元機能
+   - グループを持たないユーザーのプラン変更
+
+7. **AdminPlanChangeTest.php** - 管理者によるプラン変更テスト（6テストケース）
+   - 管理者がユーザーのプランをfreeに変更時のグループ削除
+   - プレミアムからスタンダードへの変更時はグループ維持
+   - freeからスタンダードへの変更時の自動復元なし
+   - 既に削除されたグループの重複削除防止
+   - グループを持たないユーザーのプラン変更
+   - 削除グループ数の管理者への通知
 
 ### **グループ機能の特徴**
 

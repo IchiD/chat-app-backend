@@ -528,9 +528,20 @@ class StripeService extends BaseService
           // アクティブなユーザーの場合のみステータス更新
           $subscription->user->update(['subscription_status' => 'canceled', 'plan' => 'free']);
 
-          // グループの上限人数を50に戻す（フリープランはグループ機能が使えないため）
-          \App\Models\Group::where('owner_user_id', $subscription->user->id)
-            ->update(['max_members' => 50]);
+          // フリープランではグループ機能が使えないため、所有するグループを論理削除
+          $userGroups = \App\Models\Group::where('owner_user_id', $subscription->user->id)
+            ->whereNull('deleted_at')
+            ->get();
+          
+          foreach ($userGroups as $group) {
+            $group->deleteBySelf('プラン解約によるグループ削除（Freeプランではグループ機能が利用できません）');
+            Log::info('Group deleted due to subscription cancellation', [
+              'group_id' => $group->id,
+              'group_name' => $group->name,
+              'owner_user_id' => $subscription->user->id,
+              'reason' => 'subscription_canceled_to_free'
+            ]);
+          }
 
           // 履歴記録
           $this->recordSubscriptionHistory(

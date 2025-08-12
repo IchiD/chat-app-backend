@@ -262,6 +262,10 @@ class AdminDashboardController extends Controller
       'allow_re_registration' => 'boolean',
     ]);
 
+    // プラン変更前の値を保存
+    $oldPlan = $user->plan;
+    $newPlan = $request->plan;
+
     $user->update([
       'name' => $request->name,
       'email' => $request->email,
@@ -270,10 +274,39 @@ class AdminDashboardController extends Controller
       'plan' => $request->plan,
       'allow_re_registration' => $request->boolean('allow_re_registration'),
     ]);
+    
+    // プランがfreeに変更された場合、所有するグループを論理削除
+    if ($oldPlan !== 'free' && $newPlan === 'free') {
+      $userGroups = \App\Models\Group::where('owner_user_id', $user->id)
+        ->whereNull('deleted_at')
+        ->get();
+      
+      foreach ($userGroups as $group) {
+        $group->deleteBySelf('管理者によるプラン変更（Freeプラン）に伴うグループ削除');
+        \Log::info('Group deleted due to admin plan change to free', [
+          'group_id' => $group->id,
+          'group_name' => $group->name,
+          'owner_user_id' => $user->id,
+          'admin_id' => $admin->id,
+          'old_plan' => $oldPlan,
+          'new_plan' => $newPlan
+        ]);
+      }
+      
+      if ($userGroups->count() > 0) {
+        \App\Services\OperationLogService::log('backend', 'delete_user_groups_plan_change', 'admin:' . $admin->id . ' user:' . $user->id . ' groups_deleted:' . $userGroups->count());
+      }
+    }
+    
     \App\Services\OperationLogService::log('backend', 'update_user', 'admin:' . $admin->id . ' user:' . $user->id);
 
+    $successMessage = 'ユーザー情報を更新しました。';
+    if ($oldPlan !== 'free' && $newPlan === 'free' && $userGroups->count() > 0) {
+      $successMessage .= ' ' . $userGroups->count() . '個のグループが削除されました。';
+    }
+
     return redirect()->route('admin.users.show', $user->id)
-      ->with('success', 'ユーザー情報を更新しました。');
+      ->with('success', $successMessage);
   }
 
   /**
