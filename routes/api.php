@@ -18,6 +18,11 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerificationEmail']);
 Route::get('/verify', [AuthController::class, 'verifyEmail']);
 Route::post('/login', [AuthController::class, 'login'])->name('login');
+
+// 管理画面セッションタイムアウト対応：GET /api/login は管理画面ログインにリダイレクト
+Route::get('/login', function () {
+  return redirect()->route('admin.login');
+});
 Route::post('/logout', [AuthController::class, 'logout'])->middleware(['auth:sanctum', 'check.user.status']);
 Route::post('/password/email', [AuthController::class, 'sendResetLinkEmail']);
 Route::post('/password/reset', [AuthController::class, 'resetPassword'])->name('password.reset');
