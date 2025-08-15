@@ -12,7 +12,6 @@ use App\Http\Controllers\API\AppConfigController;
 use App\Http\Controllers\API\ExternalResourceController;
 use App\Http\Controllers\API\StripeController;
 use App\Http\Controllers\API\ExternalAuthController;
-use Illuminate\Support\Facades\DB;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerificationEmail']);
@@ -35,9 +34,7 @@ Route::middleware(['web'])->group(function () {
 
 // アプリケーション設定情報取得
 Route::get('/config', [AppConfigController::class, 'getPublicConfig']);
-Route::get('/app-config', [AppConfigController::class, 'index']);
 Route::get('/pricing', [AppConfigController::class, 'getPricing']);
-Route::post('/external/fetch', [ExternalResourceController::class, 'fetch']);
 
 // 外部システム向け認証
 Route::prefix('auth/external')->controller(ExternalAuthController::class)->group(function () {
@@ -63,9 +60,6 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
 
   // 友達関係のAPI
   Route::prefix('friends')->group(function () {
-    // デバッグテスト用エンドポイント
-    Route::get('/debug-test', [FriendshipController::class, 'testDebug']);
-
     // 友達一覧
     Route::get('/', [FriendshipController::class, 'getFriends']);
 
@@ -132,7 +126,6 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
   Route::prefix('notifications')->controller(NotificationController::class)->group(function () {
     Route::post('/subscribe', 'subscribe'); // プッシュ通知の購読登録
     Route::post('/unsubscribe', 'unsubscribe'); // プッシュ通知の購読解除
-    Route::post('/test', 'sendTestNotification'); // テスト通知の送信（開発用）
     Route::get('/preferences', 'getPreferences'); // 通知設定取得
     Route::put('/preferences', 'updatePreferences'); // 通知設定更新
   });
@@ -147,8 +140,6 @@ Route::middleware(['auth:sanctum', 'check.user.status'])->group(function () {
   Route::get('/stripe/subscription/history', [StripeController::class, 'getSubscriptionHistory']);
   Route::post('/stripe/customer-portal', [StripeController::class, 'createCustomerPortalSession']);
 
-  // 価格設定キャッシュクリア（管理者用）
-  Route::post('/admin/pricing/clear-cache', [AppConfigController::class, 'clearPricingCache']);
 
   // メールアドレス変更関連
   Route::put('/user/update-email', [AuthController::class, 'requestEmailChange']);
@@ -172,121 +163,4 @@ Route::post('/conversations/groups/join/{token}', [ConversationsController::clas
 // グループ情報取得 (認証不要)
 Route::get('/conversations/groups/info/{token}', [ConversationsController::class, 'getGroupInfoByToken']);
 
-// 既存のユーザー情報取得エンドポイント
-Route::middleware(['auth:sanctum', 'check.user.status'])->get('/user', function (Request $request) {
-  return $request->user();
-});
 
-// テスト用の一時的なエンドポイント（本実装後は削除すること）
-Route::get('/test/friend-chat-separation', function () {
-  try {
-    // 現在のChatRoomデータを確認
-    $chatRooms = App\Models\ChatRoom::with(['participant1:id,name,friend_id', 'participant2:id,name,friend_id'])
-      ->orderBy('type')
-      ->get()
-      ->map(function ($room) {
-        return [
-          'id' => $room->id,
-          'type' => $room->type,
-          'participant1' => $room->participant1 ? [
-            'id' => $room->participant1->id,
-            'name' => $room->participant1->name,
-            'friend_id' => $room->participant1->friend_id,
-          ] : null,
-          'participant2' => $room->participant2 ? [
-            'id' => $room->participant2->id,
-            'name' => $room->participant2->name,
-            'friend_id' => $room->participant2->friend_id,
-          ] : null,
-          'group_id' => $room->group_id,
-        ];
-      });
-
-    // 友達関係を確認
-    $friendships = App\Models\Friendship::with(['user:id,name,friend_id', 'friend:id,name,friend_id'])
-      ->where('status', 1)
-      ->get()
-      ->map(function ($friendship) {
-        return [
-          'id' => $friendship->id,
-          'user' => [
-            'id' => $friendship->user->id,
-            'name' => $friendship->user->name,
-            'friend_id' => $friendship->user->friend_id,
-          ],
-          'friend' => [
-            'id' => $friendship->friend->id,
-            'name' => $friendship->friend->name,
-            'friend_id' => $friendship->friend->friend_id,
-          ],
-          'status' => $friendship->status,
-        ];
-      });
-
-    return response()->json([
-      'chat_rooms' => $chatRooms,
-      'friendships' => $friendships,
-    ]);
-  } catch (\Exception $e) {
-    return response()->json([
-      'error' => $e->getMessage(),
-      'trace' => $e->getTraceAsString(),
-    ], 500);
-  }
-});
-
-// テスト用：friend_chatを手動作成
-Route::post('/test/create-friend-chat', function (Illuminate\Http\Request $request) {
-  try {
-    $request->validate([
-      'user_id1' => 'required|integer',
-      'user_id2' => 'required|integer',
-    ]);
-
-    $userId1 = $request->user_id1;
-    $userId2 = $request->user_id2;
-
-    // 既存のfriend_chatをチェック
-    $existingFriendChat = App\Models\ChatRoom::where('type', 'friend_chat')
-      ->where(function ($query) use ($userId1, $userId2) {
-        $query->where(function ($q) use ($userId1, $userId2) {
-          $q->where('participant1_id', $userId1)
-            ->where('participant2_id', $userId2);
-        })->orWhere(function ($q) use ($userId1, $userId2) {
-          $q->where('participant1_id', $userId2)
-            ->where('participant2_id', $userId1);
-        });
-      })
-      ->first();
-
-    if ($existingFriendChat) {
-      return response()->json([
-        'message' => 'friend_chatは既に存在します',
-        'chat_room' => $existingFriendChat,
-      ]);
-    }
-
-    // friend_chatを作成
-    $newChatRoom = null;
-    DB::transaction(function () use ($userId1, $userId2, &$newChatRoom) {
-      $newChatRoom = App\Models\ChatRoom::create([
-        'type' => 'friend_chat',
-        'group_id' => null,
-        'participant1_id' => $userId1,
-        'participant2_id' => $userId2,
-      ]);
-
-      // 新アーキテクチャでは、participant1_idとparticipant2_idで参加者を管理するため
-      // 別途Participantテーブルへの登録は不要
-    });
-
-    return response()->json([
-      'message' => 'friend_chatを作成しました',
-      'chat_room' => $newChatRoom,
-    ]);
-  } catch (\Exception $e) {
-    return response()->json([
-      'error' => $e->getMessage(),
-    ], 500);
-  }
-});
