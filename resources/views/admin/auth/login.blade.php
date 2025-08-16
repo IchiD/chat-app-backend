@@ -89,7 +89,6 @@
         <i class="fas fa-lock me-2"></i>
         管理者ログイン
       </h3>
-      <p class="mb-0 mt-2 opacity-75">システム管理者専用</p>
     </div>
 
     <div class="login-body">
